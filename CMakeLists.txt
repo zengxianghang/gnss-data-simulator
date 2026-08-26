@@ -14,10 +14,16 @@ include(cmake/CompilerWarnings.cmake)
 
 set(GNSS_SIM_RTKLIB_COMMIT "47bb6cf9935b510109d16f46baa35c648e56f1b5" CACHE STRING
     "Pinned RTKLIB commit used by this simulator build")
+set(GNSS_SIM_CJSON_COMMIT "acc76239bee01d8e9c858ae2cab296704e52d916" CACHE STRING
+    "Pinned cJSON commit used by this simulator build")
 
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/RTKLIB/src/rtklib.h")
     message(FATAL_ERROR
         "RTKLIB submodule is missing. Run: git submodule update --init --recursive")
+endif()
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cJSON/cJSON.h")
+    message(FATAL_ERROR
+        "cJSON submodule is missing. Run: git submodule update --init --recursive")
 endif()
 
 add_library(rtklib_pinned INTERFACE)
@@ -27,13 +33,33 @@ target_include_directories(rtklib_pinned SYSTEM INTERFACE
 target_compile_definitions(rtklib_pinned INTERFACE
     GNSS_SIM_RTKLIB_COMMIT="${GNSS_SIM_RTKLIB_COMMIT}")
 
+add_library(cjson_vendor STATIC
+    third_party/cJSON/cJSON.c
+)
+add_library(gnss_sim::cjson ALIAS cjson_vendor)
+target_include_directories(cjson_vendor SYSTEM PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cJSON")
+set_target_properties(cjson_vendor PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED ON
+    C_EXTENSIONS OFF
+)
+
 add_library(gnss_sim_core STATIC
+    src/core/deterministic_rng.cpp
+    src/core/sim_config.cpp
+    src/core/sim_time.cpp
     src/core/simulator.cpp
 )
 add_library(gnss_sim::core ALIAS gnss_sim_core)
-target_include_directories(gnss_sim_core PUBLIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(gnss_sim_core PUBLIC gnss_sim::rtklib)
+target_include_directories(gnss_sim_core
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_link_libraries(gnss_sim_core
+    PUBLIC gnss_sim::rtklib
+    PRIVATE gnss_sim::cjson
+)
 gnss_sim_set_project_warnings(gnss_sim_core)
 
 add_executable(gnss-data-simulator
@@ -55,8 +81,12 @@ if(BUILD_TESTING)
     FetchContent_MakeAvailable(googletest)
 
     add_executable(gnss_sim_unit_tests
+        tests/unit/test_deterministic_rng.cpp
+        tests/unit/test_sim_config.cpp
         tests/unit/test_sim_time.cpp
     )
+    target_include_directories(gnss_sim_unit_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(gnss_sim_unit_tests PRIVATE
         gnss_sim::core
         GTest::gtest_main

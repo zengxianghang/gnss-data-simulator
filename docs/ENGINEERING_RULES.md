@@ -11,6 +11,7 @@ This document defines the required repository layout, source-file naming, C/C++ 
 - Primary Windows toolchain: Visual Studio 2022 / MSVC.
 - CI secondary toolchain: GCC on Ubuntu.
 - RTKLIB must be consumed through a fixed/pinned repository revision for a reproducible build. The simulator release/run manifest must record the exact RTKLIB commit SHA.
+- JSON configuration parsing uses the pinned cJSON dependency through `sim_config`; cJSON types must not leak outside that module boundary.
 - Project code must compile cleanly on both Windows and Linux. Platform-specific code must be isolated behind a narrow adapter and must not leak into the GNSS physics/model layers.
 - Production code must not require a network connection at runtime. Downloading IGS data is a separate tooling concern.
 
@@ -72,6 +73,7 @@ The implementation must use the following top-level layout. New directories requ
 │     └─ truth_writer.cpp
 ├─ tests/
 │  ├─ unit/
+│  │  ├─ test_sim_config.cpp
 │  │  ├─ test_sim_time.cpp
 │  │  ├─ test_deterministic_rng.cpp
 │  │  ├─ test_signal_definitions.cpp
@@ -98,7 +100,8 @@ The implementation must use the following top-level layout. New directories requ
 │  ├─ build_cn0_model/
 │  └─ download_igs/
 ├─ third_party/
-│  └─ RTKLIB/
+│  ├─ RTKLIB/
+│  └─ cJSON/
 └─ .github/
    └─ workflows/
       ├─ ci.yml
@@ -198,7 +201,7 @@ _cycles   carrier cycles
 Examples:
 
 ```cpp
-int64_t epoch_time_ns;
+std::int64_t epoch_time_ns;
 double pseudorange_m;
 double doppler_hz;
 double elevation_deg;
@@ -214,6 +217,7 @@ Do not use generic names such as `time`, `range`, `speed`, or `freq` in physics 
 - Minimize transitive includes.
 - Do not expose RTKLIB internal structures in the public `include/gnss_sim/` API.
 - RTKLIB types should be contained inside `rtklib_adapter` / navigation implementation boundaries.
+- cJSON types must remain private to `sim_config.cpp`.
 - Prefer `const` input pointers/references when data is read-only.
 - Functions should return explicit success/failure status rather than silently falling back when input data is invalid.
 
@@ -240,7 +244,7 @@ Determinism is a product requirement, not only a test convenience.
 ## 5. Frozen module ownership
 
 ### `sim_config`
-Owns configuration parsing/defaults/validation only.
+Owns configuration parsing/defaults/validation only. The JSON parser is an implementation detail and must not leak into other modules.
 
 ### `sim_time`
 Owns integer simulation scheduling, GPST conversion, week rollover, epoch alignment, and event-to-epoch rules.
@@ -259,285 +263,181 @@ No formatter or scenario module may maintain a second independent signal mapping
 ### `satellite_engine`
 Owns transmission-time iteration, satellite state at transmit time, LOS, azimuth/elevation, geometric range, and range rate.
 
-### `navigation_state`
-Owns Truth NAV vs Receiver NAV state and usable navigation-data lifecycle.
-
-### `nav_message_scheduler`
-Owns COLD navigation fragment/page/message acquisition timing and EPH completion logic.
-
 ### `receiver_truth`
-Owns receiver truth position/velocity/clock state. V1 clock bias/drift are zero, but the fields remain explicit.
+Owns receiver truth position/velocity/clock state and future trajectory interpolation.
 
 ### `atmosphere_model`
-Owns ionosphere/troposphere corrections and `none`/broadcast modes.
+Owns ionosphere and troposphere truth/correction models.
 
 ### `measurement_model`
-Owns final PSR/Doppler/ADR physical equations. It does not own acquisition state or text formatting.
+Owns pseudorange, Doppler, carrier phase/ADR generation and signal-specific correction application.
 
 ### `cn0_model`
-Owns system+signal+elevation CN0 lookup/interpolation and fallback behavior.
+Owns CN0-vs-elevation runtime lookup/model evaluation.
 
 ### `signal_tracking`
-Owns SIGNAL_OFF/SEARCHING/ACQUIRING/TRACKING, lock time, valid flags, and acquisition/reacquisition delays.
+Owns per-signal acquisition/tracking/lock/validity state.
+
+### `navigation_state`
+Owns Truth NAV and Receiver NAV stores and their update/availability state.
+
+### `nav_message_scheduler`
+Owns COLD-start frame/subframe/page/message fragment acquisition timing.
 
 ### `scenario_engine`
-Owns KS/REA/TTFF event scheduling and power/signal state. It must not contain satellite-orbit or observation equations.
+Owns KS/REA/TTFF events only.
 
 ### `solution_engine`
-Owns construction of RTKLIB observations from simulated measurements and generation of PSRPOS/PSRVEL solution state.
+Owns conversion of generated observations + Receiver NAV into RTKLIB SPP/velocity results.
 
-### Output writers
-Writers only serialize already-computed state. They must not recalculate physics or invent receiver state.
+### output writers
+Own formatting/serialization only. Writers must not recompute geometry, navigation corrections, tracking state, or solution validity.
 
-## 6. CMake target rules
+## 6. GitHub Actions policy
 
-Use explicit targets:
-
-```text
-gnss_sim_core       library containing simulator production logic
-gnss_data_simulator executable containing only CLI/app entry logic
-gnss_sim_tests      unit/integration test executable(s)
-```
-
-Third-party RTKLIB warnings must not be treated as project-code warnings.
-
-Project code should use strict warnings:
+Normal PR/push CI is fast and mandatory:
 
 ```text
-MSVC: /W4
-GCC/Clang: -Wall -Wextra -Wpedantic
+.github/workflows/ci.yml
 ```
 
-New warnings introduced by project code are not acceptable. CI may promote project warnings to errors once the initial build baseline is clean.
+It must include:
 
-## 7. GitHub Actions policy
+- formatting check;
+- Windows / Visual Studio 2022 build;
+- Ubuntu / GCC build;
+- unit tests;
+- short deterministic integration tests when they exist;
+- no live IGS download;
+- no default 8-hour generation run.
 
-Two workflows are frozen for V1.
-
-### `.github/workflows/ci.yml`
-
-Purpose: required fast PR/main validation.
-
-Triggers:
+Long/expensive validation belongs in:
 
 ```text
-pull_request
-push to main
-workflow_dispatch
+.github/workflows/extended.yml
 ```
 
-Required jobs:
+It is intended for:
 
-1. Windows / MSVC build + tests.
-2. Ubuntu / GCC build + tests.
-3. Formatting check.
+- `workflow_dispatch` manual execution;
+- scheduled execution if useful;
+- 1/5/10/20/50 Hz matrix;
+- full constellation/signal matrix;
+- HOT/WARM/COLD;
+- REA;
+- cross-week tests;
+- deterministic rerun checks;
+- long-duration streaming/memory tests;
+- default 8-hour run;
+- selected 50 Hz runs.
 
-Required fast test scope:
+Do not make ordinary documentation-only changes consume an 8-hour simulation test.
 
-- all unit tests;
-- small deterministic integration tests;
-- representative GPS-only and multi-GNSS zero-noise loopback;
-- output golden tests;
-- startup/REA state-machine tests using short synthetic durations;
-- week-rollover boundary test.
+## 7. Unit-test principles
 
-Rules:
+Use GoogleTest for C/C++ unit tests and register tests through CTest.
 
-- PR CI must not generate the normal 8-hour dataset.
-- Tests must not depend on live IGS/network availability.
-- CI must use checked-in minimal test fixtures.
-- A test failure must fail the workflow; no `continue-on-error` for required checks.
-- Avoid retry loops that hide flaky tests.
-- Cancel stale in-progress CI runs for the same PR when a newer commit is pushed.
-- Do not upload large generated simulator logs by default.
-- On failure, small diagnostic logs/test reports may be uploaded as artifacts.
+### 7.1 General rules
 
-### `.github/workflows/extended.yml`
+- One production module should have focused unit tests.
+- Every bug fix must add a regression test that fails before the fix and passes after it.
+- Tests must not depend on current wall-clock time, network availability, machine locale, or unspecified random state.
+- Test random behavior with explicit fixed seeds.
+- Do not weaken numerical tolerances merely to make CI pass.
+- Test both normal operation and boundary/error conditions.
+- Parser/formatter tests should use small representative fixtures rather than GB-sized logs.
+- Unit tests should normally complete in seconds.
 
-Purpose: expensive/full validation.
+### 7.2 Deterministic physical model tests
 
-Triggers:
+For numerical physics functions:
 
-```text
-workflow_dispatch
-scheduled run
-```
+1. Test a simple analytically checkable case where possible.
+2. Test against RTKLIB/reference calculations where RTKLIB owns the reference algorithm.
+3. Use explicitly justified absolute/relative tolerances.
+4. Include constellation-specific edge cases, especially GLONASS FDMA.
 
-Extended scope should include:
+### 7.3 State-machine tests
 
-- longer multi-GNSS runs;
-- all supported sampling rates 1/5/10/20/50 Hz;
-- all supported signal mappings;
-- HOT/WARM/COLD/REA scenario regression;
-- navigation update behavior;
-- deterministic same-seed repeat comparison;
-- 8-hour default-run smoke/regression when runtime cost is acceptable;
-- memory-growth/streaming validation;
-- optional sanitizer job on Linux.
+State-machine tests must check transitions and invariants, not only final values.
 
-Extended CI is not a substitute for fast PR CI. A PR must remain testable without waiting for an 8-hour-generation job.
+Examples:
 
-## 8. Unit test principles
+- lock time resets on signal loss;
+- ADR validity resets on power/signal loss as designed;
+- Receiver NAV is retained during REA;
+- Receiver NAV is empty at COLD startup;
+- EPH becomes available only after required NAV fragments;
+- HOT/WARM EPH is available immediately;
+- PSRPOS and PSRVEL validity can differ.
 
-### 8.1 General rules
+### 7.4 Output/golden tests
 
-- Every deterministic algorithm/module must have unit tests before or together with its implementation.
-- Test public behavior and important invariants, not private implementation trivia.
-- A bug fix must add a regression test that fails before the fix and passes after it.
-- Tests must be deterministic and independent of execution order.
-- Unit tests must not use current wall-clock time, online services, random unrecorded seeds, or machine-specific paths.
-- Do not loosen numerical tolerances merely to make a failing physics test pass. First determine the physical/numerical reason for the difference.
-- Tests should be small enough that developers run them locally before every PR.
+For NovAtel OEM7 and Unicore N4 formatters:
 
-### 8.2 Test framework
+- maintain small golden files under `tests/golden/`;
+- compare the complete serialized line/record where practical;
+- field formatting/precision/ordering is part of the test contract;
+- changes to golden output require explicit review and a reason;
+- golden files must never be regenerated silently merely because a test failed.
 
-- Use GoogleTest for C++ unit/integration tests.
-- Integrate tests through CTest.
-- Pin the GoogleTest revision/version just like other build dependencies.
-- Test-only code may use STL/features more freely than production hot-path code.
+## 8. Integration-test principles
 
-### 8.3 Required unit coverage categories
+Integration tests verify module boundaries and physical consistency.
 
-#### Time
+Required V1 integration coverage eventually includes:
 
-- 1/5/10/20/50 Hz exact tick intervals;
-- no cumulative floating-time drift;
-- GPST week crossover;
-- event effective at first epoch where `epoch_time >= event_time`.
+- GPS-only ideal static loopback;
+- multi-GNSS ideal static loopback;
+- all supported signals;
+- RTKLIB SPP recovery of the configured receiver position;
+- static velocity recovery near zero;
+- HOT/WARM/COLD startup;
+- REA signal off/on;
+- Truth NAV vs Receiver NAV isolation;
+- COLD EPH progressive acquisition;
+- EPH/ION runtime updates;
+- GPST week rollover;
+- 1/5/10/20/50 Hz;
+- deterministic same-seed repeatability.
 
-#### Signal definitions
+Normal CI uses short fixtures/durations. Long-duration versions of these tests belong in extended CI.
 
-- every supported constellation/signal maps to exactly one intended RINEX/RTKLIB/OEM definition;
-- GLONASS G1/G2 FCN-dependent wavelength;
-- no duplicate or conflicting mapping.
+## 9. Test data policy
 
-#### Satellite geometry
+- Keep only minimal necessary test data in Git.
+- Do not commit multi-GB IGS archives.
+- Every fixture should document its origin and any transformation applied.
+- Prefer synthetic minimal RINEX fixtures for parser boundary tests if they faithfully exercise the target format.
+- Real IGS snippets may be used when needed for reference/compatibility testing and redistribution is appropriate.
+- CI tests must not download test data from the internet during the test itself.
 
-- transmit-time iteration converges;
-- azimuth/elevation/range against trusted RTKLIB/reference cases;
-- 3 degree visibility mask boundary.
+## 10. Pull request and commit rules
 
-#### Measurement model
+- One PR should primarily solve one issue/work package.
+- Keep PRs reviewable; avoid one giant V1 implementation PR.
+- PR descriptions must include:
+  - what changed;
+  - why;
+  - tests run;
+  - any limitations/follow-up issues;
+  - Implementation Notes relevant to the issue.
+- Do not mix broad formatting/refactoring with unrelated GNSS behavior changes.
+- Update design/engineering documentation in the same PR when behavior or a frozen interface changes.
+- CI must pass before merge.
+- Do not bypass failing deterministic tests without root-cause analysis.
 
-- zero-noise PSR equation term-by-term;
-- Doppler/range-rate sign convention;
-- ADR continuity while tracking;
-- correct ionosphere sign between code and carrier;
-- TGD/ISC/BGD applied only to the intended signal.
+## 11. Review checklist
 
-#### Tracking
+Before merge, verify:
 
-- lock time increments only under continuous tracking;
-- loss of signal resets lock/ADR validity as specified;
-- HOT/WARM/COLD acquisition timing is deterministic for fixed seed/config;
-- REA recovery does not clear Receiver NAV.
-
-#### Navigation
-
-- Truth NAV and Receiver NAV never alias accidentally;
-- HOT/WARM restore cached EPH/ION;
-- COLD does not expose future/full Truth NAV before fragments complete;
-- IOD consistency checks;
-- RINEX NAV update causes correct Receiver NAV/log update.
-
-#### Output
-
-- exact OEM7/N4 record family names;
-- exact status/type transitions including `INSUFFICIENT_OBS/NONE`;
-- numeric formatting/field ordering;
-- CRC/checksum behavior where applicable;
-- golden output lines compared byte-for-byte where practical.
-
-## 9. Integration/acceptance test principles
-
-### Zero-noise static loopback
-
-Given the same broadcast NAV/corrections and static truth, simulated observations processed by RTKLIB must recover the truth within a tight numerical tolerance appropriate to the exact model path.
-
-This is the primary physics correctness oracle for V1.
-
-### Position/velocity independence
-
-PSRPOS and PSRVEL must be produced from the simulated measurements/Receiver NAV. Integration tests must catch any accidental direct use of receiver truth to fill solution outputs.
-
-### Startup modes
-
-Tests must verify state semantics, not only TTFF number:
-
-- HOT/WARM EPH available immediately from receiver cache;
-- COLD EPH progressively available through navigation-message collection;
-- TTFF occurs only once actual solution conditions are met.
-
-### REA
-
-During SIGNAL OFF:
-
-```text
-RANGEA count = 0
-PSRPOSA = INSUFFICIENT_OBS / NONE
-PSRVELA = INSUFFICIENT_OBS / NONE
-Receiver NAV retained
-GPST continuous
-```
-
-After SIGNAL ON, observations and solution must recover progressively according to tracking state.
-
-### Determinism
-
-Run the same short scenario twice with the same config/input/seed and compare hashes or exact output bytes. Run with a different seed and verify only intentionally stochastic timing/state fields change.
-
-### Cross-platform
-
-Numerical physics results should agree within defined floating-point tolerances between MSVC and GCC. Text-format golden tests should be designed to remain platform-independent (explicit line endings/locale/formatting).
-
-## 10. Test data policy
-
-- Keep CI fixtures minimal; do not commit GB-scale IGS/RINEX files.
-- Each fixture must document its source and purpose in `tests/data/README.md`.
-- Prefer the smallest RINEX excerpt that still exercises the intended condition.
-- Golden files are specifications and must not be regenerated automatically during CI.
-- Updating a golden file requires review of why the external format changed.
-
-## 11. Pull request rules
-
-Every implementation PR must include:
-
-- concise scope;
-- linked issue when applicable;
-- implementation notes describing important design choices;
-- tests added/updated;
-- local test command/results;
-- any format/config compatibility impact.
-
-A PR is not complete when only the new code works manually. The corresponding deterministic tests and documentation updates are part of the implementation.
-
-Keep PRs focused. Avoid combining unrelated formatter, physics, scenario, and CI refactors in one PR unless the dependency is unavoidable.
-
-## 12. Commit rules
-
-Use short English imperative/conventional-style commit subjects, for example:
-
-```text
-feat: add GPS LNAV cold-start scheduler
-test: add week-rollover timing coverage
-fix: preserve receiver nav during REA outage
-docs: define V1 output record rules
-ci: add Windows and Ubuntu test matrix
-```
-
-Do not use vague messages such as `update`, `fix bug`, or `changes`.
-
-## 13. Definition of done for V1 implementation work
-
-A module/change is done only when all applicable items are true:
-
-1. code follows the frozen directory/file/module ownership;
-2. public behavior is documented where necessary;
-3. unit tests cover deterministic behavior and boundaries;
-4. integration/regression tests cover cross-module behavior where applicable;
-5. local CMake build and CTest pass;
-6. Windows/MSVC CI passes;
-7. Ubuntu/GCC CI passes;
-8. no new project-code warnings;
-9. deterministic outputs remain reproducible;
-10. no 8-hour in-memory buffering or other obvious duration-proportional memory growth is introduced.
+- module ownership is respected;
+- no duplicate signal mapping was introduced;
+- Truth NAV and Receiver NAV remain separate;
+- no hidden random source was introduced;
+- units are explicit;
+- no full-run unbounded memory accumulation was introduced;
+- output writers only serialize;
+- tests cover the new behavior;
+- Windows and Linux builds remain green;
+- long tests have not leaked into normal PR CI.

@@ -100,8 +100,8 @@ bool generate_measurements(const gnss_sim::RtklibNavStore* truth_nav, const gnss
 }
 
 void expect_static_truth(const gnss_sim::SolutionEpoch& solution) {
-    ASSERT_TRUE(solution.position.valid);
-    ASSERT_TRUE(solution.velocity.valid);
+    ASSERT_TRUE(solution.position.valid) << solution.position.diagnostic;
+    ASSERT_TRUE(solution.velocity.valid) << solution.velocity.diagnostic;
     EXPECT_EQ(solution.position.status, gnss_sim::ReceiverSolutionStatus::kSolComputed);
     EXPECT_EQ(solution.position.type, gnss_sim::ReceiverSolutionType::kSingle);
     EXPECT_EQ(solution.velocity.status, gnss_sim::ReceiverSolutionStatus::kSolComputed);
@@ -136,7 +136,7 @@ TEST(SolutionEngine, IdealStaticZeroNoiseLoopbackRecoversTruth) {
                                                &solution, &error_message))
         << error_message;
     expect_static_truth(solution);
-    EXPECT_TRUE(state.has_position_hint);
+    EXPECT_TRUE(state.has_position_hint) << solution.position.diagnostic;
 }
 
 TEST(SolutionEngine, PositionAndVelocityValidityAreIndependent) {
@@ -160,7 +160,7 @@ TEST(SolutionEngine, PositionAndVelocityValidityAreIndependent) {
     ASSERT_TRUE(gnss_sim::solve_receiver_epoch(nav.store, epoch_time, position_only, kSatelliteCount,
                                                kLoopbackElevationMaskDeg, gnss_sim::AtmosphereMode::NONE,
                                                &position_state, &position_solution, &error_message));
-    EXPECT_TRUE(position_solution.position.valid);
+    EXPECT_TRUE(position_solution.position.valid) << position_solution.position.diagnostic;
     EXPECT_FALSE(position_solution.velocity.valid);
     EXPECT_EQ(position_solution.velocity.status, gnss_sim::ReceiverSolutionStatus::kInsufficientObs);
     EXPECT_EQ(position_solution.velocity.type, gnss_sim::ReceiverSolutionType::kNone);
@@ -170,7 +170,7 @@ TEST(SolutionEngine, PositionAndVelocityValidityAreIndependent) {
     ASSERT_TRUE(gnss_sim::solve_receiver_epoch(nav.store, epoch_time, measurements, kSatelliteCount,
                                                kLoopbackElevationMaskDeg, gnss_sim::AtmosphereMode::NONE,
                                                &velocity_state, &seed_solution, &error_message));
-    ASSERT_TRUE(seed_solution.position.valid);
+    ASSERT_TRUE(seed_solution.position.valid) << seed_solution.position.diagnostic;
 
     gnss_sim::SimTime next_time{};
     ASSERT_TRUE(gnss_sim::add_time_ns(epoch_time, gnss_sim::NANOSECONDS_PER_SECOND, &next_time));
@@ -184,7 +184,7 @@ TEST(SolutionEngine, PositionAndVelocityValidityAreIndependent) {
                                                kLoopbackElevationMaskDeg, gnss_sim::AtmosphereMode::NONE,
                                                &velocity_state, &velocity_solution, &error_message));
     EXPECT_FALSE(velocity_solution.position.valid);
-    EXPECT_TRUE(velocity_solution.velocity.valid);
+    EXPECT_TRUE(velocity_solution.velocity.valid) << velocity_solution.velocity.diagnostic;
     EXPECT_EQ(velocity_solution.position.status, gnss_sim::ReceiverSolutionStatus::kInsufficientObs);
     EXPECT_EQ(velocity_solution.position.type, gnss_sim::ReceiverSolutionType::kNone);
     EXPECT_NEAR(velocity_solution.velocity.velocity_ecef_mps[0], 0.0, 1.0e-3);

@@ -65,6 +65,7 @@ set_target_properties(cjson_vendor PROPERTIES
 )
 
 add_library(gnss_sim_core STATIC
+    src/core/atmosphere_types.cpp
     src/core/deterministic_rng.cpp
     src/core/sim_config.cpp
     src/core/sim_time.cpp

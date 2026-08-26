@@ -92,6 +92,11 @@ TEST(AtmosphereBroadcast, GpsMatchesReferenceKlobucharAndRtklibTroposphere) {
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2041, 200000.0, &time));
     double receiver_ecef[3]{};
     ASSERT_TRUE(gnss_sim::rtklib_llh_to_ecef(20.0, 120.0, 100.0, receiver_ecef));
+    double reference_latitude_deg = 0.0;
+    double reference_longitude_deg = 0.0;
+    double reference_height_m = 0.0;
+    ASSERT_TRUE(gnss_sim::rtklib_ecef_to_llh(receiver_ecef, &reference_latitude_deg, &reference_longitude_deg,
+                                             &reference_height_m));
     const double azimuth = 1.2;
     const double elevation = 0.7;
     gnss_sim::AtmosphereCorrection correction{};
@@ -99,9 +104,10 @@ TEST(AtmosphereBroadcast, GpsMatchesReferenceKlobucharAndRtklibTroposphere) {
                                                         gnss_sim::SignalId::kGpsL1Ca, 0, receiver_ecef, azimuth,
                                                         elevation, &correction, &error_message));
     const double gps_ion[8] = {1.1176e-8, 2.2352e-8, -1.1921e-7, -1.1921e-7, 90112.0, 98304.0, -65536.0, -589824.0};
-    const double expected_ion =
-        reference_klobuchar(200000.0, gps_ion, 20.0 * kPi / 180.0, 120.0 * kPi / 180.0, azimuth, elevation);
-    const double expected_trop = reference_troposphere(20.0 * kPi / 180.0, 100.0, elevation);
+    const double expected_ion = reference_klobuchar(200000.0, gps_ion, reference_latitude_deg * kPi / 180.0,
+                                                    reference_longitude_deg * kPi / 180.0, azimuth, elevation);
+    const double expected_trop = reference_troposphere(reference_latitude_deg * kPi / 180.0, reference_height_m,
+                                                       elevation);
     EXPECT_EQ(correction.ionosphere_status, gnss_sim::IonosphereCorrectionStatus::kApplied);
     EXPECT_NEAR(correction.ionosphere_code_delay_m, expected_ion, 1.0e-9);
     EXPECT_NEAR(correction.troposphere_delay_m, expected_trop, 1.0e-9);

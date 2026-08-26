@@ -1,0 +1,26 @@
+name: extended
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 0'
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap-extended:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with RTKLIB
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -S . -B build -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Extended-suite placeholder
+        run: echo "Long scenario and 8-hour/50 Hz validation is added by issue #17."

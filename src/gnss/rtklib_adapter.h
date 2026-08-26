@@ -38,6 +38,10 @@ bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, doubl
 
 bool rtklib_llh_to_ecef(double latitude_deg, double longitude_deg, double height_m, double ecef_m[3]);
 bool rtklib_ecef_to_llh(const double ecef_m[3], double* latitude_deg, double* longitude_deg, double* height_m);
+bool rtklib_geometric_distance(const double satellite_ecef_m[3], const double receiver_ecef_m[3], double* range_m,
+                               double line_of_sight_ecef[3]);
+bool rtklib_azimuth_elevation(const double receiver_ecef_m[3], const double line_of_sight_ecef[3],
+                              double* azimuth_rad, double* elevation_rad);
 
 } // namespace gnss_sim
 

@@ -74,7 +74,7 @@ TEST(AtmosphereNone, ReturnsExactZeroWithoutNavigationStore) {
     ASSERT_TRUE(gnss_sim::rtklib_llh_to_ecef(20.0, 120.0, 100.0, receiver_ecef));
     gnss_sim::AtmosphereCorrection correction{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::kNone, nullptr, time,
+    ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::NONE, nullptr, time,
                                                         gnss_sim::SignalId::kGpsL1Ca, 0, receiver_ecef, 1.0, 0.7,
                                                         &correction, &error_message));
     EXPECT_EQ(correction.ionosphere_status, gnss_sim::IonosphereCorrectionStatus::kDisabled);
@@ -95,7 +95,7 @@ TEST(AtmosphereBroadcast, GpsMatchesReferenceKlobucharAndRtklibTroposphere) {
     const double azimuth = 1.2;
     const double elevation = 0.7;
     gnss_sim::AtmosphereCorrection correction{};
-    ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::kBroadcast, nav.store, time,
+    ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::BROADCAST, nav.store, time,
                                                         gnss_sim::SignalId::kGpsL1Ca, 0, receiver_ecef, azimuth,
                                                         elevation, &correction, &error_message));
     const double gps_ion[8] = {1.1176e-8, 2.2352e-8, -1.1921e-7, -1.1921e-7,
@@ -120,10 +120,10 @@ TEST(AtmosphereBroadcast, MultiFrequencyIonosphereScalesWithInverseFrequencySqua
 
     gnss_sim::AtmosphereCorrection l1{};
     gnss_sim::AtmosphereCorrection l5{};
-    ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::kBroadcast, nav.store, time,
+    ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::BROADCAST, nav.store, time,
                                                         gnss_sim::SignalId::kGpsL1Ca, 0, receiver_ecef, 0.5, 0.8, &l1,
                                                         &error_message));
-    ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::kBroadcast, nav.store, time,
+    ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::BROADCAST, nav.store, time,
                                                         gnss_sim::SignalId::kGpsL5Q, 0, receiver_ecef, 0.5, 0.8, &l5,
                                                         &error_message));
     const double expected_ratio = (kGpsL1Hz / kGpsL5Hz) * (kGpsL1Hz / kGpsL5Hz);
@@ -145,10 +145,10 @@ TEST(AtmosphereBroadcast, BeidouLegacyUsesBdtPhaseAndB1IReferenceFrequency) {
 
     gnss_sim::AtmosphereCorrection b1i{};
     gnss_sim::AtmosphereCorrection b3i{};
-    ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::kBroadcast, nav.store, time,
+    ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::BROADCAST, nav.store, time,
                                                         gnss_sim::SignalId::kBeidouB1I, 0, receiver_ecef, azimuth,
                                                         elevation, &b1i, &error_message));
-    ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::kBroadcast, nav.store, time,
+    ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::BROADCAST, nav.store, time,
                                                         gnss_sim::SignalId::kBeidouB3I, 0, receiver_ecef, azimuth,
                                                         elevation, &b3i, &error_message));
     const double bds_ion[8] = {2.0e-8, -1.0e-8, 3.0e-8, -2.0e-8, 70000.0, 80000.0, -50000.0, -400000.0};
@@ -174,7 +174,7 @@ TEST(AtmosphereBroadcast, MissingAndUnsupportedModelsAreExplicit) {
     ASSERT_TRUE(gnss_sim::rtklib_llh_to_ecef(20.0, 120.0, 100.0, receiver_ecef));
 
     gnss_sim::AtmosphereCorrection missing{};
-    ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::kBroadcast, no_ion_nav.store, time,
+    ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::BROADCAST, no_ion_nav.store, time,
                                                         gnss_sim::SignalId::kGpsL1Ca, 0, receiver_ecef, 1.0, 0.7,
                                                         &missing, &error_message));
     EXPECT_EQ(missing.ionosphere_status, gnss_sim::IonosphereCorrectionStatus::kMissingParameters);
@@ -186,7 +186,7 @@ TEST(AtmosphereBroadcast, MissingAndUnsupportedModelsAreExplicit) {
                                                        gnss_sim::SignalId::kBeidouB1C};
     for (gnss_sim::SignalId signal_id : unsupported_signals) {
         gnss_sim::AtmosphereCorrection unsupported{};
-        ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::kBroadcast, ion_nav.store, time,
+        ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::BROADCAST, ion_nav.store, time,
                                                             signal_id, 0, receiver_ecef, 1.0, 0.7, &unsupported,
                                                             &error_message));
         EXPECT_EQ(unsupported.ionosphere_status,

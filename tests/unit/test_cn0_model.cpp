@@ -1,10 +1,8 @@
+#include "gnss_sim/sim_time.h"
 #include "model/cn0_model.h"
 
-#include "gnss_sim/sim_time.h"
-
-#include <gtest/gtest.h>
-
 #include <cmath>
+#include <gtest/gtest.h>
 
 namespace {
 
@@ -20,8 +18,8 @@ double estimate(gnss_sim::SignalId signal_id, double elevation_deg, double sow_s
 TEST(Cn0Model, ElevationFallbackIsContinuousAndMonotonicAtPiecewiseBoundaries) {
     const double sow = 180000.0;
     const gnss_sim::SignalId signal = gnss_sim::SignalId::kGpsL1Ca;
-    const double elevations[] = {0.0, 4.999, 5.0, 5.001, 14.999, 15.0, 15.001,
-                                 29.999, 30.0, 30.001, 59.999, 60.0, 60.001, 90.0};
+    const double elevations[] = {0.0,    4.999, 5.0,    5.001,  14.999, 15.0,   15.001,
+                                 29.999, 30.0,  30.001, 59.999, 60.0,   60.001, 90.0};
     double previous = estimate(signal, elevations[0], sow);
     for (std::size_t index = 1; index < sizeof(elevations) / sizeof(elevations[0]); ++index) {
         const double current = estimate(signal, elevations[index], sow);

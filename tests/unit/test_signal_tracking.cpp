@@ -1,11 +1,9 @@
-#include "model/signal_tracking.h"
-
 #include "gnss_sim/sim_time.h"
-
-#include <gtest/gtest.h>
+#include "model/signal_tracking.h"
 
 #include <algorithm>
 #include <cstdint>
+#include <gtest/gtest.h>
 #include <string>
 #include <vector>
 
@@ -181,10 +179,10 @@ std::int64_t fourth_psr_ready_delay_ns(std::uint64_t seed, gnss_sim::StartupMode
     const gnss_sim::SignalTrackingModelConfig config = gnss_sim::default_signal_tracking_model_config();
     const gnss_sim::Cn0Model cn0_model = gnss_sim::make_builtin_cn0_model(seed);
     const gnss_sim::SignalId signals[] = {
-        gnss_sim::SignalId::kGpsL1Ca,    gnss_sim::SignalId::kGpsL1C,     gnss_sim::SignalId::kGpsL5Q,
-        gnss_sim::SignalId::kQzssL1C,    gnss_sim::SignalId::kGalileoE1,  gnss_sim::SignalId::kGalileoE5A,
-        gnss_sim::SignalId::kBeidouB1C,  gnss_sim::SignalId::kGpsL2C,     gnss_sim::SignalId::kGalileoE5B,
-        gnss_sim::SignalId::kBeidouB1I,  gnss_sim::SignalId::kGlonassG1,  gnss_sim::SignalId::kBeidouB3I,
+        gnss_sim::SignalId::kGpsL1Ca,   gnss_sim::SignalId::kGpsL1C,    gnss_sim::SignalId::kGpsL5Q,
+        gnss_sim::SignalId::kQzssL1C,   gnss_sim::SignalId::kGalileoE1, gnss_sim::SignalId::kGalileoE5A,
+        gnss_sim::SignalId::kBeidouB1C, gnss_sim::SignalId::kGpsL2C,    gnss_sim::SignalId::kGalileoE5B,
+        gnss_sim::SignalId::kBeidouB1I, gnss_sim::SignalId::kGlonassG1, gnss_sim::SignalId::kBeidouB3I,
     };
     const double elevations[] = {75.0, 65.0, 55.0, 50.0, 45.0, 40.0, 35.0, 30.0, 25.0, 20.0, 15.0, 10.0};
 
@@ -228,12 +226,12 @@ TEST(SignalTrackingCalibration, NominalOpenSkyEnsemblesStayNearFrozenHotWarmAndR
     std::vector<int> warm;
     std::vector<int> rea;
     for (std::uint64_t seed = 1U; seed <= 1024U; ++seed) {
-        hot.push_back(ceil_seconds(fourth_psr_ready_delay_ns(seed, gnss_sim::StartupMode::HOT,
-                                                            gnss_sim::AcquisitionContext::kHot)));
-        warm.push_back(ceil_seconds(fourth_psr_ready_delay_ns(seed, gnss_sim::StartupMode::WARM,
-                                                             gnss_sim::AcquisitionContext::kWarm)));
-        rea.push_back(ceil_seconds(fourth_psr_ready_delay_ns(seed, gnss_sim::StartupMode::HOT,
-                                                            gnss_sim::AcquisitionContext::kReacquisition)));
+        hot.push_back(ceil_seconds(
+            fourth_psr_ready_delay_ns(seed, gnss_sim::StartupMode::HOT, gnss_sim::AcquisitionContext::kHot)));
+        warm.push_back(ceil_seconds(
+            fourth_psr_ready_delay_ns(seed, gnss_sim::StartupMode::WARM, gnss_sim::AcquisitionContext::kWarm)));
+        rea.push_back(ceil_seconds(
+            fourth_psr_ready_delay_ns(seed, gnss_sim::StartupMode::HOT, gnss_sim::AcquisitionContext::kReacquisition)));
     }
 
     const int hot_p50 = percentile(hot, 50);

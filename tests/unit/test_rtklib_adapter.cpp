@@ -22,6 +22,18 @@ std::string test_nav_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/mixed_nav_2019.rnx";
 }
 
+std::string rtklib_reference_nav_path() {
+    std::string path = test_nav_path();
+#ifdef _WIN32
+    for (char& character : path) {
+        if (character == '/') {
+            character = '\\';
+        }
+    }
+#endif
+    return path;
+}
+
 std::string invalid_nav_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/invalid_nav.rnx";
 }
@@ -81,7 +93,8 @@ TEST_F(RtklibAdapterTest, BroadcastSatelliteStateMatchesDirectRtklibReference) {
     nav_t reference_nav{};
     obs_t reference_obs{};
     sta_t reference_station{};
-    ASSERT_NE(readrnx(test_nav_path().c_str(), 1, "", &reference_obs, &reference_nav, &reference_station), 0);
+    const std::string reference_path = rtklib_reference_nav_path();
+    ASSERT_NE(readrnx(reference_path.c_str(), 1, "", &reference_obs, &reference_nav, &reference_station), 0);
     freeobs(&reference_obs);
     uniqnav(&reference_nav);
 

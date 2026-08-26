@@ -34,6 +34,21 @@ bool valid_gps_time(int gps_week, double sow_sec) {
     return gps_week >= 0 && std::isfinite(sow_sec) && sow_sec >= 0.0 && sow_sec < 604800.0;
 }
 
+std::string rtklib_file_path(const char* file_path) {
+    std::string path(file_path);
+#ifdef _WIN32
+    // RTKLIB expath() only recognizes '\\' as the Windows directory separator.
+    // CMake and callers commonly provide absolute paths with '/'. Normalize at
+    // the adapter boundary so the same simulator path works on MSVC and GCC.
+    for (char& character : path) {
+        if (character == '/') {
+            character = '\\';
+        }
+    }
+#endif
+    return path;
+}
+
 void count_system(int system, RtklibNavCounts* counts) {
     switch (system) {
         case SYS_GPS:
@@ -79,9 +94,10 @@ bool load_rinex_nav_file(RtklibNavStore* store, const char* file_path, std::stri
 
     reset_nav(&store->nav);
 
+    const std::string normalized_path = rtklib_file_path(file_path);
     obs_t obs{};
     sta_t station{};
-    const int status = readrnx(file_path, 1, "", &obs, &store->nav, &station);
+    const int status = readrnx(normalized_path.c_str(), 1, "", &obs, &store->nav, &station);
     freeobs(&obs);
     if (status == 0) {
         reset_nav(&store->nav);

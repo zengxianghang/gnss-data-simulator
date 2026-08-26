@@ -10,7 +10,13 @@
 
 namespace gnss_sim {
 
-constexpr int MAX_NAV_ACQUISITION_FRAGMENTS = 4;
+constexpr int MAX_NAV_ACQUISITION_FRAGMENTS = 12;
+
+enum class NavScheduleVariant {
+    kDefault,
+    kBeidouD1,
+    kBeidouD2,
+};
 
 struct NavAcquisitionFragment {
     int fragment_id;
@@ -21,6 +27,7 @@ struct NavAcquisitionFragment {
 struct NavAcquisitionPlan {
     SignalId signal_id;
     NavMessageFamily family;
+    NavScheduleVariant variant;
     SimTime acquisition_time;
     SimTime availability_time;
     int issue_data;
@@ -38,6 +45,9 @@ struct NavFragmentCollector {
 
 bool build_cold_nav_acquisition_plan(SignalId signal_id, const SimTime& acquisition_time, int issue_data,
                                      NavAcquisitionPlan* plan, std::string* error_message);
+bool build_cold_nav_acquisition_plan_with_variant(SignalId signal_id, NavScheduleVariant variant,
+                                                  const SimTime& acquisition_time, int issue_data,
+                                                  NavAcquisitionPlan* plan, std::string* error_message);
 std::uint32_t nav_acquisition_received_mask(const NavAcquisitionPlan& plan, const SimTime& current_time);
 bool nav_acquisition_complete(const NavAcquisitionPlan& plan, const SimTime& current_time);
 

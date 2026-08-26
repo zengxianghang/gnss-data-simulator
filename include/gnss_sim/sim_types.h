@@ -10,6 +10,6 @@ struct SimTime {
     std::int64_t tow_ns;
 };
 
-}  // namespace gnss_sim
+} // namespace gnss_sim
 
-#endif  // GNSS_SIM_SIM_TYPES_H_
+#endif // GNSS_SIM_SIM_TYPES_H_

@@ -6,14 +6,12 @@
 
 namespace gnss_sim {
 
-const char* simulator_version()
-{
+const char* simulator_version() {
     return "0.1.0-dev";
 }
 
-const char* rtklib_commit_sha()
-{
+const char* rtklib_commit_sha() {
     return GNSS_SIM_RTKLIB_COMMIT;
 }
 
-}  // namespace gnss_sim
+} // namespace gnss_sim

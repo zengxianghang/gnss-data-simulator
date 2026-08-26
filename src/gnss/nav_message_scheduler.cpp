@@ -69,16 +69,12 @@ bool add_periodic_fragment(const SimTime& acquisition_time, std::int64_t cycle_s
 }
 
 bool build_lnav_plan(const SimTime& acquisition_time, NavAcquisitionPlan* plan) {
-    // GPS/QZSS legacy NAV repeats a 30 s frame made of five 6 s subframes.
-    // A complete broadcast ephemeris requires subframes 1, 2, and 3.
     return add_periodic_fragment(acquisition_time, 30, 0, 6, 1, kFragment1, plan) &&
            add_periodic_fragment(acquisition_time, 30, 6, 6, 2, kFragment2, plan) &&
            add_periodic_fragment(acquisition_time, 30, 12, 6, 3, kFragment3, plan);
 }
 
 bool build_cnav_plan(const SimTime& acquisition_time, std::int64_t message_duration_sec, NavAcquisitionPlan* plan) {
-    // CNAV ephemeris requires MT10 + MT11 plus one clock-bearing MT30-37.
-    // V1 models the nominal TTFF-critical repeating sequence MT10, MT11, MT30.
     const std::int64_t cycle_sec = 3 * message_duration_sec;
     return add_periodic_fragment(acquisition_time, cycle_sec, 0, message_duration_sec, 10, kFragment1, plan) &&
            add_periodic_fragment(acquisition_time, cycle_sec, message_duration_sec, message_duration_sec, 11,
@@ -88,15 +84,10 @@ bool build_cnav_plan(const SimTime& acquisition_time, std::int64_t message_durat
 }
 
 bool build_cnav2_plan(const SimTime& acquisition_time, NavAcquisitionPlan* plan) {
-    // L1C CNAV-2 uses an 18 s frame; subframe 2 contains clock and ephemeris.
-    // Require a complete frame after acquisition rather than granting data from
-    // a frame that was already in progress when tracking began.
     return add_periodic_fragment(acquisition_time, 18, 0, 18, 2, kFragment1, plan);
 }
 
 bool build_glonass_fdma_plan(const SimTime& acquisition_time, NavAcquisitionPlan* plan) {
-    // Legacy GLONASS FDMA has 15 two-second strings per 30 s frame.
-    // Immediate ephemeris/clock data occupy strings 1-4 and repeat every frame.
     return add_periodic_fragment(acquisition_time, 30, 0, 2, 1, kFragment1, plan) &&
            add_periodic_fragment(acquisition_time, 30, 2, 2, 2, kFragment2, plan) &&
            add_periodic_fragment(acquisition_time, 30, 4, 2, 3, kFragment3, plan) &&
@@ -104,9 +95,6 @@ bool build_glonass_fdma_plan(const SimTime& acquisition_time, NavAcquisitionPlan
 }
 
 bool build_glonass_l3oc_plan(const SimTime& acquisition_time, NavAcquisitionPlan* plan) {
-    // L3OC immediate orbit/clock data are string types 10, 11, and 12.
-    // Nominal L3OC strings are 3 s; model them at the start of an 18 s
-    // pseudoframe while leaving non-immediate string composition unspecified.
     return add_periodic_fragment(acquisition_time, 18, 0, 3, 10, kFragment1, plan) &&
            add_periodic_fragment(acquisition_time, 18, 3, 3, 11, kFragment2, plan) &&
            add_periodic_fragment(acquisition_time, 18, 6, 3, 12, kFragment3, plan);
@@ -229,6 +217,17 @@ bool deliver_cold_nav_plan_if_complete(const NavAcquisitionPlan& plan, int truth
     if (!nav_acquisition_complete(plan, current_time)) {
         return true;
     }
+
+    RtklibNavRecordInfo record_info{};
+    if (!rtklib_nav_record_info(truth_navigation_store(navigation_state), truth_record_index, &record_info)) {
+        set_error(error_message, "cold NAV plan references an invalid truth navigation record");
+        return false;
+    }
+    if (record_info.kind == RtklibNavRecordKind::kIonosphere || record_info.iode != plan.issue_data) {
+        set_error(error_message, "cold NAV fragment IOD does not match truth ephemeris record");
+        return false;
+    }
+
     return apply_truth_navigation_record(navigation_state, truth_record_index, plan.availability_time, event, emitted,
                                          error_message);
 }

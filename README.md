@@ -4,7 +4,10 @@ C/C++ GNSS test-data simulator for generating deterministic KS, REA, and TTFF da
 
 The simulator is planned to use the latest primary development branch of [zengxianghang/RTKLIB](https://github.com/zengxianghang/RTKLIB) as the GNSS navigation engine, use real IGS RINEX navigation data to compute satellite states, and generate NovAtel-style RANGEA/PSRPOSA/PSRVELA logs together with ground-truth files.
 
+Current V1 defaults include a 3 degree elevation mask, EPH+ION navigation output, no multipath model, and 8 hours of generated data per scenario unless overridden by configuration.
+
 See:
 
-- [`docs/DESIGN_SPEC.md`](docs/DESIGN_SPEC.md) for the current agreed design principles and V1 scope.
-- [`docs/NAV_RECORDS.md`](docs/NAV_RECORDS.md) for the frozen NovAtel OEM7 and Unicore N4 navigation-record output scope.
+- [`docs/DESIGN_SPEC.md`](docs/DESIGN_SPEC.md) for the agreed architecture and V1 scope.
+- [`docs/NAV_RECORDS.md`](docs/NAV_RECORDS.md) for supported NovAtel OEM7 and Unicore N4 navigation records.
+- [`docs/V1_DEFAULTS.md`](docs/V1_DEFAULTS.md) for frozen V1 default parameters.

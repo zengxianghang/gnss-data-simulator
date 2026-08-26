@@ -74,7 +74,9 @@ add_library(gnss_sim_core STATIC
     src/gnss/rtklib_adapter.cpp
     src/gnss/satellite_engine.cpp
     src/gnss/signal_definitions.cpp
+    src/model/cn0_model.cpp
     src/model/receiver_truth.cpp
+    src/model/signal_tracking.cpp
 )
 add_library(gnss_sim::core ALIAS gnss_sim_core)
 target_include_directories(gnss_sim_core
@@ -105,6 +107,7 @@ if(BUILD_TESTING)
     FetchContent_MakeAvailable(googletest)
 
     add_executable(gnss_sim_unit_tests
+        tests/unit/test_cn0_model.cpp
         tests/unit/test_deterministic_rng.cpp
         tests/unit/test_nav_message_scheduler.cpp
         tests/unit/test_nav_message_scheduler_gal_bds.cpp
@@ -113,6 +116,7 @@ if(BUILD_TESTING)
         tests/unit/test_rtklib_adapter.cpp
         tests/unit/test_satellite_engine.cpp
         tests/unit/test_signal_definitions.cpp
+        tests/unit/test_signal_tracking.cpp
         tests/unit/test_sim_config.cpp
         tests/unit/test_sim_time.cpp
     )

@@ -65,6 +65,7 @@ set_target_properties(cjson_vendor PROPERTIES
 )
 
 add_library(gnss_sim_core STATIC
+    src/core/atmosphere_types.cpp
     src/core/deterministic_rng.cpp
     src/core/sim_config.cpp
     src/core/sim_time.cpp
@@ -72,8 +73,10 @@ add_library(gnss_sim_core STATIC
     src/gnss/nav_message_scheduler.cpp
     src/gnss/navigation_state.cpp
     src/gnss/rtklib_adapter.cpp
+    src/gnss/rtklib_atmosphere_adapter.cpp
     src/gnss/satellite_engine.cpp
     src/gnss/signal_definitions.cpp
+    src/model/atmosphere_model.cpp
     src/model/cn0_model.cpp
     src/model/receiver_truth.cpp
     src/model/signal_tracking.cpp
@@ -107,6 +110,7 @@ if(BUILD_TESTING)
     FetchContent_MakeAvailable(googletest)
 
     add_executable(gnss_sim_unit_tests
+        tests/unit/test_atmosphere_model.cpp
         tests/unit/test_cn0_model.cpp
         tests/unit/test_deterministic_rng.cpp
         tests/unit/test_nav_message_scheduler.cpp

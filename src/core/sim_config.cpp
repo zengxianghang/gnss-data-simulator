@@ -158,6 +158,23 @@ bool parse_startup_mode(const char* value, StartupMode* startup_mode, std::strin
     return false;
 }
 
+bool parse_atmosphere_mode(const char* value, AtmosphereMode* atmosphere_mode, std::string* error_message) {
+    if (std::strcmp(value, "unspecified") == 0) {
+        *atmosphere_mode = AtmosphereMode::UNSPECIFIED;
+        return true;
+    }
+    if (std::strcmp(value, "none") == 0) {
+        *atmosphere_mode = AtmosphereMode::NONE;
+        return true;
+    }
+    if (std::strcmp(value, "broadcast") == 0) {
+        *atmosphere_mode = AtmosphereMode::BROADCAST;
+        return true;
+    }
+    set_error(error_message, std::string("unsupported atmosphere_mode: ") + value);
+    return false;
+}
+
 bool parse_receiver(const cJSON* root, SimConfig* config, std::string* error_message) {
     const cJSON* receiver = cJSON_GetObjectItemCaseSensitive(root, "receiver");
     if (receiver == nullptr) {
@@ -230,6 +247,16 @@ bool parse_seed(const cJSON* root, SimConfig* config, std::string* error_message
     return true;
 }
 
+bool valid_atmosphere_mode(AtmosphereMode atmosphere_mode) {
+    switch (atmosphere_mode) {
+        case AtmosphereMode::UNSPECIFIED:
+        case AtmosphereMode::NONE:
+        case AtmosphereMode::BROADCAST:
+            return true;
+    }
+    return false;
+}
+
 } // namespace
 
 SimConfig default_sim_config() {
@@ -245,6 +272,7 @@ SimConfig default_sim_config() {
     config.multipath_enabled = false;
     config.receiver_clock_bias_m = 0.0;
     config.receiver_clock_drift_mps = 0.0;
+    config.atmosphere_mode = AtmosphereMode::UNSPECIFIED;
     config.receiver = {20.0, 120.0, 100.0};
     config.ttff = {StartupMode::HOT, 300LL * NANOSECONDS_PER_SECOND, 30LL * NANOSECONDS_PER_SECOND};
     config.rea = {300LL * NANOSECONDS_PER_SECOND, 10LL * NANOSECONDS_PER_SECOND};
@@ -281,6 +309,10 @@ bool validate_sim_config(const SimConfig& config, std::string* error_message) {
     }
     if (config.receiver_clock_bias_m != 0.0 || config.receiver_clock_drift_mps != 0.0) {
         set_error(error_message, "receiver clock bias and drift must be zero in V1");
+        return false;
+    }
+    if (!valid_atmosphere_mode(config.atmosphere_mode)) {
+        set_error(error_message, "atmosphere_mode is invalid");
         return false;
     }
     if (!std::isfinite(config.receiver.latitude_deg) || config.receiver.latitude_deg < -90.0 ||
@@ -344,16 +376,18 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                                         "multipath_enabled",
                                         "receiver_clock_bias_m",
                                         "receiver_clock_drift_mps",
+                                        "atmosphere_mode",
                                         "receiver",
                                         "ttff",
                                         "rea",
                                         "seed"};
 
     SimConfig parsed = default_sim_config();
-    bool success = validate_object_keys(root, "root", allowed_keys, 15U, error_message);
+    bool success = validate_object_keys(root, "root", allowed_keys, 16U, error_message);
 
     double duration_sec = static_cast<double>(parsed.duration_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
     const char* scenario_name = scenario_type_name(parsed.scenario);
+    const char* atmosphere_name = atmosphere_mode_name(parsed.atmosphere_mode);
     if (success) {
         success =
             read_optional_int(root, "schema_version", &parsed.schema_version, error_message) &&
@@ -369,6 +403,8 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
             read_optional_bool(root, "multipath_enabled", &parsed.multipath_enabled, error_message) &&
             read_optional_number(root, "receiver_clock_bias_m", &parsed.receiver_clock_bias_m, error_message) &&
             read_optional_number(root, "receiver_clock_drift_mps", &parsed.receiver_clock_drift_mps, error_message) &&
+            read_optional_string(root, "atmosphere_mode", &atmosphere_name, error_message) &&
+            parse_atmosphere_mode(atmosphere_name, &parsed.atmosphere_mode, error_message) &&
             parse_receiver(root, &parsed, error_message) && parse_ttff(root, &parsed, error_message) &&
             parse_rea(root, &parsed, error_message) && parse_seed(root, &parsed, error_message) &&
             validate_sim_config(parsed, error_message);

@@ -1,6 +1,8 @@
 #ifndef GNSS_SIM_SIM_CONFIG_H_
 #define GNSS_SIM_SIM_CONFIG_H_
 
+#include "gnss_sim/atmosphere_types.h"
+
 #include <cstdint>
 #include <string>
 
@@ -47,6 +49,7 @@ struct SimConfig {
     bool multipath_enabled;
     double receiver_clock_bias_m;
     double receiver_clock_drift_mps;
+    AtmosphereMode atmosphere_mode;
     ReceiverConfig receiver;
     TtffConfig ttff;
     ReaConfig rea;
@@ -58,6 +61,7 @@ bool validate_sim_config(const SimConfig& config, std::string* error_message);
 bool load_sim_config_json(const char* file_path, SimConfig* config, std::string* error_message);
 const char* scenario_type_name(ScenarioType scenario);
 const char* startup_mode_name(StartupMode startup_mode);
+const char* atmosphere_mode_name(AtmosphereMode atmosphere_mode);
 
 } // namespace gnss_sim
 

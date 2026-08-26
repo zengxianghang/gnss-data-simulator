@@ -13,6 +13,21 @@ enum class RtklibNavRecordKind {
     kIonosphere,
 };
 
+enum class RtklibIonosphereSystem {
+    kGps,
+    kQzss,
+    kBeidouLegacy,
+    kGalileo,
+    kGlonass,
+    kBeidouModern,
+};
+
+enum class RtklibIonosphereStatus {
+    kApplied,
+    kMissingParameters,
+    kUnsupportedModel,
+};
+
 struct RtklibNavCounts {
     int gps_eph_count;
     int glo_eph_count;
@@ -44,6 +59,12 @@ struct RtklibSatelliteState {
     int health;
 };
 
+struct RtklibIonosphereResult {
+    RtklibIonosphereStatus status;
+    double reference_delay_m;
+    double reference_frequency_hz;
+};
+
 RtklibNavStore* create_rtklib_nav_store();
 void destroy_rtklib_nav_store(RtklibNavStore* store);
 
@@ -69,6 +90,13 @@ bool rtklib_geometric_distance(const double satellite_ecef_m[3], const double re
                                double line_of_sight_ecef[3]);
 bool rtklib_azimuth_elevation(const double receiver_ecef_m[3], const double line_of_sight_ecef[3], double* azimuth_rad,
                               double* elevation_rad);
+
+bool rtklib_broadcast_ionosphere_reference_delay(const RtklibNavStore* store, RtklibIonosphereSystem system,
+                                                 int gps_week, double sow_sec, const double receiver_ecef_m[3],
+                                                 double azimuth_rad, double elevation_rad,
+                                                 RtklibIonosphereResult* result, std::string* error_message);
+bool rtklib_troposphere_delay(int gps_week, double sow_sec, const double receiver_ecef_m[3], double azimuth_rad,
+                              double elevation_rad, double* delay_m, std::string* error_message);
 
 } // namespace gnss_sim
 

@@ -54,8 +54,7 @@ struct MeasurementObservation {
 void reset_carrier_ambiguity_state(CarrierAmbiguityState* state);
 
 bool compute_broadcast_code_bias_m(const SignalDefinition& signal, const RtklibBroadcastBiasData& bias_data,
-                                   double* code_bias_m, BroadcastCodeBiasStatus* status,
-                                   std::string* error_message);
+                                   double* code_bias_m, BroadcastCodeBiasStatus* status, std::string* error_message);
 
 bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const SatelliteGeometry& geometry,
                                      const SignalTracker& tracker, const AtmosphereCorrection& atmosphere,

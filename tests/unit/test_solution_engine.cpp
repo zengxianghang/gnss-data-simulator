@@ -61,8 +61,7 @@ gnss_sim::SignalTracker tracking_gps_l1ca(const gnss_sim::SimTime& tracking_star
 }
 
 bool generate_measurements(const gnss_sim::RtklibNavStore* truth_nav, const gnss_sim::SimTime& epoch_time,
-                           gnss_sim::MeasurementObservation measurements[kSatelliteCount],
-                           std::string* error_message) {
+                           gnss_sim::MeasurementObservation measurements[kSatelliteCount], std::string* error_message) {
     gnss_sim::ReceiverTruth receiver{};
     if (!make_receiver(&receiver, error_message)) {
         return false;

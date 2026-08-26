@@ -1,6 +1,8 @@
 #ifndef GNSS_SIM_SIM_CONFIG_H_
 #define GNSS_SIM_SIM_CONFIG_H_
 
+#include "gnss_sim/atmosphere_types.h"
+
 #include <cstdint>
 #include <string>
 
@@ -16,12 +18,6 @@ enum class StartupMode {
     HOT,
     WARM,
     COLD,
-};
-
-enum class AtmosphereMode {
-    UNSPECIFIED,
-    NONE,
-    BROADCAST,
 };
 
 struct ReceiverConfig {

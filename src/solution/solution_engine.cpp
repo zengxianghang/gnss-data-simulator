@@ -50,8 +50,8 @@ bool make_rtklib_observation(const MeasurementObservation& source, RtklibSolutio
     result.doppler_hz = source.doppler_hz;
     result.wavelength_m = source.wavelength_m;
     result.cn0_dbhz = source.cn0_dbhz;
-    result.pseudorange_valid = source.pseudorange_valid &&
-                               source.code_bias_status != BroadcastCodeBiasStatus::kUnavailableForMessageFamily;
+    result.pseudorange_valid =
+        source.pseudorange_valid && source.code_bias_status != BroadcastCodeBiasStatus::kUnavailableForMessageFamily;
     result.doppler_valid = source.doppler_valid;
     *destination = result;
     return true;
@@ -148,9 +148,9 @@ void reset_solution_engine_state(SolutionEngineState* state) {
 }
 
 bool solve_receiver_epoch(const RtklibNavStore* receiver_nav, const SimTime& epoch_time,
-                          const MeasurementObservation* observations, int observation_count,
-                          double elevation_mask_deg, AtmosphereMode atmosphere_mode, SolutionEngineState* state,
-                          SolutionEpoch* solution, std::string* error_message) {
+                          const MeasurementObservation* observations, int observation_count, double elevation_mask_deg,
+                          AtmosphereMode atmosphere_mode, SolutionEngineState* state, SolutionEpoch* solution,
+                          std::string* error_message) {
     if (receiver_nav == nullptr || observation_count < 0 || (observation_count > 0 && observations == nullptr) ||
         state == nullptr || solution == nullptr || !valid_epoch_time(epoch_time) ||
         !std::isfinite(elevation_mask_deg) || elevation_mask_deg < -90.0 || elevation_mask_deg > 90.0 ||
@@ -188,8 +188,8 @@ bool solve_receiver_epoch(const RtklibNavStore* receiver_nav, const SimTime& epo
 
     const double sow_sec = sim_time_sow_sec(epoch_time);
     RtklibPositionSolution rtklib_position{};
-    if (!rtklib_solve_single_position(receiver_nav, epoch_time.gps_week, sow_sec, position_observations,
-                                      position_count, elevation_mask_deg, atmosphere_mode == AtmosphereMode::BROADCAST,
+    if (!rtklib_solve_single_position(receiver_nav, epoch_time.gps_week, sow_sec, position_observations, position_count,
+                                      elevation_mask_deg, atmosphere_mode == AtmosphereMode::BROADCAST,
                                       &rtklib_position, error_message)) {
         return false;
     }

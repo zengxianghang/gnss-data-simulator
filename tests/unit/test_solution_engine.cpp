@@ -17,7 +17,7 @@
 namespace {
 
 constexpr int kSatelliteCount = 8;
-constexpr double kLoopbackElevationMaskDeg = -90.0;
+constexpr double kLoopbackElevationMaskDeg = 0.0;
 
 std::string loopback_nav_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/gps_loopback_nav.rnx";
@@ -222,7 +222,7 @@ TEST(SolutionEngine, ColdReceiverCannotUseTruthOnlyEphemeris) {
     gnss_sim::SimTime epoch_time{};
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2253, 172900.0, &epoch_time));
     ASSERT_TRUE(gnss_sim::initialize_receiver_navigation(navigation.state, gnss_sim::StartupMode::COLD, epoch_time,
-                                                        &error_message));
+                                                         &error_message));
 
     const gnss_sim::RtklibNavStore* truth_nav = gnss_sim::truth_navigation_store(navigation.state);
     const gnss_sim::RtklibNavStore* receiver_nav = gnss_sim::receiver_navigation_store(navigation.state);

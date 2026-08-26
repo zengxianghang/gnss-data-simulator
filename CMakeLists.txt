@@ -33,6 +33,7 @@ add_library(rtklib_pinned STATIC
     third_party/RTKLIB/src/preceph.c
     third_party/RTKLIB/src/qzslex.c
     third_party/RTKLIB/src/rinex.c
+    third_party/RTKLIB/src/rtcm3.c
     third_party/RTKLIB/src/rtkcmn.c
     third_party/RTKLIB/src/sbas.c
 )

@@ -18,6 +18,12 @@ enum class StartupMode {
     COLD,
 };
 
+enum class AtmosphereMode {
+    UNSPECIFIED,
+    NONE,
+    BROADCAST,
+};
+
 struct ReceiverConfig {
     double latitude_deg;
     double longitude_deg;
@@ -47,6 +53,7 @@ struct SimConfig {
     bool multipath_enabled;
     double receiver_clock_bias_m;
     double receiver_clock_drift_mps;
+    AtmosphereMode atmosphere_mode;
     ReceiverConfig receiver;
     TtffConfig ttff;
     ReaConfig rea;
@@ -58,6 +65,7 @@ bool validate_sim_config(const SimConfig& config, std::string* error_message);
 bool load_sim_config_json(const char* file_path, SimConfig* config, std::string* error_message);
 const char* scenario_type_name(ScenarioType scenario);
 const char* startup_mode_name(StartupMode startup_mode);
+const char* atmosphere_mode_name(AtmosphereMode atmosphere_mode);
 
 } // namespace gnss_sim
 

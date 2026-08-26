@@ -93,8 +93,8 @@ bool rtklib_azimuth_elevation(const double receiver_ecef_m[3], const double line
 
 bool rtklib_broadcast_ionosphere_reference_delay(const RtklibNavStore* store, RtklibIonosphereSystem system,
                                                  int gps_week, double sow_sec, const double receiver_ecef_m[3],
-                                                 double azimuth_rad, double elevation_rad, RtklibIonosphereResult* result,
-                                                 std::string* error_message);
+                                                 double azimuth_rad, double elevation_rad,
+                                                 RtklibIonosphereResult* result, std::string* error_message);
 bool rtklib_troposphere_delay(int gps_week, double sow_sec, const double receiver_ecef_m[3], double azimuth_rad,
                               double elevation_rad, double* delay_m, std::string* error_message);
 

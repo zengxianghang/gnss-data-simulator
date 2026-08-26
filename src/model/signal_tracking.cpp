@@ -176,7 +176,8 @@ bool schedule_signal_acquisition(SignalTracker* tracker, AcquisitionContext cont
                                  std::string* error_message) {
     if (tracker == nullptr || rng == nullptr || !valid_time(signal_on_time) || !valid_time(search_ready_time) ||
         compare_sim_time(search_ready_time, signal_on_time) < 0 || !std::isfinite(elevation_deg) ||
-        find_signal_definition(tracker->signal_id) == nullptr || !validate_signal_tracking_model_config(config, nullptr)) {
+        find_signal_definition(tracker->signal_id) == nullptr ||
+        !validate_signal_tracking_model_config(config, nullptr)) {
         set_error(error_message, "signal acquisition schedule has invalid arguments");
         return false;
     }

@@ -116,8 +116,7 @@ bool compute_atmosphere_correction(AtmosphereMode mode, const RtklibNavStore* na
     if (ionosphere.status == RtklibIonosphereStatus::kApplied) {
         const SignalDefinition* definition = find_signal_definition(signal_id);
         double signal_frequency_hz = 0.0;
-        if (definition == nullptr ||
-            !signal_carrier_frequency_hz(*definition, glonass_fcn, &signal_frequency_hz) ||
+        if (definition == nullptr || !signal_carrier_frequency_hz(*definition, glonass_fcn, &signal_frequency_hz) ||
             !std::isfinite(signal_frequency_hz) || signal_frequency_hz <= 0.0 ||
             ionosphere.reference_frequency_hz <= 0.0) {
             set_error(error_message, "cannot determine signal frequency for ionosphere scaling");

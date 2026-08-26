@@ -7,6 +7,12 @@ namespace gnss_sim {
 
 struct RtklibNavStore;
 
+enum class RtklibNavRecordKind {
+    kEphemeris,
+    kGlonassEphemeris,
+    kIonosphere,
+};
+
 struct RtklibNavCounts {
     int gps_eph_count;
     int glo_eph_count;
@@ -14,6 +20,19 @@ struct RtklibNavCounts {
     int bds_eph_count;
     int qzss_eph_count;
     int other_eph_count;
+};
+
+struct RtklibNavRecordInfo {
+    RtklibNavRecordKind kind;
+    int satellite_number;
+    int system;
+    int prn;
+    int message_type;
+    int iode;
+    int iodc;
+    int gps_week;
+    double transmit_sow_sec;
+    double toe_sow_sec;
 };
 
 struct RtklibSatelliteState {
@@ -30,6 +49,14 @@ void destroy_rtklib_nav_store(RtklibNavStore* store);
 
 bool load_rinex_nav_file(RtklibNavStore* store, const char* file_path, std::string* error_message);
 bool get_rtklib_nav_counts(const RtklibNavStore* store, RtklibNavCounts* counts);
+int rtklib_nav_record_count(const RtklibNavStore* store);
+bool rtklib_nav_record_info(const RtklibNavStore* store, int record_index, RtklibNavRecordInfo* info);
+bool rtklib_clear_nav_store(RtklibNavStore* store);
+bool rtklib_copy_nav_snapshot(const RtklibNavStore* source, int gps_week, double sow_sec, RtklibNavStore* destination,
+                              std::string* error_message);
+bool rtklib_copy_nav_record(const RtklibNavStore* source, int record_index, RtklibNavStore* destination,
+                            std::string* error_message);
+bool rtklib_nav_store_has_satellite_ephemeris(const RtklibNavStore* store, int satellite_number);
 
 bool rtklib_satellite_id_to_number(const char* satellite_id, int* satellite_number);
 bool rtklib_observation_code(const char* rinex_signal_code, int* observation_code, int* frequency_index);

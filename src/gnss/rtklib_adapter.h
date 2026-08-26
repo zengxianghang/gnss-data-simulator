@@ -88,6 +88,33 @@ struct RtklibBroadcastBiasData {
     double glonass_dtaun_sec;
 };
 
+struct RtklibSolutionObservation {
+    int satellite_number;
+    int observation_code;
+    double pseudorange_m;
+    double doppler_hz;
+    double wavelength_m;
+    double cn0_dbhz;
+    bool pseudorange_valid;
+    bool doppler_valid;
+};
+
+struct RtklibPositionSolution {
+    double position_ecef_m[3];
+    double latitude_deg;
+    double longitude_deg;
+    double height_m;
+    double receiver_clock_bias_m;
+    double covariance_ecef_m2[6];
+    int used_satellites;
+};
+
+struct RtklibVelocitySolution {
+    double velocity_ecef_mps[3];
+    double receiver_clock_drift_mps;
+    int used_satellites;
+};
+
 RtklibNavStore* create_rtklib_nav_store();
 void destroy_rtklib_nav_store(RtklibNavStore* store);
 
@@ -108,6 +135,15 @@ bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, doubl
                                 RtklibSatelliteState* state, std::string* error_message);
 bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
                                 RtklibBroadcastBiasData* data, std::string* error_message);
+
+bool rtklib_solve_single_position(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
+                                  const RtklibSolutionObservation* observations, int observation_count,
+                                  double elevation_mask_deg, bool broadcast_atmosphere,
+                                  RtklibPositionSolution* solution, std::string* error_message);
+bool rtklib_solve_single_velocity(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
+                                  const RtklibSolutionObservation* observations, int observation_count,
+                                  const double position_hint_ecef_m[3], double elevation_mask_deg,
+                                  RtklibVelocitySolution* solution, std::string* error_message);
 
 bool rtklib_llh_to_ecef(double latitude_deg, double longitude_deg, double height_m, double ecef_m[3]);
 bool rtklib_ecef_to_llh(const double ecef_m[3], double* latitude_deg, double* longitude_deg, double* height_m);

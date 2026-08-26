@@ -119,10 +119,6 @@ bool get_rtklib_nav_counts(const RtklibNavStore* store, RtklibNavCounts* counts)
     return true;
 }
 
-const char* rtklib_commit_sha() {
-    return GNSS_SIM_RTKLIB_COMMIT;
-}
-
 bool rtklib_satellite_id_to_number(const char* satellite_id, int* satellite_number) {
     if (satellite_id == nullptr || satellite_number == nullptr) {
         return false;

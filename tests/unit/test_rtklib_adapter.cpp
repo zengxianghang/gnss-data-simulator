@@ -1,4 +1,5 @@
 #include "gnss/rtklib_adapter.h"
+#include "gnss_sim/simulator.h"
 
 #include <gtest/gtest.h>
 

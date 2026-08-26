@@ -31,8 +31,10 @@ find_package(Threads REQUIRED)
 add_library(rtklib_pinned STATIC
     third_party/RTKLIB/src/ephemeris.c
     third_party/RTKLIB/src/preceph.c
+    third_party/RTKLIB/src/qzslex.c
     third_party/RTKLIB/src/rinex.c
     third_party/RTKLIB/src/rtkcmn.c
+    third_party/RTKLIB/src/sbas.c
 )
 add_library(gnss_sim::rtklib ALIAS rtklib_pinned)
 target_include_directories(rtklib_pinned SYSTEM PUBLIC

@@ -31,6 +31,7 @@ struct PositionSolution {
     double receiver_clock_bias_m;
     double covariance_ecef_m2[6];
     int used_satellites;
+    char diagnostic[128];
 };
 
 struct VelocitySolution {
@@ -40,6 +41,7 @@ struct VelocitySolution {
     double velocity_ecef_mps[3];
     double receiver_clock_drift_mps;
     int used_satellites;
+    char diagnostic[128];
 };
 
 struct SolutionEpoch {

@@ -1,10 +1,18 @@
 #include "gnss/rtklib_adapter.h"
 
+#include <gtest/gtest.h>
+
 extern "C" {
 #include <rtklib.h>
 }
 
-#include <gtest/gtest.h>
+#ifdef lock
+#undef lock
+#endif
+#ifdef unlock
+#undef unlock
+#endif
+
 #include <string>
 
 namespace {
@@ -65,8 +73,8 @@ TEST_F(RtklibAdapterTest, BroadcastSatelliteStateMatchesDirectRtklibReference) {
     ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number("G01", &satellite_number));
 
     gnss_sim::RtklibSatelliteState adapter_state{};
-    ASSERT_TRUE(gnss_sim::get_rtklib_satellite_state(store_, 2041, 180000.0, satellite_number, &adapter_state,
-                                                     &error_message))
+    ASSERT_TRUE(
+        gnss_sim::get_rtklib_satellite_state(store_, 2041, 180000.0, satellite_number, &adapter_state, &error_message))
         << error_message;
 
     nav_t reference_nav{};

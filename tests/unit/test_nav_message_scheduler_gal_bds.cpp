@@ -63,9 +63,9 @@ TEST(ColdNavGalileo, InavUsesSignalSpecificNominalWordSwapSchedule) {
     gnss_sim::NavAcquisitionPlan e5b_plan{};
     std::string error_message;
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGalileoE1, e1_after_word2_start, 7,
-                                                         &e1_plan, &error_message));
+                                                          &e1_plan, &error_message));
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGalileoE5B, e5b_after_word1_start, 7,
-                                                         &e5b_plan, &error_message));
+                                                          &e5b_plan, &error_message));
     EXPECT_NEAR(gnss_sim::sim_time_sow_sec(e1_plan.availability_time), 180033.0, 1.0e-9);
     EXPECT_NEAR(gnss_sim::sim_time_sow_sec(e5b_plan.availability_time), 180032.0, 1.0e-9);
     EXPECT_EQ(e1_plan.fragment_count, 4);
@@ -80,7 +80,7 @@ TEST(ColdNavGalileo, FnavRequiresClockPageAndThreeEphemerisPages) {
     gnss_sim::NavAcquisitionPlan plan{};
     std::string error_message;
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGalileoE5A, acquisition_time, 7, &plan,
-                                                         &error_message));
+                                                          &error_message));
     EXPECT_NEAR(gnss_sim::sim_time_sow_sec(plan.availability_time), 180060.0, 1.0e-9);
     ASSERT_EQ(plan.fragment_count, 4);
     EXPECT_EQ(plan.fragments[0].fragment_id, 1);
@@ -95,28 +95,28 @@ TEST(ColdNavGalileo, E6HasNoNormalBroadcastEphemerisAcquisitionPlan) {
     gnss_sim::NavAcquisitionPlan plan{};
     std::string error_message;
     EXPECT_FALSE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGalileoE6, acquisition_time, 7, &plan,
-                                                          &error_message));
+                                                           &error_message));
     EXPECT_NE(error_message.find("does not provide the normal broadcast ephemeris"), std::string::npos);
 }
 
 TEST(ColdNavBeidou, D1AndD2AreDistinctAndUseBdtPhase) {
     // GPST 180014 corresponds to BDT 180000, exactly on a BDT frame boundary.
-    expect_bds_variant_availability(gnss_sim::SignalId::kBeidouB1I, gnss_sim::NavScheduleVariant::kBeidouD1,
-                                    180014.0, 180032.0, 3);
-    expect_bds_variant_availability(gnss_sim::SignalId::kBeidouB1I, gnss_sim::NavScheduleVariant::kBeidouD2,
-                                    180014.0, 180041.6, 10);
-    expect_bds_variant_availability(gnss_sim::SignalId::kBeidouB3I, gnss_sim::NavScheduleVariant::kBeidouD1,
-                                    180014.0, 180032.0, 3);
-    expect_bds_variant_availability(gnss_sim::SignalId::kBeidouB3I, gnss_sim::NavScheduleVariant::kBeidouD2,
-                                    180014.0, 180041.6, 10);
+    expect_bds_variant_availability(gnss_sim::SignalId::kBeidouB1I, gnss_sim::NavScheduleVariant::kBeidouD1, 180014.0,
+                                    180032.0, 3);
+    expect_bds_variant_availability(gnss_sim::SignalId::kBeidouB1I, gnss_sim::NavScheduleVariant::kBeidouD2, 180014.0,
+                                    180041.6, 10);
+    expect_bds_variant_availability(gnss_sim::SignalId::kBeidouB3I, gnss_sim::NavScheduleVariant::kBeidouD1, 180014.0,
+                                    180032.0, 3);
+    expect_bds_variant_availability(gnss_sim::SignalId::kBeidouB3I, gnss_sim::NavScheduleVariant::kBeidouD2, 180014.0,
+                                    180041.6, 10);
 
     gnss_sim::SimTime just_after_page1{};
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2300, 180014.001, &just_after_page1));
     gnss_sim::NavAcquisitionPlan d2_plan{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan_with_variant(
-        gnss_sim::SignalId::kBeidouB1I, gnss_sim::NavScheduleVariant::kBeidouD2, just_after_page1, 7, &d2_plan,
-        &error_message));
+    ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan_with_variant(gnss_sim::SignalId::kBeidouB1I,
+                                                                       gnss_sim::NavScheduleVariant::kBeidouD2,
+                                                                       just_after_page1, 7, &d2_plan, &error_message));
     EXPECT_NEAR(gnss_sim::sim_time_sow_sec(d2_plan.availability_time), 180044.6, 1.0e-9);
 }
 
@@ -126,7 +126,7 @@ TEST(ColdNavBeidou, DefaultLegacyVariantIsD1) {
     gnss_sim::NavAcquisitionPlan plan{};
     std::string error_message;
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kBeidouB1I, acquisition_time, 7, &plan,
-                                                         &error_message));
+                                                          &error_message));
     EXPECT_EQ(plan.variant, gnss_sim::NavScheduleVariant::kBeidouD1);
     EXPECT_EQ(plan.fragment_count, 3);
 }
@@ -144,11 +144,11 @@ TEST(ColdNavBeidou, ModernFamiliesUseDifferentFrameAndMessageRules) {
     gnss_sim::NavAcquisitionPlan b2a_plan{};
     gnss_sim::NavAcquisitionPlan b2b_plan{};
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kBeidouB1C, acquisition_time, 7,
-                                                         &b1c_plan, &error_message));
+                                                          &b1c_plan, &error_message));
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kBeidouB2A, acquisition_time, 7,
-                                                         &b2a_plan, &error_message));
+                                                          &b2a_plan, &error_message));
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kBeidouB2B, acquisition_time, 7,
-                                                         &b2b_plan, &error_message));
+                                                          &b2b_plan, &error_message));
     EXPECT_NEAR(gnss_sim::sim_time_sow_sec(b1c_plan.availability_time), 180050.0, 1.0e-9);
     EXPECT_NEAR(gnss_sim::sim_time_sow_sec(b2a_plan.availability_time), 180026.0, 1.0e-9);
     EXPECT_NEAR(gnss_sim::sim_time_sow_sec(b2b_plan.availability_time), 180017.0, 1.0e-9);
@@ -166,9 +166,9 @@ TEST(ColdNavBeidou, D1CrossesGpsWeekWhileKeepingBdtFramePhase) {
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2300, 604784.0, &acquisition_time));
     gnss_sim::NavAcquisitionPlan plan{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan_with_variant(
-        gnss_sim::SignalId::kBeidouB1I, gnss_sim::NavScheduleVariant::kBeidouD1, acquisition_time, 7, &plan,
-        &error_message));
+    ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan_with_variant(gnss_sim::SignalId::kBeidouB1I,
+                                                                       gnss_sim::NavScheduleVariant::kBeidouD1,
+                                                                       acquisition_time, 7, &plan, &error_message));
     EXPECT_EQ(plan.availability_time.gps_week, 2301);
     EXPECT_NEAR(gnss_sim::sim_time_sow_sec(plan.availability_time), 2.0, 1.0e-9);
 }
@@ -178,9 +178,9 @@ TEST(ColdNavBeidou, VariantCannotBeAppliedToUnrelatedConstellation) {
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2300, 180000.0, &acquisition_time));
     gnss_sim::NavAcquisitionPlan plan{};
     std::string error_message;
-    EXPECT_FALSE(gnss_sim::build_cold_nav_acquisition_plan_with_variant(
-        gnss_sim::SignalId::kGpsL1Ca, gnss_sim::NavScheduleVariant::kBeidouD2, acquisition_time, 7, &plan,
-        &error_message));
+    EXPECT_FALSE(gnss_sim::build_cold_nav_acquisition_plan_with_variant(gnss_sim::SignalId::kGpsL1Ca,
+                                                                        gnss_sim::NavScheduleVariant::kBeidouD2,
+                                                                        acquisition_time, 7, &plan, &error_message));
     EXPECT_FALSE(error_message.empty());
 }
 
@@ -210,8 +210,8 @@ TEST(ColdNavGalileoBeidouIntegration, ReceiverNavGrowsOnlyAfterEachConstellation
     ASSERT_TRUE(gnss_sim::rtklib_nav_record_info(gnss_sim::truth_navigation_store(state), bds_record, &bds_info));
 
     gnss_sim::NavAcquisitionPlan gal_plan{};
-    ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGalileoE1, startup_time,
-                                                         gal_info.iode, &gal_plan, &error_message));
+    ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGalileoE1, startup_time, gal_info.iode,
+                                                          &gal_plan, &error_message));
     gnss_sim::SimTime bds_acquisition{};
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2041, 180014.0, &bds_acquisition));
     gnss_sim::NavAcquisitionPlan bds_plan{};
@@ -221,7 +221,7 @@ TEST(ColdNavGalileoBeidouIntegration, ReceiverNavGrowsOnlyAfterEachConstellation
 
     bool emitted = false;
     ASSERT_TRUE(gnss_sim::deliver_cold_nav_plan_if_complete(gal_plan, gal_record, gal_plan.availability_time, state,
-                                                           nullptr, &emitted, &error_message));
+                                                            nullptr, &emitted, &error_message));
     EXPECT_TRUE(emitted);
     gnss_sim::RtklibNavCounts counts{};
     ASSERT_TRUE(gnss_sim::get_rtklib_nav_counts(gnss_sim::receiver_navigation_store(state), &counts));
@@ -230,10 +230,10 @@ TEST(ColdNavGalileoBeidouIntegration, ReceiverNavGrowsOnlyAfterEachConstellation
 
     emitted = true;
     ASSERT_TRUE(gnss_sim::deliver_cold_nav_plan_if_complete(bds_plan, bds_record, gal_plan.availability_time, state,
-                                                           nullptr, &emitted, &error_message));
+                                                            nullptr, &emitted, &error_message));
     EXPECT_FALSE(emitted);
     ASSERT_TRUE(gnss_sim::deliver_cold_nav_plan_if_complete(bds_plan, bds_record, bds_plan.availability_time, state,
-                                                           nullptr, &emitted, &error_message));
+                                                            nullptr, &emitted, &error_message));
     EXPECT_TRUE(emitted);
     ASSERT_TRUE(gnss_sim::get_rtklib_nav_counts(gnss_sim::receiver_navigation_store(state), &counts));
     EXPECT_EQ(counts.gal_eph_count, 1);

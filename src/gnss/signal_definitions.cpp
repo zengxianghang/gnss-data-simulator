@@ -157,4 +157,20 @@ bool signal_rtklib_observation_code(const SignalDefinition& definition, int* obs
     return rtklib_observation_code(definition.rinex_signal_code, observation_code, frequency_index);
 }
 
+int signal_single_point_priority(SignalId signal_id) {
+    switch (signal_id) {
+        case SignalId::kGpsL1Ca:
+        case SignalId::kQzssL1Ca:
+        case SignalId::kGlonassG1:
+        case SignalId::kGalileoE1:
+        case SignalId::kBeidouB1I:
+            return 0;
+        case SignalId::kGpsL1C:
+        case SignalId::kQzssL1C:
+            return 1;
+        default:
+            return -1;
+    }
+}
+
 } // namespace gnss_sim

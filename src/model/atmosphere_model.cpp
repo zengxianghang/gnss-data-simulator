@@ -90,12 +90,12 @@ bool compute_atmosphere_correction(AtmosphereMode mode, const RtklibNavStore* na
     result.ionosphere_status = IonosphereCorrectionStatus::kDisabled;
     result.ionosphere_code_delay_m = 0.0;
     result.troposphere_delay_m = 0.0;
-    if (mode == AtmosphereMode::kNone) {
+    if (mode == AtmosphereMode::NONE) {
         *correction = result;
         return true;
     }
-    if (mode != AtmosphereMode::kBroadcast || nav_store == nullptr) {
-        set_error(error_message, "broadcast atmosphere correction requires a navigation store");
+    if (mode != AtmosphereMode::BROADCAST || nav_store == nullptr) {
+        set_error(error_message, "broadcast atmosphere correction requires a navigation store and explicit mode");
         return false;
     }
 
@@ -133,16 +133,6 @@ bool compute_atmosphere_correction(AtmosphereMode mode, const RtklibNavStore* na
     }
     *correction = result;
     return true;
-}
-
-const char* atmosphere_mode_name(AtmosphereMode mode) {
-    switch (mode) {
-        case AtmosphereMode::kNone:
-            return "none";
-        case AtmosphereMode::kBroadcast:
-            return "broadcast";
-    }
-    return "unknown";
 }
 
 const char* ionosphere_correction_status_name(IonosphereCorrectionStatus status) {

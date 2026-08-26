@@ -240,6 +240,41 @@ TEST(ZeroNoiseMeasurement, ComponentsMatchReferenceEquationsAndAtmosphereSigns) 
     EXPECT_TRUE(observation.adr_valid);
 }
 
+TEST(ZeroNoiseMeasurement, MultiFrequencySharesGeometryClockAndDiffersByWavelengthAndBias) {
+    NavGuard nav{gnss_sim::create_rtklib_nav_store()};
+    ASSERT_NE(nav.store, nullptr);
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(nav.store, mixed_nav_path().c_str(), &error_message));
+    gnss_sim::ReceiverTruth receiver{};
+    ASSERT_TRUE(make_test_receiver(&receiver, &error_message));
+    gnss_sim::SimTime receive_time{};
+    ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2041, 180100.0, &receive_time));
+    int satellite_number = 0;
+    ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number("G01", &satellite_number));
+    gnss_sim::SatelliteGeometry geometry{};
+    ASSERT_TRUE(gnss_sim::compute_satellite_geometry(nav.store, receiver, receive_time, satellite_number, -90.0,
+                                                     &geometry, &error_message));
+    gnss_sim::AtmosphereCorrection atmosphere{};
+    atmosphere.mode = gnss_sim::AtmosphereMode::NONE;
+    gnss_sim::CarrierAmbiguityState l1_ambiguity{};
+    gnss_sim::CarrierAmbiguityState l2_ambiguity{};
+    gnss_sim::MeasurementObservation l1{};
+    gnss_sim::MeasurementObservation l2{};
+    gnss_sim::SignalTracker l1_tracker = tracking_tracker(gnss_sim::SignalId::kGpsL1Ca, receive_time);
+    gnss_sim::SignalTracker l2_tracker = tracking_tracker(gnss_sim::SignalId::kGpsL2P, receive_time);
+    ASSERT_TRUE(gnss_sim::generate_zero_noise_measurement(nav.store, geometry, l1_tracker, atmosphere, &l1_ambiguity,
+                                                          &l1, &error_message));
+    ASSERT_TRUE(gnss_sim::generate_zero_noise_measurement(nav.store, geometry, l2_tracker, atmosphere, &l2_ambiguity,
+                                                          &l2, &error_message));
+    EXPECT_DOUBLE_EQ(l1.geometric_range_m, l2.geometric_range_m);
+    EXPECT_DOUBLE_EQ(l1.range_rate_mps, l2.range_rate_mps);
+    EXPECT_DOUBLE_EQ(l1.satellite_clock_bias_m, l2.satellite_clock_bias_m);
+    EXPECT_DOUBLE_EQ(l1.satellite_clock_drift_mps, l2.satellite_clock_drift_mps);
+    EXPECT_NE(l1.wavelength_m, l2.wavelength_m);
+    EXPECT_NE(l1.code_bias_m, l2.code_bias_m);
+    EXPECT_NEAR(l2.pseudorange_m - l1.pseudorange_m, l2.code_bias_m - l1.code_bias_m, 1.0e-9);
+}
+
 TEST(ZeroNoiseMeasurement, GlonassFdmaUsesSatelliteFcnForWavelengthAndDoppler) {
     NavGuard nav{gnss_sim::create_rtklib_nav_store()};
     ASSERT_NE(nav.store, nullptr);
@@ -270,7 +305,7 @@ TEST(ZeroNoiseMeasurement, GlonassFdmaUsesSatelliteFcnForWavelengthAndDoppler) {
                 -(geometry.range_rate_mps - observation.satellite_clock_drift_mps) / expected_wavelength_m, 1.0e-12);
 }
 
-TEST(ZeroNoiseMeasurement, AdrAmbiguityIsContinuousWithinLockAndChangesAfterReacquisition) {
+TEST(ZeroNoiseMeasurement, AdrAmbiguityIsContinuousResetsOnSignalOffAndChangesAfterReacquisition) {
     NavGuard nav{gnss_sim::create_rtklib_nav_store()};
     ASSERT_NE(nav.store, nullptr);
     std::string error_message;
@@ -285,24 +320,36 @@ TEST(ZeroNoiseMeasurement, AdrAmbiguityIsContinuousWithinLockAndChangesAfterReac
     ASSERT_TRUE(gnss_sim::add_time_ns(t0, gnss_sim::NANOSECONDS_PER_SECOND, &t1));
     gnss_sim::SatelliteGeometry g0{};
     gnss_sim::SatelliteGeometry g1{};
-    ASSERT_TRUE(gnss_sim::compute_satellite_geometry(nav.store, receiver, t0, satellite_number, -90.0, &g0,
-                                                     &error_message));
-    ASSERT_TRUE(gnss_sim::compute_satellite_geometry(nav.store, receiver, t1, satellite_number, -90.0, &g1,
-                                                     &error_message));
+    ASSERT_TRUE(
+        gnss_sim::compute_satellite_geometry(nav.store, receiver, t0, satellite_number, -90.0, &g0, &error_message));
+    ASSERT_TRUE(
+        gnss_sim::compute_satellite_geometry(nav.store, receiver, t1, satellite_number, -90.0, &g1, &error_message));
     gnss_sim::AtmosphereCorrection atmosphere{};
     atmosphere.mode = gnss_sim::AtmosphereMode::NONE;
     gnss_sim::SignalTracker tracker = tracking_tracker(gnss_sim::SignalId::kGpsL1Ca, t0);
     gnss_sim::CarrierAmbiguityState ambiguity{};
     gnss_sim::MeasurementObservation o0{};
     gnss_sim::MeasurementObservation o1{};
-    ASSERT_TRUE(gnss_sim::generate_zero_noise_measurement(nav.store, g0, tracker, atmosphere, &ambiguity, &o0,
-                                                          &error_message));
-    ASSERT_TRUE(gnss_sim::generate_zero_noise_measurement(nav.store, g1, tracker, atmosphere, &ambiguity, &o1,
-                                                          &error_message));
+    ASSERT_TRUE(
+        gnss_sim::generate_zero_noise_measurement(nav.store, g0, tracker, atmosphere, &ambiguity, &o0, &error_message));
+    ASSERT_TRUE(
+        gnss_sim::generate_zero_noise_measurement(nav.store, g1, tracker, atmosphere, &ambiguity, &o1, &error_message));
     EXPECT_EQ(o0.ambiguity_cycles, o1.ambiguity_cycles);
     const double carrier0 = g0.geometric_range_m - o0.satellite_clock_bias_m;
     const double carrier1 = g1.geometric_range_m - o1.satellite_clock_bias_m;
     EXPECT_NEAR(o1.adr_cycles - o0.adr_cycles, (carrier1 - carrier0) / o0.wavelength_m, 1.0e-7);
+
+    gnss_sim::SignalTracker signal_off = tracker;
+    signal_off.phase = gnss_sim::SignalTrackingPhase::kSignalOff;
+    signal_off.psr_valid = false;
+    signal_off.doppler_valid = false;
+    signal_off.adr_valid = false;
+    signal_off.observation_available = false;
+    gnss_sim::MeasurementObservation off_observation{};
+    ASSERT_TRUE(gnss_sim::generate_zero_noise_measurement(nav.store, g1, signal_off, atmosphere, &ambiguity,
+                                                          &off_observation, &error_message));
+    EXPECT_FALSE(ambiguity.initialized);
+    EXPECT_FALSE(off_observation.adr_valid);
 
     tracker.tracking_start_time = t1;
     gnss_sim::MeasurementObservation reacquired{};

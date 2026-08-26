@@ -106,8 +106,8 @@ TEST(AtmosphereBroadcast, GpsMatchesReferenceKlobucharAndRtklibTroposphere) {
     const double gps_ion[8] = {1.1176e-8, 2.2352e-8, -1.1921e-7, -1.1921e-7, 90112.0, 98304.0, -65536.0, -589824.0};
     const double expected_ion = reference_klobuchar(200000.0, gps_ion, reference_latitude_deg * kPi / 180.0,
                                                     reference_longitude_deg * kPi / 180.0, azimuth, elevation);
-    const double expected_trop = reference_troposphere(reference_latitude_deg * kPi / 180.0, reference_height_m,
-                                                       elevation);
+    const double expected_trop =
+        reference_troposphere(reference_latitude_deg * kPi / 180.0, reference_height_m, elevation);
     EXPECT_EQ(correction.ionosphere_status, gnss_sim::IonosphereCorrectionStatus::kApplied);
     EXPECT_NEAR(correction.ionosphere_code_delay_m, expected_ion, 1.0e-9);
     EXPECT_NEAR(correction.troposphere_delay_m, expected_trop, 1.0e-9);

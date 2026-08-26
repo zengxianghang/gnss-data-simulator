@@ -107,6 +107,7 @@ if(BUILD_TESTING)
     add_executable(gnss_sim_unit_tests
         tests/unit/test_deterministic_rng.cpp
         tests/unit/test_nav_message_scheduler.cpp
+        tests/unit/test_nav_message_scheduler_gal_bds.cpp
         tests/unit/test_navigation_state.cpp
         tests/unit/test_receiver_truth.cpp
         tests/unit/test_rtklib_adapter.cpp

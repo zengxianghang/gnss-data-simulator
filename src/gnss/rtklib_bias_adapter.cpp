@@ -83,10 +83,8 @@ const geph_t* select_glonass_ephemeris(const nav_t& nav, gtime_t time, int satel
     return selected;
 }
 
-RtklibBroadcastMessageFamily message_family(int system, int message_type) {
-    if (system == SYS_GLO) {
-        return RtklibBroadcastMessageFamily::kGlonassFdma;
-    }
+RtklibBroadcastMessageFamily message_family(const eph_t& eph, int system) {
+    const int message_type = eph.hdr.msg_type;
     if (system == SYS_GAL) {
         if (message_type == NAV_INAV) {
             return RtklibBroadcastMessageFamily::kGalileoInav;
@@ -94,7 +92,23 @@ RtklibBroadcastMessageFamily message_family(int system, int message_type) {
         if (message_type == NAV_FNAV) {
             return RtklibBroadcastMessageFamily::kGalileoFnav;
         }
-        return RtklibBroadcastMessageFamily::kLegacy;
+        // RINEX 3 stores Galileo message/clock source in eph.code. Bit 8
+        // identifies E5a/E1 (F/NAV) clock data; bit 9 identifies E5b/E1
+        // (I/NAV) clock data. Prefer the clock-source bits over lower signal
+        // source bits when both are present.
+        if ((eph.code & (1 << 9)) != 0) {
+            return RtklibBroadcastMessageFamily::kGalileoInav;
+        }
+        if ((eph.code & (1 << 8)) != 0) {
+            return RtklibBroadcastMessageFamily::kGalileoFnav;
+        }
+        if ((eph.code & ((1 << 0) | (1 << 2))) != 0) {
+            return RtklibBroadcastMessageFamily::kGalileoInav;
+        }
+        if ((eph.code & (1 << 1)) != 0) {
+            return RtklibBroadcastMessageFamily::kGalileoFnav;
+        }
+        return RtklibBroadcastMessageFamily::kUnknown;
     }
     if (system == SYS_CMP) {
         if (message_type == NAV_CNV1) {
@@ -156,7 +170,7 @@ bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, doubl
         return false;
     }
 
-    result.message_family = message_family(system, eph->hdr.msg_type);
+    result.message_family = message_family(*eph, system);
     result.iode = eph->iode;
     std::memcpy(result.tgd_sec, eph->tgd, sizeof(result.tgd_sec));
     std::memcpy(result.isc_sec, eph->isc, sizeof(result.isc_sec));

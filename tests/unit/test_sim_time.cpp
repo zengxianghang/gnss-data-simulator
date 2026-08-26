@@ -11,7 +11,7 @@ TEST(SimTime, UsesIntegerNanosecondsAndPinnedRtklibRevision) {
     const gnss_sim::SimTime time{2300, 123456789LL};
     EXPECT_EQ(time.gps_week, 2300);
     EXPECT_EQ(time.tow_ns, 123456789LL);
-    EXPECT_STREQ(gnss_sim::rtklib_commit_sha(), "47bb6cf9935b510109d16f46baa35c648e56f1b5");
+    EXPECT_STREQ(gnss_sim::rtklib_commit_sha(), "07e813b72c8667350c4e80293cb6679c519ef1a6");
     EXPECT_EQ(std::strlen(gnss_sim::rtklib_commit_sha()), 40U);
 }
 

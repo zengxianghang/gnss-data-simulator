@@ -3,7 +3,7 @@
 
 #include "gnss/rtklib_adapter.h"
 #include "gnss/signal_definitions.h"
-#include "gnss_sim/sim_config.h"
+#include "gnss_sim/atmosphere_types.h"
 #include "gnss_sim/sim_types.h"
 
 #include <string>

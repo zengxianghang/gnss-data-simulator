@@ -20,11 +20,21 @@ Navigation output must reflect the simulated Receiver NAV state:
 - COLD startup outputs EPH progressively as the corresponding navigation message fragments are collected and the ephemeris becomes usable.
 - REA signal-off retains Receiver NAV and continues normal navigation-state behavior.
 
+## Measurement noise
+
+- **V1 does not add stochastic measurement noise.**
+- Pseudorange measurement-noise contribution is zero.
+- Doppler measurement-noise contribution is zero.
+- Carrier-phase/ADR measurement-noise contribution is zero.
+- The observation-generation architecture should keep measurement noise as an independent future extension point, but noise injection is not part of the V1 required implementation.
+- CN0 is still generated from the elevation/signal model and is still used by the tracking/acquisition state machine. It does not introduce measurement noise into PSR, Doppler, or ADR in V1.
+- This zero-noise policy is intended to make V1 a deterministic physics/format/state-machine validation baseline and to permit near-zero RTKLIB loopback residuals where the same physical corrections are applied consistently.
+
 ## Multipath
 
 - **V1 does not add a multipath error model.**
 - The pseudorange/phase/Doppler architecture should keep multipath as a separate future extension point, but the V1 default and V1 required implementation use zero multipath contribution.
-- Observation realism in V1 comes from real satellite geometry/navigation data, signal-specific code-bias corrections, atmosphere/noise models where enabled, CN0 modeling, and tracking-state behavior.
+- Observation realism in V1 comes from real satellite geometry/navigation data, signal-specific code-bias corrections, configured atmosphere models, CN0 modeling, and tracking-state behavior rather than synthetic multipath or measurement noise.
 
 ## Default generated duration
 
@@ -83,7 +93,7 @@ COLD is fundamentally different: Receiver NAV starts without usable EPH and ephe
 
 REA remains powered and retains NAV/time/position state, so its reacquisition timing model is separate from HOT startup and should be materially faster.
 
-Recommended HOT per-signal acquisition-delay calibration before small deterministic jitter:
+Recommended HOT per-signal acquisition-delay calibration before small deterministic timing jitter:
 
 ```text
 CN0 >= 40 dB-Hz : about 0.2-0.6 s
@@ -104,18 +114,22 @@ WARM extra search-uncertainty delay
   P95 ~= 12-15 s
 ```
 
-All stochastic timing behavior must use the deterministic seeded PRNG and remain configurable.
+All stochastic timing behavior must use the deterministic seeded PRNG and remain configurable. This timing randomness is independent of the V1 zero measurement-noise policy.
 
 ## Summary
 
 ```text
-elevation_mask_deg = 3.0
-output_eph         = true
-output_ion         = true
-multipath_enabled  = false
-duration_sec       = 28800  # 8 h
+elevation_mask_deg     = 3.0
+output_eph             = true
+output_ion             = true
+measurement_noise      = false
+psr_noise_m            = 0.0
+doppler_noise          = 0.0
+adr_noise              = 0.0
+multipath_enabled      = false
+duration_sec           = 28800  # 8 h
 
-ttff.default_mode  = HOT
+ttff.default_mode      = HOT
 
 HOT target:
   P50 ~= 2 s

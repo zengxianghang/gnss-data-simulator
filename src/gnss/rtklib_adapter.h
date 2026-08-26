@@ -28,6 +28,19 @@ enum class RtklibIonosphereStatus {
     kUnsupportedModel,
 };
 
+enum class RtklibBroadcastMessageFamily {
+    kUnknown,
+    kLegacy,
+    kCnav,
+    kCnav2,
+    kGalileoInav,
+    kGalileoFnav,
+    kBeidouBcnav1,
+    kBeidouBcnav2,
+    kBeidouBcnav3,
+    kGlonassFdma,
+};
+
 struct RtklibNavCounts {
     int gps_eph_count;
     int glo_eph_count;
@@ -65,6 +78,16 @@ struct RtklibIonosphereResult {
     double reference_frequency_hz;
 };
 
+struct RtklibBroadcastBiasData {
+    RtklibBroadcastMessageFamily message_family;
+    int system;
+    int iode;
+    int glonass_fcn;
+    double tgd_sec[4];
+    double isc_sec[6];
+    double glonass_dtaun_sec;
+};
+
 RtklibNavStore* create_rtklib_nav_store();
 void destroy_rtklib_nav_store(RtklibNavStore* store);
 
@@ -83,6 +106,8 @@ bool rtklib_satellite_id_to_number(const char* satellite_id, int* satellite_numb
 bool rtklib_observation_code(const char* rinex_signal_code, int* observation_code, int* frequency_index);
 bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
                                 RtklibSatelliteState* state, std::string* error_message);
+bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
+                                RtklibBroadcastBiasData* data, std::string* error_message);
 
 bool rtklib_llh_to_ecef(double latitude_deg, double longitude_deg, double height_m, double ecef_m[3]);
 bool rtklib_ecef_to_llh(const double ecef_m[3], double* latitude_deg, double* longitude_deg, double* height_m);

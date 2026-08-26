@@ -4,6 +4,7 @@
 #include "gnss_sim/sim_time.h"
 
 #include <cmath>
+#include <cstring>
 
 namespace gnss_sim {
 namespace {
@@ -20,6 +21,11 @@ void set_error(std::string* error_message, const char* message) {
     if (error_message != nullptr) {
         *error_message = message;
     }
+}
+
+void copy_diagnostic(const char source[128], char destination[128]) {
+    std::memcpy(destination, source, 128);
+    destination[127] = '\0';
 }
 
 bool valid_epoch_time(const SimTime& time) {
@@ -112,6 +118,10 @@ void sort_selected_observations(SelectedObservation selected[kMaxSolverSatellite
 }
 
 void copy_position_solution(const RtklibPositionSolution& source, PositionSolution* destination) {
+    copy_diagnostic(source.diagnostic, destination->diagnostic);
+    if (!source.valid) {
+        return;
+    }
     destination->valid = true;
     destination->status = ReceiverSolutionStatus::kSolComputed;
     destination->type = ReceiverSolutionType::kSingle;
@@ -129,6 +139,10 @@ void copy_position_solution(const RtklibPositionSolution& source, PositionSoluti
 }
 
 void copy_velocity_solution(const RtklibVelocitySolution& source, VelocitySolution* destination) {
+    copy_diagnostic(source.diagnostic, destination->diagnostic);
+    if (!source.valid) {
+        return;
+    }
     destination->valid = true;
     destination->status = ReceiverSolutionStatus::kSolComputed;
     destination->type = ReceiverSolutionType::kSingle;
@@ -193,8 +207,8 @@ bool solve_receiver_epoch(const RtklibNavStore* receiver_nav, const SimTime& epo
                                       &rtklib_position, error_message)) {
         return false;
     }
+    copy_position_solution(rtklib_position, &result.position);
     if (rtklib_position.valid) {
-        copy_position_solution(rtklib_position, &result.position);
         state->has_position_hint = true;
         for (int index = 0; index < 3; ++index) {
             state->last_position_ecef_m[index] = rtklib_position.position_ecef_m[index];
@@ -215,9 +229,7 @@ bool solve_receiver_epoch(const RtklibNavStore* receiver_nav, const SimTime& epo
                                           error_message)) {
             return false;
         }
-        if (rtklib_velocity.valid) {
-            copy_velocity_solution(rtklib_velocity, &result.velocity);
-        }
+        copy_velocity_solution(rtklib_velocity, &result.velocity);
     }
 
     *solution = result;

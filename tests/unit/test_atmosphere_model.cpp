@@ -7,6 +7,17 @@
 #include <gtest/gtest.h>
 #include <string>
 
+extern "C" {
+#include <rtklib.h>
+}
+
+#ifdef lock
+#undef lock
+#endif
+#ifdef unlock
+#undef unlock
+#endif
+
 namespace {
 
 constexpr double kPi = 3.1415926535897932;
@@ -22,6 +33,14 @@ std::string ionosphere_nav_path() {
 
 std::string mixed_nav_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/mixed_nav_2019.rnx";
+}
+
+double normalized_gpst_sow(int gps_week, double sow_sec) {
+    const gtime_t time = gpst2time(gps_week, sow_sec);
+    int normalized_week = 0;
+    const double normalized_sow = time2gpst(time, &normalized_week);
+    EXPECT_EQ(normalized_week, gps_week);
+    return normalized_sow;
 }
 
 double reference_klobuchar(double sow_sec, const double ion[8], double latitude_rad, double longitude_rad,
@@ -104,8 +123,9 @@ TEST(AtmosphereBroadcast, GpsMatchesReferenceKlobucharAndRtklibTroposphere) {
                                                         gnss_sim::SignalId::kGpsL1Ca, 0, receiver_ecef, azimuth,
                                                         elevation, &correction, &error_message));
     const double gps_ion[8] = {1.1176e-8, 2.2352e-8, -1.1921e-7, -1.1921e-7, 90112.0, 98304.0, -65536.0, -589824.0};
-    const double expected_ion = reference_klobuchar(200000.0, gps_ion, reference_latitude_deg * kPi / 180.0,
-                                                    reference_longitude_deg * kPi / 180.0, azimuth, elevation);
+    const double expected_ion =
+        reference_klobuchar(normalized_gpst_sow(2041, 200000.0), gps_ion, reference_latitude_deg * kPi / 180.0,
+                            reference_longitude_deg * kPi / 180.0, azimuth, elevation);
     const double expected_trop =
         reference_troposphere(reference_latitude_deg * kPi / 180.0, reference_height_m, elevation);
     EXPECT_EQ(correction.ionosphere_status, gnss_sim::IonosphereCorrectionStatus::kApplied);
@@ -157,8 +177,8 @@ TEST(AtmosphereBroadcast, BeidouLegacyUsesBdtPhaseAndB1IReferenceFrequency) {
                                                         gnss_sim::SignalId::kBeidouB3I, 0, receiver_ecef, azimuth,
                                                         elevation, &b3i, &error_message));
     const double bds_ion[8] = {2.0e-8, -1.0e-8, 3.0e-8, -2.0e-8, 70000.0, 80000.0, -50000.0, -400000.0};
-    const double expected_b1i =
-        reference_klobuchar(200000.0, bds_ion, 20.0 * kPi / 180.0, 120.0 * kPi / 180.0, azimuth, elevation);
+    const double expected_b1i = reference_klobuchar(normalized_gpst_sow(2041, 200014.0) - 14.0, bds_ion,
+                                                   20.0 * kPi / 180.0, 120.0 * kPi / 180.0, azimuth, elevation);
     EXPECT_EQ(b1i.ionosphere_status, gnss_sim::IonosphereCorrectionStatus::kApplied);
     EXPECT_NEAR(b1i.ionosphere_code_delay_m, expected_b1i, 1.0e-9);
     const double expected_ratio = (kBdsB1IHz / kBdsB3IHz) * (kBdsB1IHz / kBdsB3IHz);

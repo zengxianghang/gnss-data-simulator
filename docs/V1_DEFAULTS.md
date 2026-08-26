@@ -49,6 +49,63 @@ repeat until duration is reached
 
 For TTFF, the configured startup mode (HOT/WARM/COLD, default HOT) is applied at each POWER OFF -> POWER ON transition unless a future per-cycle startup schedule is explicitly configured.
 
+## Startup and reacquisition timing defaults
+
+Detailed semantics and calibration references are defined in [`STARTUP_RECOVERY_MODEL.md`](STARTUP_RECOVERY_MODEL.md).
+
+The frozen V1 default open-sky targets are:
+
+```text
+HOT
+  TTFF P50        ~= 2 s
+  TTFF P95        ~= 4 s
+  nominal target  <= 5 s
+
+WARM
+  TTFF P50        ~= 6-8 s
+  TTFF P95        ~= 15-20 s
+  nominal target  <= 30 s
+
+COLD
+  NAV-message-driven; no artificial fixed TTFF
+  typical/P50 region ~= 20-30 s
+  P95 target         <= 45 s
+  approximately 10-20 s is allowed when real multi-GNSS NAV timing permits it
+
+REA
+  position recovery P50 ~= 0.8-1.2 s
+  position recovery P95 <= 2 s
+```
+
+HOT and WARM both restore all cached EPH/ION immediately. WARM is slower because its approximate time/position prior is less accurate and therefore its signal-acquisition search space is wider.
+
+COLD is fundamentally different: Receiver NAV starts without usable EPH and ephemeris availability is determined by the actual navigation-message frame/page/message collection logic. The implementation must not insert a random fixed cold-start delay solely to hit the target TTFF statistics.
+
+REA remains powered and retains NAV/time/position state, so its reacquisition timing model is separate from HOT startup and should be materially faster.
+
+Recommended HOT per-signal acquisition-delay calibration before small deterministic jitter:
+
+```text
+CN0 >= 40 dB-Hz : about 0.2-0.6 s
+35-40 dB-Hz     : about 0.3-1.0 s
+30-35 dB-Hz     : about 0.6-2.0 s
+<30 dB-Hz       : about 1.0-4.0 s
+```
+
+Recommended receiver-level delay calibration:
+
+```text
+HOT common startup delay
+  P50 ~= 0.8 s
+  P95 ~= 1.5 s
+
+WARM extra search-uncertainty delay
+  P50 ~= 4-5 s
+  P95 ~= 12-15 s
+```
+
+All stochastic timing behavior must use the deterministic seeded PRNG and remain configurable.
+
 ## Summary
 
 ```text
@@ -57,4 +114,22 @@ output_eph         = true
 output_ion         = true
 multipath_enabled  = false
 duration_sec       = 28800  # 8 h
+
+ttff.default_mode  = HOT
+
+HOT target:
+  P50 ~= 2 s
+  P95 ~= 4 s
+
+WARM target:
+  P50 ~= 6-8 s
+  P95 ~= 15-20 s
+
+COLD:
+  navigation-message-driven
+  P95 target <= 45 s
+
+REA position recovery:
+  P50 ~= 0.8-1.2 s
+  P95 <= 2 s
 ```

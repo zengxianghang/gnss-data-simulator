@@ -9,7 +9,7 @@
 
 namespace {
 
-constexpr double kPi = 3.14159265358979323846;
+constexpr double kPi = 3.1415926535897932;
 constexpr double kSpeedOfLightMps = 299792458.0;
 constexpr double kGpsL1Hz = 1575.42e6;
 constexpr double kGpsL5Hz = 1176.45e6;
@@ -39,9 +39,8 @@ double reference_klobuchar(double sow_sec, const double ion[8], double latitude_
     amplitude = std::max(amplitude, 0.0);
     period = std::max(period, 72000.0);
     const double phase = 2.0 * kPi * (local_time - 50400.0) / period;
-    const double base = std::abs(phase) < 1.57
-                            ? 5.0e-9 + amplitude * (1.0 + phase * phase * (-0.5 + phase * phase / 24.0))
-                            : 5.0e-9;
+    const double base =
+        std::abs(phase) < 1.57 ? 5.0e-9 + amplitude * (1.0 + phase * phase * (-0.5 + phase * phase / 24.0)) : 5.0e-9;
     return kSpeedOfLightMps * mapping * base;
 }
 
@@ -86,7 +85,8 @@ TEST(AtmosphereBroadcast, GpsMatchesReferenceKlobucharAndRtklibTroposphere) {
     NavGuard nav{gnss_sim::create_rtklib_nav_store()};
     ASSERT_NE(nav.store, nullptr);
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(nav.store, ionosphere_nav_path().c_str(), &error_message)) << error_message;
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(nav.store, ionosphere_nav_path().c_str(), &error_message))
+        << error_message;
 
     gnss_sim::SimTime time{};
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2041, 200000.0, &time));
@@ -98,10 +98,9 @@ TEST(AtmosphereBroadcast, GpsMatchesReferenceKlobucharAndRtklibTroposphere) {
     ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::BROADCAST, nav.store, time,
                                                         gnss_sim::SignalId::kGpsL1Ca, 0, receiver_ecef, azimuth,
                                                         elevation, &correction, &error_message));
-    const double gps_ion[8] = {1.1176e-8, 2.2352e-8, -1.1921e-7, -1.1921e-7,
-                               90112.0, 98304.0, -65536.0, -589824.0};
-    const double expected_ion = reference_klobuchar(200000.0, gps_ion, 20.0 * kPi / 180.0, 120.0 * kPi / 180.0,
-                                                    azimuth, elevation);
+    const double gps_ion[8] = {1.1176e-8, 2.2352e-8, -1.1921e-7, -1.1921e-7, 90112.0, 98304.0, -65536.0, -589824.0};
+    const double expected_ion =
+        reference_klobuchar(200000.0, gps_ion, 20.0 * kPi / 180.0, 120.0 * kPi / 180.0, azimuth, elevation);
     const double expected_trop = reference_troposphere(20.0 * kPi / 180.0, 100.0, elevation);
     EXPECT_EQ(correction.ionosphere_status, gnss_sim::IonosphereCorrectionStatus::kApplied);
     EXPECT_NEAR(correction.ionosphere_code_delay_m, expected_ion, 1.0e-9);
@@ -152,8 +151,8 @@ TEST(AtmosphereBroadcast, BeidouLegacyUsesBdtPhaseAndB1IReferenceFrequency) {
                                                         gnss_sim::SignalId::kBeidouB3I, 0, receiver_ecef, azimuth,
                                                         elevation, &b3i, &error_message));
     const double bds_ion[8] = {2.0e-8, -1.0e-8, 3.0e-8, -2.0e-8, 70000.0, 80000.0, -50000.0, -400000.0};
-    const double expected_b1i = reference_klobuchar(200000.0, bds_ion, 20.0 * kPi / 180.0,
-                                                   120.0 * kPi / 180.0, azimuth, elevation);
+    const double expected_b1i =
+        reference_klobuchar(200000.0, bds_ion, 20.0 * kPi / 180.0, 120.0 * kPi / 180.0, azimuth, elevation);
     EXPECT_EQ(b1i.ionosphere_status, gnss_sim::IonosphereCorrectionStatus::kApplied);
     EXPECT_NEAR(b1i.ionosphere_code_delay_m, expected_b1i, 1.0e-9);
     const double expected_ratio = (kBdsB1IHz / kBdsB3IHz) * (kBdsB1IHz / kBdsB3IHz);
@@ -181,16 +180,14 @@ TEST(AtmosphereBroadcast, MissingAndUnsupportedModelsAreExplicit) {
     EXPECT_DOUBLE_EQ(missing.ionosphere_code_delay_m, 0.0);
     EXPECT_GT(missing.troposphere_delay_m, 0.0);
 
-    const gnss_sim::SignalId unsupported_signals[] = {gnss_sim::SignalId::kGalileoE1,
-                                                       gnss_sim::SignalId::kGlonassG1,
-                                                       gnss_sim::SignalId::kBeidouB1C};
+    const gnss_sim::SignalId unsupported_signals[] = {gnss_sim::SignalId::kGalileoE1, gnss_sim::SignalId::kGlonassG1,
+                                                      gnss_sim::SignalId::kBeidouB1C};
     for (gnss_sim::SignalId signal_id : unsupported_signals) {
         gnss_sim::AtmosphereCorrection unsupported{};
         ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::BROADCAST, ion_nav.store, time,
                                                             signal_id, 0, receiver_ecef, 1.0, 0.7, &unsupported,
                                                             &error_message));
-        EXPECT_EQ(unsupported.ionosphere_status,
-                  gnss_sim::IonosphereCorrectionStatus::kUnsupportedBroadcastModel);
+        EXPECT_EQ(unsupported.ionosphere_status, gnss_sim::IonosphereCorrectionStatus::kUnsupportedBroadcastModel);
         EXPECT_DOUBLE_EQ(unsupported.ionosphere_code_delay_m, 0.0);
         EXPECT_GT(unsupported.troposphere_delay_m, 0.0);
     }

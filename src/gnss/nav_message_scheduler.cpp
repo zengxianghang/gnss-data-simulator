@@ -23,8 +23,7 @@ bool valid_sim_time(const SimTime& time) {
 }
 
 bool set_fragment(const SimTime& acquisition_time, std::int64_t cycle_ns, std::int64_t slot_start_ns,
-                  std::int64_t duration_ns, int fragment_id, std::uint32_t mask_bit,
-                  NavAcquisitionFragment* fragment) {
+                  std::int64_t duration_ns, int fragment_id, std::uint32_t mask_bit, NavAcquisitionFragment* fragment) {
     if (fragment == nullptr || cycle_ns <= 0 || slot_start_ns < 0 || slot_start_ns >= cycle_ns || duration_ns <= 0) {
         return false;
     }

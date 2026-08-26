@@ -30,6 +30,7 @@ find_package(Threads REQUIRED)
 
 add_library(rtklib_pinned STATIC
     third_party/RTKLIB/src/ephemeris.c
+    third_party/RTKLIB/src/ionex.c
     third_party/RTKLIB/src/pntpos.c
     third_party/RTKLIB/src/preceph.c
     third_party/RTKLIB/src/qzslex.c

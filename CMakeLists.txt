@@ -74,10 +74,12 @@ add_library(gnss_sim_core STATIC
     src/gnss/navigation_state.cpp
     src/gnss/rtklib_adapter.cpp
     src/gnss/rtklib_atmosphere_adapter.cpp
+    src/gnss/rtklib_bias_adapter.cpp
     src/gnss/satellite_engine.cpp
     src/gnss/signal_definitions.cpp
     src/model/atmosphere_model.cpp
     src/model/cn0_model.cpp
+    src/model/measurement_model.cpp
     src/model/receiver_truth.cpp
     src/model/signal_tracking.cpp
 )
@@ -113,6 +115,7 @@ if(BUILD_TESTING)
         tests/unit/test_atmosphere_model.cpp
         tests/unit/test_cn0_model.cpp
         tests/unit/test_deterministic_rng.cpp
+        tests/unit/test_measurement_model.cpp
         tests/unit/test_nav_message_scheduler.cpp
         tests/unit/test_nav_message_scheduler_gal_bds.cpp
         tests/unit/test_navigation_state.cpp
@@ -137,4 +140,11 @@ if(BUILD_TESTING)
 
     include(GoogleTest)
     gtest_discover_tests(gnss_sim_unit_tests)
+
+    add_test(
+        NAME measurement_model_no_prng
+        COMMAND ${CMAKE_COMMAND}
+            -DMEASUREMENT_MODEL_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/src/model/measurement_model.cpp
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/check_measurement_no_rng.cmake
+    )
 endif()

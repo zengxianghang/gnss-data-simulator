@@ -256,7 +256,6 @@ bool update_signal_tracker(SignalTracker* tracker, const SimTime& current_time, 
 
     if (compare_sim_time(current_time, tracker->search_ready_time) < 0) {
         tracker->phase = SignalTrackingPhase::kSearching;
-        tracker->state_since = tracker->state_since;
         tracker->lock_time_ns = 0;
         tracker->psr_valid = false;
         tracker->doppler_valid = false;

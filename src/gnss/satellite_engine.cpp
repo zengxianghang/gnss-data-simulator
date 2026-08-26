@@ -66,8 +66,8 @@ bool subtract_propagation_time(const SimTime& receive_time, double propagation_t
     }
 
     int week = receive_time.gps_week;
-    double sow_sec = static_cast<double>(receive_time.tow_ns) / static_cast<double>(NANOSECONDS_PER_SECOND) -
-                     propagation_time_sec;
+    double sow_sec =
+        static_cast<double>(receive_time.tow_ns) / static_cast<double>(NANOSECONDS_PER_SECOND) - propagation_time_sec;
     while (sow_sec < 0.0) {
         if (week == 0) {
             return false;
@@ -119,15 +119,15 @@ bool compute_satellite_geometry(const RtklibNavStore* nav_store, const ReceiverT
         }
 
         RtklibSatelliteState satellite_state{};
-        if (!get_rtklib_satellite_state(nav_store, transmit_week, transmit_sow_sec, satellite_number,
-                                        &satellite_state, error_message)) {
+        if (!get_rtklib_satellite_state(nav_store, transmit_week, transmit_sow_sec, satellite_number, &satellite_state,
+                                        error_message)) {
             return false;
         }
 
         double line_of_sight_ecef[3]{};
         double geometric_range_m = 0.0;
-        if (!rtklib_geometric_distance(satellite_state.position_ecef_m, receiver.position_ecef_m,
-                                       &geometric_range_m, line_of_sight_ecef)) {
+        if (!rtklib_geometric_distance(satellite_state.position_ecef_m, receiver.position_ecef_m, &geometric_range_m,
+                                       line_of_sight_ecef)) {
             set_error(error_message, "RTKLIB geometric-distance calculation failed");
             return false;
         }

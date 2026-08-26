@@ -35,6 +35,10 @@ bool valid_gps_time(int gps_week, double sow_sec) {
     return gps_week >= 0 && std::isfinite(sow_sec) && sow_sec >= 0.0 && sow_sec < 604800.0;
 }
 
+bool finite_vector3(const double vector[3]) {
+    return vector != nullptr && std::isfinite(vector[0]) && std::isfinite(vector[1]) && std::isfinite(vector[2]);
+}
+
 std::string rtklib_file_path(const char* file_path) {
     std::string path(file_path);
 #ifdef _WIN32
@@ -204,13 +208,8 @@ bool rtklib_llh_to_ecef(double latitude_deg, double longitude_deg, double height
 }
 
 bool rtklib_ecef_to_llh(const double ecef_m[3], double* latitude_deg, double* longitude_deg, double* height_m) {
-    if (ecef_m == nullptr || latitude_deg == nullptr || longitude_deg == nullptr || height_m == nullptr) {
+    if (!finite_vector3(ecef_m) || latitude_deg == nullptr || longitude_deg == nullptr || height_m == nullptr) {
         return false;
-    }
-    for (int index = 0; index < 3; ++index) {
-        if (!std::isfinite(ecef_m[index])) {
-            return false;
-        }
     }
 
     double position_rad_m[3]{};
@@ -219,6 +218,35 @@ bool rtklib_ecef_to_llh(const double ecef_m[3], double* latitude_deg, double* lo
     *longitude_deg = position_rad_m[1] * R2D;
     *height_m = position_rad_m[2];
     return true;
+}
+
+bool rtklib_geometric_distance(const double satellite_ecef_m[3], const double receiver_ecef_m[3], double* range_m,
+                               double line_of_sight_ecef[3]) {
+    if (!finite_vector3(satellite_ecef_m) || !finite_vector3(receiver_ecef_m) || range_m == nullptr ||
+        line_of_sight_ecef == nullptr) {
+        return false;
+    }
+    const double range = geodist(satellite_ecef_m, receiver_ecef_m, line_of_sight_ecef);
+    if (!std::isfinite(range) || range <= 0.0) {
+        return false;
+    }
+    *range_m = range;
+    return true;
+}
+
+bool rtklib_azimuth_elevation(const double receiver_ecef_m[3], const double line_of_sight_ecef[3],
+                              double* azimuth_rad, double* elevation_rad) {
+    if (!finite_vector3(receiver_ecef_m) || !finite_vector3(line_of_sight_ecef) || azimuth_rad == nullptr ||
+        elevation_rad == nullptr) {
+        return false;
+    }
+    double position_rad_m[3]{};
+    double azel[2]{};
+    ecef2pos(receiver_ecef_m, position_rad_m);
+    satazel(position_rad_m, line_of_sight_ecef, azel);
+    *azimuth_rad = azel[0];
+    *elevation_rad = azel[1];
+    return std::isfinite(*azimuth_rad) && std::isfinite(*elevation_rad);
 }
 
 } // namespace gnss_sim

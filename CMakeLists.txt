@@ -70,7 +70,9 @@ add_library(gnss_sim_core STATIC
     src/core/sim_time.cpp
     src/core/simulator.cpp
     src/gnss/rtklib_adapter.cpp
+    src/gnss/satellite_engine.cpp
     src/gnss/signal_definitions.cpp
+    src/model/receiver_truth.cpp
 )
 add_library(gnss_sim::core ALIAS gnss_sim_core)
 target_include_directories(gnss_sim_core
@@ -102,7 +104,9 @@ if(BUILD_TESTING)
 
     add_executable(gnss_sim_unit_tests
         tests/unit/test_deterministic_rng.cpp
+        tests/unit/test_receiver_truth.cpp
         tests/unit/test_rtklib_adapter.cpp
+        tests/unit/test_satellite_engine.cpp
         tests/unit/test_signal_definitions.cpp
         tests/unit/test_sim_config.cpp
         tests/unit/test_sim_time.cpp

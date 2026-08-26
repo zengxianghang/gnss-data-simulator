@@ -6,6 +6,7 @@ extern "C" {
 }
 
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 
 namespace gnss_sim {
@@ -16,6 +17,7 @@ struct RtklibNavStore {
 
 namespace {
 
+constexpr double kSpeedOfLightMps = 299792458.0;
 constexpr double kRadiansPerDegree = 3.141592653589793238462643383279502884 / 180.0;
 
 void set_error(std::string* error_message, const char* message) {
@@ -32,6 +34,14 @@ bool valid_position_hint(const double position_ecef_m[3]) {
     return position_ecef_m != nullptr && std::isfinite(position_ecef_m[0]) && std::isfinite(position_ecef_m[1]) &&
            std::isfinite(position_ecef_m[2]) &&
            (position_ecef_m[0] != 0.0 || position_ecef_m[1] != 0.0 || position_ecef_m[2] != 0.0);
+}
+
+void copy_diagnostic(char destination[128], const char* source) {
+    if (source == nullptr) {
+        destination[0] = '\0';
+        return;
+    }
+    std::snprintf(destination, 128, "%s", source);
 }
 
 prcopt_t solution_options(double elevation_mask_deg, bool broadcast_atmosphere) {
@@ -58,22 +68,74 @@ unsigned char snr_quarter_dbhz(double cn0_dbhz) {
     return static_cast<unsigned char>(scaled + 0.5);
 }
 
-bool fill_observation(const RtklibSolutionObservation& source, gtime_t time, obsd_t* destination) {
-    if (destination == nullptr || source.satellite_number <= 0 || source.satellite_number > MAXSAT ||
-        source.observation_code < 0 || source.observation_code > 255 || !std::isfinite(source.pseudorange_m) ||
-        source.pseudorange_m <= 0.0 || !std::isfinite(source.doppler_hz)) {
+bool legacy_prange_adjustment_m(const nav_t& nav, int satellite_number, int observation_code,
+                                double* adjustment_m) {
+    if (adjustment_m == nullptr || satellite_number <= 0 || satellite_number > MAXSAT || observation_code <= 0 ||
+        observation_code > 255) {
         return false;
     }
 
+    const int system = satsys(satellite_number, nullptr);
+    const int second_frequency_index = (system & (SYS_GAL | SYS_SBS)) ? 2 : 1;
+    const double first_wavelength_m = nav.lam[satellite_number - 1][0];
+    const double second_wavelength_m = nav.lam[satellite_number - 1][second_frequency_index];
+    if (!(first_wavelength_m > 0.0) || !(second_wavelength_m > 0.0)) {
+        return false;
+    }
+
+    const double ratio = second_wavelength_m / first_wavelength_m;
+    const double gamma = ratio * ratio;
+    if (!std::isfinite(gamma) || std::fabs(1.0 - gamma) < 1.0e-12) {
+        return false;
+    }
+
+    double p1_p2_m = nav.cbias[satellite_number - 1][0];
+    const double p1_c1_m = nav.cbias[satellite_number - 1][1];
+    if (p1_p2_m == 0.0 && (system & (SYS_GPS | SYS_GAL | SYS_QZS))) {
+        for (int index = 0; index < nav.n; ++index) {
+            if (nav.eph[index].sat == satellite_number) {
+                p1_p2_m = (1.0 - gamma) * kSpeedOfLightMps * nav.eph[index].tgd[0];
+                break;
+            }
+        }
+    }
+
+    double adjustment = -p1_p2_m / (1.0 - gamma);
+    if (observation_code == CODE_L1C) {
+        adjustment += p1_c1_m;
+    }
+    *adjustment_m = adjustment;
+    return std::isfinite(adjustment);
+}
+
+bool solver_pseudorange_m(const nav_t& nav, const RtklibSolutionObservation& observation,
+                          double* pseudorange_m) {
+    if (pseudorange_m == nullptr || !std::isfinite(observation.pseudorange_m) || observation.pseudorange_m <= 0.0 ||
+        !std::isfinite(observation.code_bias_m)) {
+        return false;
+    }
+
+    double legacy_adjustment_m = 0.0;
+    if (!legacy_prange_adjustment_m(nav, observation.satellite_number, observation.observation_code,
+                                    &legacy_adjustment_m)) {
+        return false;
+    }
+
+    // #11 emits raw signal-specific pseudorange. Remove its explicit
+    // TGD/BGD/ISC term, then pre-compensate the adjustment that the pinned
+    // RTKLIB prange() applies. The PC seen by rescode() is therefore the
+    // broadcast-clock-referenced pseudorange without modifying pntpos().
+    *pseudorange_m = observation.pseudorange_m - observation.code_bias_m - legacy_adjustment_m;
+    return std::isfinite(*pseudorange_m) && *pseudorange_m > 0.0;
+}
+
+void fill_common_observation(const RtklibSolutionObservation& source, gtime_t time, obsd_t* destination) {
     std::memset(destination, 0, sizeof(*destination));
     destination->time = time;
     destination->sat = static_cast<unsigned char>(source.satellite_number);
     destination->rcv = 1;
-    destination->P[0] = source.pseudorange_m;
-    destination->D[0] = static_cast<float>(source.doppler_hz);
     destination->SNR[0] = snr_quarter_dbhz(source.cn0_dbhz);
     destination->code[0] = static_cast<unsigned char>(source.observation_code);
-    return true;
 }
 
 } // namespace
@@ -82,40 +144,54 @@ bool rtklib_solve_single_position(const RtklibNavStore* receiver_nav, int gps_we
                                   const RtklibSolutionObservation* observations, int observation_count,
                                   double elevation_mask_deg, bool broadcast_atmosphere,
                                   RtklibPositionSolution* solution, std::string* error_message) {
-    if (receiver_nav == nullptr || observations == nullptr || observation_count <= 0 || solution == nullptr ||
+    if (receiver_nav == nullptr || observations == nullptr || observation_count < 0 || solution == nullptr ||
         !valid_time(gps_week, sow_sec) || !std::isfinite(elevation_mask_deg) || elevation_mask_deg < -90.0 ||
         elevation_mask_deg > 90.0) {
         set_error(error_message, "position-solution request has invalid arguments");
         return false;
     }
 
+    RtklibPositionSolution result{};
     obsd_t rtklib_observations[MAXOBS]{};
     const gtime_t epoch_time = gpst2time(gps_week, sow_sec);
+    bool used_satellite[MAXSAT]{};
     int usable_count = 0;
+
     for (int index = 0; index < observation_count && usable_count < MAXOBS; ++index) {
-        if (!observations[index].pseudorange_valid) {
+        const RtklibSolutionObservation& source = observations[index];
+        if (!source.pseudorange_valid || source.satellite_number <= 0 || source.satellite_number > MAXSAT ||
+            source.observation_code <= 0 || source.observation_code > 255 ||
+            used_satellite[source.satellite_number - 1]) {
             continue;
         }
-        if (!fill_observation(observations[index], epoch_time, &rtklib_observations[usable_count])) {
+        double pseudorange_m = 0.0;
+        if (!solver_pseudorange_m(receiver_nav->nav, source, &pseudorange_m)) {
             continue;
         }
+        fill_common_observation(source, epoch_time, &rtklib_observations[usable_count]);
+        rtklib_observations[usable_count].P[0] = pseudorange_m;
+        used_satellite[source.satellite_number - 1] = true;
         ++usable_count;
     }
+
     if (usable_count < 4) {
-        set_error(error_message, "insufficient valid pseudorange observations");
-        return false;
+        copy_diagnostic(result.diagnostic, "insufficient valid pseudorange observations");
+        *solution = result;
+        return true;
     }
 
     prcopt_t options = solution_options(elevation_mask_deg, broadcast_atmosphere);
     sol_t rtklib_solution{};
     char message[128]{};
-    if (!pntpos(rtklib_observations, usable_count, &receiver_nav->nav, &options, &rtklib_solution, nullptr, nullptr,
-                message)) {
-        set_error(error_message, message[0] != '\0' ? message : "RTKLIB position solution failed");
-        return false;
+    const int status = pntpos(rtklib_observations, usable_count, &receiver_nav->nav, &options, &rtklib_solution, nullptr,
+                              nullptr, message);
+    copy_diagnostic(result.diagnostic, message);
+    if (status == 0) {
+        *solution = result;
+        return true;
     }
 
-    RtklibPositionSolution result{};
+    result.valid = true;
     for (int index = 0; index < 3; ++index) {
         result.position_ecef_m[index] = rtklib_solution.rr[index];
     }
@@ -124,7 +200,7 @@ bool rtklib_solve_single_position(const RtklibNavStore* receiver_nav, int gps_we
     result.latitude_deg = position_rad[0] / kRadiansPerDegree;
     result.longitude_deg = position_rad[1] / kRadiansPerDegree;
     result.height_m = position_rad[2];
-    result.receiver_clock_bias_m = rtklib_solution.dtr[0] * CLIGHT;
+    result.receiver_clock_bias_m = rtklib_solution.dtr[0] * kSpeedOfLightMps;
     for (int index = 0; index < 6; ++index) {
         result.covariance_ecef_m2[index] = static_cast<double>(rtklib_solution.qr[index]);
     }
@@ -137,53 +213,60 @@ bool rtklib_solve_single_velocity(const RtklibNavStore* receiver_nav, int gps_we
                                   const RtklibSolutionObservation* observations, int observation_count,
                                   const double position_hint_ecef_m[3], double elevation_mask_deg,
                                   RtklibVelocitySolution* solution, std::string* error_message) {
-    if (receiver_nav == nullptr || observations == nullptr || observation_count <= 0 || solution == nullptr ||
+    if (receiver_nav == nullptr || observations == nullptr || observation_count < 0 || solution == nullptr ||
         !valid_time(gps_week, sow_sec) || !valid_position_hint(position_hint_ecef_m) ||
         !std::isfinite(elevation_mask_deg) || elevation_mask_deg < -90.0 || elevation_mask_deg > 90.0) {
         set_error(error_message, "velocity-solution request has invalid arguments");
         return false;
     }
 
+    RtklibVelocitySolution result{};
     obsd_t rtklib_observations[MAXOBS]{};
     unsigned char doppler_valid[MAXOBS]{};
     double wavelength_m[MAXOBS]{};
     const gtime_t epoch_time = gpst2time(gps_week, sow_sec);
+    bool used_satellite[MAXSAT]{};
     int usable_count = 0;
+
     for (int index = 0; index < observation_count && usable_count < MAXOBS; ++index) {
         const RtklibSolutionObservation& source = observations[index];
-        if (!source.doppler_valid || !std::isfinite(source.wavelength_m) || source.wavelength_m <= 0.0) {
+        if (!source.doppler_valid || source.satellite_number <= 0 || source.satellite_number > MAXSAT ||
+            source.observation_code <= 0 || source.observation_code > 255 ||
+            !std::isfinite(source.doppler_hz) || !std::isfinite(source.wavelength_m) || source.wavelength_m <= 0.0 ||
+            !std::isfinite(source.pseudorange_m) || source.pseudorange_m <= 0.0 ||
+            used_satellite[source.satellite_number - 1]) {
             continue;
         }
-        if (!fill_observation(source, epoch_time, &rtklib_observations[usable_count])) {
-            continue;
-        }
+        fill_common_observation(source, epoch_time, &rtklib_observations[usable_count]);
+        rtklib_observations[usable_count].P[0] = source.pseudorange_m;
+        rtklib_observations[usable_count].D[0] = static_cast<float>(source.doppler_hz);
         doppler_valid[usable_count] = 1;
         wavelength_m[usable_count] = source.wavelength_m;
+        used_satellite[source.satellite_number - 1] = true;
         ++usable_count;
     }
+
     if (usable_count < 4) {
-        set_error(error_message, "insufficient valid Doppler observations");
-        return false;
+        copy_diagnostic(result.diagnostic, "insufficient valid Doppler observations");
+        *solution = result;
+        return true;
     }
 
     prcopt_t options = solution_options(elevation_mask_deg, false);
-    double velocity_ecef_mps[3]{};
-    double receiver_clock_drift_mps = 0.0;
-    int used_satellites = 0;
     char message[128]{};
-    if (!rtklib_pntvel_ext(rtklib_observations, doppler_valid, wavelength_m, usable_count, &receiver_nav->nav, &options,
-                           position_hint_ecef_m, velocity_ecef_mps, &receiver_clock_drift_mps, &used_satellites,
-                           message)) {
-        set_error(error_message, message[0] != '\0' ? message : "RTKLIB velocity solution failed");
-        return false;
+    int used_count = 0;
+    const int status = rtklib_pntvel_ext(rtklib_observations, doppler_valid, wavelength_m, usable_count,
+                                         &receiver_nav->nav, &options, position_hint_ecef_m,
+                                         result.velocity_ecef_mps, &result.receiver_clock_drift_mps, &used_count,
+                                         message);
+    copy_diagnostic(result.diagnostic, message);
+    if (status == 0) {
+        *solution = result;
+        return true;
     }
 
-    RtklibVelocitySolution result{};
-    for (int index = 0; index < 3; ++index) {
-        result.velocity_ecef_mps[index] = velocity_ecef_mps[index];
-    }
-    result.receiver_clock_drift_mps = receiver_clock_drift_mps;
-    result.used_satellites = used_satellites;
+    result.valid = true;
+    result.used_satellites = used_count;
     *solution = result;
     return true;
 }

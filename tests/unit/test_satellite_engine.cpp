@@ -1,6 +1,5 @@
-#include "gnss/satellite_engine.h"
-
 #include "gnss/rtklib_adapter.h"
+#include "gnss/satellite_engine.h"
 #include "gnss_sim/sim_config.h"
 #include "gnss_sim/sim_time.h"
 #include "model/receiver_truth.h"
@@ -51,8 +50,7 @@ class SatelliteEngineTest : public ::testing::Test {
             << error_message;
 
         const gnss_sim::SimConfig config = gnss_sim::default_sim_config();
-        ASSERT_TRUE(gnss_sim::make_static_receiver_truth(config.receiver, &receiver_, &error_message))
-            << error_message;
+        ASSERT_TRUE(gnss_sim::make_static_receiver_truth(config.receiver, &receiver_, &error_message)) << error_message;
     }
 
     void TearDown() override {
@@ -165,10 +163,8 @@ TEST_F(SatelliteEngineTest, GeometryMatchesDirectRtklibReferenceAtConvergedTrans
     }
     reference_range_rate_mps +=
         OMGE / kSpeedOfLightMps *
-        (reference_state[4] * receiver_.position_ecef_m[0] +
-         reference_state[1] * receiver_.velocity_ecef_mps[0] -
-         reference_state[3] * receiver_.position_ecef_m[1] -
-         reference_state[0] * receiver_.velocity_ecef_mps[1]);
+        (reference_state[4] * receiver_.position_ecef_m[0] + reference_state[1] * receiver_.velocity_ecef_mps[0] -
+         reference_state[3] * receiver_.position_ecef_m[1] - reference_state[0] * receiver_.velocity_ecef_mps[1]);
 
     for (int index = 0; index < 3; ++index) {
         EXPECT_NEAR(geometry.satellite_state.position_ecef_m[index], reference_state[index], 1.0e-6);

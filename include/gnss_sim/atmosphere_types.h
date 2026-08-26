@@ -9,6 +9,8 @@ enum class AtmosphereMode {
     BROADCAST,
 };
 
+const char* atmosphere_mode_name(AtmosphereMode atmosphere_mode);
+
 } // namespace gnss_sim
 
 #endif // GNSS_SIM_ATMOSPHERE_TYPES_H_

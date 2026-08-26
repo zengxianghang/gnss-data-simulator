@@ -6,6 +6,7 @@ extern "C" {
 }
 
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <new>
 
@@ -37,6 +38,10 @@ bool valid_gps_time(int gps_week, double sow_sec) {
 
 bool finite_vector3(const double vector[3]) {
     return vector != nullptr && std::isfinite(vector[0]) && std::isfinite(vector[1]) && std::isfinite(vector[2]);
+}
+
+bool zero_time(gtime_t time) {
+    return time.time == 0 && time.sec == 0.0;
 }
 
 std::string rtklib_file_path(const char* file_path) {
@@ -75,6 +80,121 @@ void count_system(int system, RtklibNavCounts* counts) {
             ++counts->other_eph_count;
             break;
     }
+}
+
+void copy_nav_metadata(const nav_t& source, nav_t* destination, bool include_ion) {
+    destination->leaps = source.leaps;
+    std::memcpy(destination->lam, source.lam, sizeof(destination->lam));
+    std::memcpy(destination->glo_fcn, source.glo_fcn, sizeof(destination->glo_fcn));
+    std::memcpy(destination->glo_cpbias, source.glo_cpbias, sizeof(destination->glo_cpbias));
+    if (!include_ion) {
+        return;
+    }
+    std::memcpy(destination->utc_gps, source.utc_gps, sizeof(destination->utc_gps));
+    std::memcpy(destination->utc_glo, source.utc_glo, sizeof(destination->utc_glo));
+    std::memcpy(destination->utc_gal, source.utc_gal, sizeof(destination->utc_gal));
+    std::memcpy(destination->utc_qzs, source.utc_qzs, sizeof(destination->utc_qzs));
+    std::memcpy(destination->utc_cmp, source.utc_cmp, sizeof(destination->utc_cmp));
+    std::memcpy(destination->utc_sbs, source.utc_sbs, sizeof(destination->utc_sbs));
+    std::memcpy(destination->ion_gps, source.ion_gps, sizeof(destination->ion_gps));
+    std::memcpy(destination->ion_gal, source.ion_gal, sizeof(destination->ion_gal));
+    std::memcpy(destination->ion_qzs, source.ion_qzs, sizeof(destination->ion_qzs));
+    std::memcpy(destination->ion_cmp, source.ion_cmp, sizeof(destination->ion_cmp));
+}
+
+bool reserve_eph(nav_t* nav, int required) {
+    if (required <= nav->nmax) {
+        return true;
+    }
+    int capacity = nav->nmax > 0 ? nav->nmax : 32;
+    while (capacity < required) {
+        capacity *= 2;
+    }
+    void* memory = std::realloc(nav->eph, sizeof(eph_t) * static_cast<std::size_t>(capacity));
+    if (memory == nullptr) {
+        return false;
+    }
+    nav->eph = static_cast<eph_t*>(memory);
+    nav->nmax = capacity;
+    return true;
+}
+
+bool reserve_geph(nav_t* nav, int required) {
+    if (required <= nav->ngmax) {
+        return true;
+    }
+    int capacity = nav->ngmax > 0 ? nav->ngmax : 16;
+    while (capacity < required) {
+        capacity *= 2;
+    }
+    void* memory = std::realloc(nav->geph, sizeof(geph_t) * static_cast<std::size_t>(capacity));
+    if (memory == nullptr) {
+        return false;
+    }
+    nav->geph = static_cast<geph_t*>(memory);
+    nav->ngmax = capacity;
+    return true;
+}
+
+bool reserve_ion(nav_t* nav, int required) {
+    if (required <= nav->nionmax) {
+        return true;
+    }
+    int capacity = nav->nionmax > 0 ? nav->nionmax : 8;
+    while (capacity < required) {
+        capacity *= 2;
+    }
+    void* memory = std::realloc(nav->ion, sizeof(ion_t) * static_cast<std::size_t>(capacity));
+    if (memory == nullptr) {
+        return false;
+    }
+    nav->ion = static_cast<ion_t*>(memory);
+    nav->nionmax = capacity;
+    return true;
+}
+
+bool append_eph(const eph_t& eph, nav_t* destination) {
+    if (!reserve_eph(destination, destination->n + 1)) {
+        return false;
+    }
+    destination->eph[destination->n++] = eph;
+    return true;
+}
+
+bool append_geph(const geph_t& geph, nav_t* destination) {
+    if (!reserve_geph(destination, destination->ng + 1)) {
+        return false;
+    }
+    destination->geph[destination->ng++] = geph;
+    return true;
+}
+
+bool append_ion(const ion_t& ion, nav_t* destination) {
+    if (!reserve_ion(destination, destination->nion + 1)) {
+        return false;
+    }
+    destination->ion[destination->nion++] = ion;
+    return true;
+}
+
+gtime_t eph_transmission_time(const eph_t& eph) {
+    return zero_time(eph.ttr) ? eph.toe : eph.ttr;
+}
+
+gtime_t geph_transmission_time(const geph_t& geph) {
+    return zero_time(geph.tof) ? geph.toe : geph.tof;
+}
+
+bool time_to_week_sow(gtime_t time, int* week, double* sow_sec) {
+    if (week == nullptr || sow_sec == nullptr) {
+        return false;
+    }
+    *sow_sec = time2gpst(time, week);
+    return *week >= 0 && std::isfinite(*sow_sec);
+}
+
+bool record_is_available(gtime_t record_time, gtime_t snapshot_time) {
+    return timediff(record_time, snapshot_time) <= 0.0;
 }
 
 } // namespace
@@ -138,6 +258,195 @@ bool get_rtklib_nav_counts(const RtklibNavStore* store, RtklibNavCounts* counts)
         count_system(system, counts);
     }
     return true;
+}
+
+int rtklib_nav_record_count(const RtklibNavStore* store) {
+    if (store == nullptr) {
+        return 0;
+    }
+    return store->nav.n + store->nav.ng + store->nav.nion;
+}
+
+bool rtklib_nav_record_info(const RtklibNavStore* store, int record_index, RtklibNavRecordInfo* info) {
+    if (store == nullptr || info == nullptr || record_index < 0 || record_index >= rtklib_nav_record_count(store)) {
+        return false;
+    }
+
+    RtklibNavRecordInfo result{};
+    if (record_index < store->nav.n) {
+        const eph_t& eph = store->nav.eph[record_index];
+        result.kind = RtklibNavRecordKind::kEphemeris;
+        result.satellite_number = eph.sat;
+        result.system = satsys(eph.sat, &result.prn);
+        result.message_type = eph.hdr.msg_type;
+        result.iode = eph.iode;
+        result.iodc = eph.iodc;
+        if (!time_to_week_sow(eph_transmission_time(eph), &result.gps_week, &result.transmit_sow_sec)) {
+            return false;
+        }
+        int toe_week = 0;
+        result.toe_sow_sec = time2gpst(eph.toe, &toe_week);
+    }
+    else if (record_index < store->nav.n + store->nav.ng) {
+        const geph_t& geph = store->nav.geph[record_index - store->nav.n];
+        result.kind = RtklibNavRecordKind::kGlonassEphemeris;
+        result.satellite_number = geph.sat;
+        result.system = satsys(geph.sat, &result.prn);
+        result.message_type = geph.hdr.msg_type;
+        result.iode = geph.iode;
+        result.iodc = -1;
+        if (!time_to_week_sow(geph_transmission_time(geph), &result.gps_week, &result.transmit_sow_sec)) {
+            return false;
+        }
+        int toe_week = 0;
+        result.toe_sow_sec = time2gpst(geph.toe, &toe_week);
+    }
+    else {
+        const ion_t& ion = store->nav.ion[record_index - store->nav.n - store->nav.ng];
+        result.kind = RtklibNavRecordKind::kIonosphere;
+        result.satellite_number = 0;
+        result.system = ion.hdr.sys;
+        result.prn = ion.hdr.prn;
+        result.message_type = ion.hdr.msg_type;
+        result.iode = -1;
+        result.iodc = -1;
+        if (!time_to_week_sow(ion.trans_time, &result.gps_week, &result.transmit_sow_sec)) {
+            return false;
+        }
+        result.toe_sow_sec = result.transmit_sow_sec;
+    }
+
+    *info = result;
+    return true;
+}
+
+bool rtklib_clear_nav_store(RtklibNavStore* store) {
+    if (store == nullptr) {
+        return false;
+    }
+    reset_nav(&store->nav);
+    return true;
+}
+
+bool rtklib_copy_nav_snapshot(const RtklibNavStore* source, int gps_week, double sow_sec, RtklibNavStore* destination,
+                              std::string* error_message) {
+    if (source == nullptr || destination == nullptr || source == destination || !valid_gps_time(gps_week, sow_sec)) {
+        set_error(error_message, "navigation snapshot request has invalid arguments");
+        return false;
+    }
+
+    reset_nav(&destination->nav);
+    copy_nav_metadata(source->nav, &destination->nav, true);
+    const gtime_t snapshot_time = gpst2time(gps_week, sow_sec);
+
+    int selected_eph[MAXSAT];
+    int selected_geph[MAXSAT];
+    for (int sat_index = 0; sat_index < MAXSAT; ++sat_index) {
+        selected_eph[sat_index] = -1;
+        selected_geph[sat_index] = -1;
+    }
+
+    for (int index = 0; index < source->nav.n; ++index) {
+        const eph_t& eph = source->nav.eph[index];
+        if (eph.sat <= 0 || eph.sat > MAXSAT || !record_is_available(eph_transmission_time(eph), snapshot_time)) {
+            continue;
+        }
+        const int sat_index = eph.sat - 1;
+        const int selected = selected_eph[sat_index];
+        if (selected < 0 || timediff(eph_transmission_time(eph), eph_transmission_time(source->nav.eph[selected])) > 0.0) {
+            selected_eph[sat_index] = index;
+        }
+    }
+    for (int index = 0; index < source->nav.ng; ++index) {
+        const geph_t& geph = source->nav.geph[index];
+        if (geph.sat <= 0 || geph.sat > MAXSAT || !record_is_available(geph_transmission_time(geph), snapshot_time)) {
+            continue;
+        }
+        const int sat_index = geph.sat - 1;
+        const int selected = selected_geph[sat_index];
+        if (selected < 0 ||
+            timediff(geph_transmission_time(geph), geph_transmission_time(source->nav.geph[selected])) > 0.0) {
+            selected_geph[sat_index] = index;
+        }
+    }
+
+    for (int index = 0; index < source->nav.n; ++index) {
+        const int sat = source->nav.eph[index].sat;
+        if (sat > 0 && sat <= MAXSAT && selected_eph[sat - 1] == index &&
+            !append_eph(source->nav.eph[index], &destination->nav)) {
+            reset_nav(&destination->nav);
+            set_error(error_message, "cannot allocate receiver ephemeris snapshot");
+            return false;
+        }
+    }
+    for (int index = 0; index < source->nav.ng; ++index) {
+        const int sat = source->nav.geph[index].sat;
+        if (sat > 0 && sat <= MAXSAT && selected_geph[sat - 1] == index &&
+            !append_geph(source->nav.geph[index], &destination->nav)) {
+            reset_nav(&destination->nav);
+            set_error(error_message, "cannot allocate receiver GLONASS ephemeris snapshot");
+            return false;
+        }
+    }
+    for (int index = 0; index < source->nav.nion; ++index) {
+        if (record_is_available(source->nav.ion[index].trans_time, snapshot_time) &&
+            !append_ion(source->nav.ion[index], &destination->nav)) {
+            reset_nav(&destination->nav);
+            set_error(error_message, "cannot allocate receiver ionosphere snapshot");
+            return false;
+        }
+    }
+    return true;
+}
+
+bool rtklib_copy_nav_record(const RtklibNavStore* source, int record_index, RtklibNavStore* destination,
+                            std::string* error_message) {
+    if (source == nullptr || destination == nullptr || source == destination || record_index < 0 ||
+        record_index >= rtklib_nav_record_count(source)) {
+        set_error(error_message, "navigation record copy request has invalid arguments");
+        return false;
+    }
+
+    if (record_index < source->nav.n) {
+        copy_nav_metadata(source->nav, &destination->nav, false);
+        if (!append_eph(source->nav.eph[record_index], &destination->nav)) {
+            set_error(error_message, "cannot allocate receiver ephemeris record");
+            return false;
+        }
+        return true;
+    }
+    if (record_index < source->nav.n + source->nav.ng) {
+        copy_nav_metadata(source->nav, &destination->nav, false);
+        if (!append_geph(source->nav.geph[record_index - source->nav.n], &destination->nav)) {
+            set_error(error_message, "cannot allocate receiver GLONASS ephemeris record");
+            return false;
+        }
+        return true;
+    }
+
+    copy_nav_metadata(source->nav, &destination->nav, true);
+    if (!append_ion(source->nav.ion[record_index - source->nav.n - source->nav.ng], &destination->nav)) {
+        set_error(error_message, "cannot allocate receiver ionosphere record");
+        return false;
+    }
+    return true;
+}
+
+bool rtklib_nav_store_has_satellite_ephemeris(const RtklibNavStore* store, int satellite_number) {
+    if (store == nullptr || satellite_number <= 0) {
+        return false;
+    }
+    for (int index = 0; index < store->nav.n; ++index) {
+        if (store->nav.eph[index].sat == satellite_number) {
+            return true;
+        }
+    }
+    for (int index = 0; index < store->nav.ng; ++index) {
+        if (store->nav.geph[index].sat == satellite_number) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool rtklib_satellite_id_to_number(const char* satellite_id, int* satellite_number) {

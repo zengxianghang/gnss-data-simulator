@@ -23,7 +23,11 @@ jobs:
             echo "No C/C++ files found"
             exit 1
           fi
-          clang-format --dry-run --Werror "${files[@]}"
+          clang-format -i "${files[@]}"
+          if ! git diff --exit-code -- "${files[@]}"; then
+            echo "C/C++ formatting differs from .clang-format. Apply the diff above."
+            exit 1
+          fi
 
   build-test:
     strategy:

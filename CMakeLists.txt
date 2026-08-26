@@ -131,6 +131,7 @@ if(BUILD_TESTING)
         tests/unit/test_sim_config.cpp
         tests/unit/test_sim_time.cpp
         tests/unit/test_solution_engine.cpp
+        tests/unit/test_solution_signal_policy.cpp
     )
     target_include_directories(gnss_sim_unit_tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src")

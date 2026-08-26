@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "scenario": "KS",
+  "duration_sec": 28800,
+  "sampling_rate_hz": 10,
+  "elevation_mask_deg": 3.0,
+  "output_eph": true,
+  "output_ion": true,
+  "measurement_noise_enabled": false,
+  "multipath_enabled": false,
+  "receiver_clock_bias_m": 0.0,
+  "receiver_clock_drift_mps": 0.0,
+  "receiver": {
+    "latitude_deg": 20.0,
+    "longitude_deg": 120.0,
+    "height_m": 100.0
+  },
+  "ttff": {
+    "startup_mode": "HOT",
+    "power_on_sec": 300.0,
+    "power_off_sec": 30.0
+  },
+  "rea": {
+    "signal_on_sec": 300.0,
+    "signal_off_sec": 10.0
+  },
+  "seed": 1
+}

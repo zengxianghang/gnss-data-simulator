@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check clang-format
+        shell: bash
+        run: |
+          mapfile -t files < <(find include src tests -type f \( -name '*.h' -o -name '*.cpp' \) | sort)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No C/C++ files found"
+            exit 1
+          fi
+          clang-format --dry-run --Werror "${files[@]}"
+
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout with RTKLIB
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -S . -B build -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure

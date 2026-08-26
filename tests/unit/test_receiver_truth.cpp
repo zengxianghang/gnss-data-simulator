@@ -1,11 +1,9 @@
-#include "model/receiver_truth.h"
-
 #include "gnss/rtklib_adapter.h"
 #include "gnss_sim/sim_config.h"
-
-#include <gtest/gtest.h>
+#include "model/receiver_truth.h"
 
 #include <cmath>
+#include <gtest/gtest.h>
 #include <string>
 
 namespace {

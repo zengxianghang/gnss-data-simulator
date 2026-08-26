@@ -1,9 +1,11 @@
+#include "gnss/rtklib_adapter.h"
 #include "gnss/signal_definitions.h"
 
 #include <gtest/gtest.h>
 
 #include <cmath>
 #include <cstddef>
+#include <iterator>
 #include <set>
 #include <string>
 #include <utility>

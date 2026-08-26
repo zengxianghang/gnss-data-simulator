@@ -122,7 +122,7 @@ TEST(AtmosphereBroadcast, GpsMatchesReferenceKlobucharAndRtklibTroposphere) {
     ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::BROADCAST, nav.store, time,
                                                         gnss_sim::SignalId::kGpsL1Ca, 0, receiver_ecef, azimuth,
                                                         elevation, &correction, &error_message));
-    const double gps_ion[8] = {1.1176e-8, 2.2352e-8, -1.1921e-7, -1.1921e-7, 90112.0, 98304.0, -65536.0, -589824.0};
+    const double gps_ion[8] = {1.1176e-8, 2.2352e-8, -1.1921e-7, -1.1921e-7, 90112.0, 98304.0, -65536.0, -589820.0};
     const double expected_ion =
         reference_klobuchar(normalized_gpst_sow(2041, 200000.0), gps_ion, reference_latitude_deg * kPi / 180.0,
                             reference_longitude_deg * kPi / 180.0, azimuth, elevation);

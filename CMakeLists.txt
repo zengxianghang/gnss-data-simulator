@@ -12,7 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(CTest)
 include(cmake/CompilerWarnings.cmake)
 
-set(GNSS_SIM_RTKLIB_COMMIT "66027afa565669f185b472b022754ab63d63b1f4" CACHE STRING
+set(GNSS_SIM_RTKLIB_COMMIT "a23adc614f43a0c9cf7a0062b9c71ddd225c0dee" CACHE STRING
     "Pinned RTKLIB commit used by this simulator build")
 set(GNSS_SIM_CJSON_COMMIT "acc76239bee01d8e9c858ae2cab296704e52d916" CACHE STRING
     "Pinned cJSON commit used by this simulator build")
@@ -77,6 +77,7 @@ add_library(gnss_sim_core STATIC
     src/gnss/rtklib_adapter.cpp
     src/gnss/rtklib_atmosphere_adapter.cpp
     src/gnss/rtklib_bias_adapter.cpp
+    src/gnss/rtklib_solution_adapter.cpp
     src/gnss/satellite_engine.cpp
     src/gnss/signal_definitions.cpp
     src/model/atmosphere_model.cpp
@@ -129,6 +130,7 @@ if(BUILD_TESTING)
         tests/unit/test_signal_tracking.cpp
         tests/unit/test_sim_config.cpp
         tests/unit/test_sim_time.cpp
+        tests/unit/test_solution_engine.cpp
     )
     target_include_directories(gnss_sim_unit_tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src")

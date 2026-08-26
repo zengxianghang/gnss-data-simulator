@@ -2,6 +2,7 @@
 
 #include "gnss_sim/sim_time.h"
 
+#include <cstddef>
 #include <cstring>
 #include <new>
 

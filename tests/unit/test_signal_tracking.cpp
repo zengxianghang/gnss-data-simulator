@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace {
@@ -86,9 +87,9 @@ TEST(SignalTrackingAcquisition, LowerCn0ProducesLongerDelayAtSameRandomQuantile)
     gnss_sim::seed_rng(&high_rng, 4321U);
     gnss_sim::seed_rng(&low_rng, 4321U);
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::schedule_signal_acquisition(high, gnss_sim::AcquisitionContext::kHot, start, start, 80.0,
+    ASSERT_TRUE(gnss_sim::schedule_signal_acquisition(&high, gnss_sim::AcquisitionContext::kHot, start, start, 80.0,
                                                       cn0_model, config, &high_rng, &error_message));
-    ASSERT_TRUE(gnss_sim::schedule_signal_acquisition(low, gnss_sim::AcquisitionContext::kHot, start, start, 3.0,
+    ASSERT_TRUE(gnss_sim::schedule_signal_acquisition(&low, gnss_sim::AcquisitionContext::kHot, start, start, 3.0,
                                                       cn0_model, config, &low_rng, &error_message));
     EXPECT_GT(gnss_sim::compare_sim_time(low.acquisition_complete_time, high.acquisition_complete_time), 0);
 }

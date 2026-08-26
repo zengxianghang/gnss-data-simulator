@@ -286,8 +286,7 @@ bool rtklib_nav_record_info(const RtklibNavStore* store, int record_index, Rtkli
         }
         int toe_week = 0;
         result.toe_sow_sec = time2gpst(eph.toe, &toe_week);
-    }
-    else if (record_index < store->nav.n + store->nav.ng) {
+    } else if (record_index < store->nav.n + store->nav.ng) {
         const geph_t& geph = store->nav.geph[record_index - store->nav.n];
         result.kind = RtklibNavRecordKind::kGlonassEphemeris;
         result.satellite_number = geph.sat;
@@ -300,8 +299,7 @@ bool rtklib_nav_record_info(const RtklibNavStore* store, int record_index, Rtkli
         }
         int toe_week = 0;
         result.toe_sow_sec = time2gpst(geph.toe, &toe_week);
-    }
-    else {
+    } else {
         const ion_t& ion = store->nav.ion[record_index - store->nav.n - store->nav.ng];
         result.kind = RtklibNavRecordKind::kIonosphere;
         result.satellite_number = 0;
@@ -353,7 +351,8 @@ bool rtklib_copy_nav_snapshot(const RtklibNavStore* source, int gps_week, double
         }
         const int sat_index = eph.sat - 1;
         const int selected = selected_eph[sat_index];
-        if (selected < 0 || timediff(eph_transmission_time(eph), eph_transmission_time(source->nav.eph[selected])) > 0.0) {
+        if (selected < 0 ||
+            timediff(eph_transmission_time(eph), eph_transmission_time(source->nav.eph[selected])) > 0.0) {
             selected_eph[sat_index] = index;
         }
     }

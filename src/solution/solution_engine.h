@@ -56,9 +56,9 @@ struct SolutionEngineState {
 void reset_solution_engine_state(SolutionEngineState* state);
 
 bool solve_receiver_epoch(const RtklibNavStore* receiver_nav, const SimTime& epoch_time,
-                          const MeasurementObservation* observations, int observation_count,
-                          double elevation_mask_deg, AtmosphereMode atmosphere_mode, SolutionEngineState* state,
-                          SolutionEpoch* solution, std::string* error_message);
+                          const MeasurementObservation* observations, int observation_count, double elevation_mask_deg,
+                          AtmosphereMode atmosphere_mode, SolutionEngineState* state, SolutionEpoch* solution,
+                          std::string* error_message);
 
 const char* receiver_solution_status_name(ReceiverSolutionStatus status);
 const char* receiver_solution_type_name(ReceiverSolutionType type);

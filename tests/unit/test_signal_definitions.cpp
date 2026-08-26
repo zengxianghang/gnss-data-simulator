@@ -1,10 +1,9 @@
 #include "gnss/rtklib_adapter.h"
 #include "gnss/signal_definitions.h"
 
-#include <gtest/gtest.h>
-
 #include <cmath>
 #include <cstddef>
+#include <gtest/gtest.h>
 #include <iterator>
 #include <set>
 #include <string>
@@ -55,12 +54,11 @@ TEST(SignalDefinitions, CoversEveryFrozenV1SignalExactlyOnce) {
     for (std::size_t index = 0; index < count; ++index) {
         const gnss_sim::SignalDefinition& definition = definitions[index];
         EXPECT_TRUE(signal_ids.insert(static_cast<int>(definition.signal_id)).second);
-        EXPECT_TRUE(rinex_keys
-                        .insert({static_cast<int>(definition.constellation), std::string(definition.rinex_signal_code)})
-                        .second);
-        EXPECT_TRUE(oem7_keys
-                        .insert({static_cast<int>(definition.constellation), definition.novatel_oem7_signal_type})
-                        .second);
+        EXPECT_TRUE(
+            rinex_keys.insert({static_cast<int>(definition.constellation), std::string(definition.rinex_signal_code)})
+                .second);
+        EXPECT_TRUE(
+            oem7_keys.insert({static_cast<int>(definition.constellation), definition.novatel_oem7_signal_type}).second);
         EXPECT_NE(definition.name, nullptr);
         EXPECT_NE(definition.rinex_signal_code, nullptr);
     }

@@ -3,16 +3,12 @@
 
 #include "gnss/rtklib_adapter.h"
 #include "gnss/signal_definitions.h"
+#include "gnss_sim/sim_config.h"
 #include "gnss_sim/sim_types.h"
 
 #include <string>
 
 namespace gnss_sim {
-
-enum class AtmosphereMode {
-    kNone,
-    kBroadcast,
-};
 
 enum class IonosphereCorrectionStatus {
     kDisabled,
@@ -33,7 +29,6 @@ bool compute_atmosphere_correction(AtmosphereMode mode, const RtklibNavStore* na
                                    double azimuth_rad, double elevation_rad, AtmosphereCorrection* correction,
                                    std::string* error_message);
 
-const char* atmosphere_mode_name(AtmosphereMode mode);
 const char* ionosphere_correction_status_name(IonosphereCorrectionStatus status);
 
 } // namespace gnss_sim

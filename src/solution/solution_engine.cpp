@@ -4,7 +4,6 @@
 #include "gnss_sim/sim_time.h"
 
 #include <cmath>
-#include <cstring>
 
 namespace gnss_sim {
 namespace {
@@ -25,38 +24,6 @@ void set_error(std::string* error_message, const char* message) {
 
 bool valid_epoch_time(const SimTime& time) {
     return time.gps_week >= 0 && time.tow_ns >= 0 && time.tow_ns < GPS_WEEK_NANOSECONDS;
-}
-
-int signal_priority(SignalId signal_id) {
-    switch (signal_id) {
-        case SignalId::kGpsL1Ca:
-        case SignalId::kQzssL1Ca:
-        case SignalId::kGlonassG1:
-        case SignalId::kGalileoE1:
-        case SignalId::kBeidouB1I:
-            return 0;
-        case SignalId::kGpsL1C:
-        case SignalId::kQzssL1C:
-        case SignalId::kGlonassG2:
-        case SignalId::kGalileoE5A:
-        case SignalId::kBeidouB3I:
-            return 1;
-        case SignalId::kGpsL2P:
-        case SignalId::kQzssL2C:
-        case SignalId::kGlonassG3:
-        case SignalId::kGalileoE5B:
-        case SignalId::kBeidouB1C:
-            return 2;
-        case SignalId::kGpsL2C:
-        case SignalId::kQzssL5Q:
-        case SignalId::kGalileoE6:
-        case SignalId::kBeidouB2A:
-            return 3;
-        case SignalId::kGpsL5Q:
-        case SignalId::kBeidouB2B:
-            return 4;
-    }
-    return 100;
 }
 
 bool make_rtklib_observation(const MeasurementObservation& source, RtklibSolutionObservation* destination) {
@@ -101,6 +68,11 @@ int find_selected_satellite(const SelectedObservation* selected, int count, int 
 
 void consider_selected_observation(const MeasurementObservation& measurement, bool for_position,
                                    SelectedObservation selected[kMaxSolverSatellites], int* count) {
+    const int priority = signal_single_point_priority(measurement.signal_id);
+    if (priority < 0) {
+        return;
+    }
+
     RtklibSolutionObservation candidate{};
     if (!make_rtklib_observation(measurement, &candidate)) {
         return;
@@ -109,7 +81,6 @@ void consider_selected_observation(const MeasurementObservation& measurement, bo
         return;
     }
 
-    const int priority = signal_priority(measurement.signal_id);
     const int existing = find_selected_satellite(selected, *count, candidate.satellite_number);
     if (existing >= 0) {
         if (priority < selected[existing].priority) {
@@ -130,7 +101,7 @@ void consider_selected_observation(const MeasurementObservation& measurement, bo
 
 void sort_selected_observations(SelectedObservation selected[kMaxSolverSatellites], int count) {
     for (int index = 1; index < count; ++index) {
-        SelectedObservation value = selected[index];
+        const SelectedObservation value = selected[index];
         int insert = index;
         while (insert > 0 && selected[insert - 1].satellite_number > value.satellite_number) {
             selected[insert] = selected[insert - 1];
@@ -180,9 +151,10 @@ bool solve_receiver_epoch(const RtklibNavStore* receiver_nav, const SimTime& epo
                           const MeasurementObservation* observations, int observation_count,
                           double elevation_mask_deg, AtmosphereMode atmosphere_mode, SolutionEngineState* state,
                           SolutionEpoch* solution, std::string* error_message) {
-    if (receiver_nav == nullptr || observations == nullptr || observation_count < 0 || state == nullptr ||
-        solution == nullptr || !valid_epoch_time(epoch_time) || !std::isfinite(elevation_mask_deg) ||
-        elevation_mask_deg < -90.0 || elevation_mask_deg > 90.0 || atmosphere_mode == AtmosphereMode::UNSPECIFIED) {
+    if (receiver_nav == nullptr || observation_count < 0 || (observation_count > 0 && observations == nullptr) ||
+        state == nullptr || solution == nullptr || !valid_epoch_time(epoch_time) ||
+        !std::isfinite(elevation_mask_deg) || elevation_mask_deg < -90.0 || elevation_mask_deg > 90.0 ||
+        atmosphere_mode == AtmosphereMode::UNSPECIFIED) {
         set_error(error_message, "receiver-solution request has invalid arguments");
         return false;
     }

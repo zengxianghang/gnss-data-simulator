@@ -234,8 +234,8 @@ bool rtklib_geometric_distance(const double satellite_ecef_m[3], const double re
     return true;
 }
 
-bool rtklib_azimuth_elevation(const double receiver_ecef_m[3], const double line_of_sight_ecef[3],
-                              double* azimuth_rad, double* elevation_rad) {
+bool rtklib_azimuth_elevation(const double receiver_ecef_m[3], const double line_of_sight_ecef[3], double* azimuth_rad,
+                              double* elevation_rad) {
     if (!finite_vector3(receiver_ecef_m) || !finite_vector3(line_of_sight_ecef) || azimuth_rad == nullptr ||
         elevation_rad == nullptr) {
         return false;

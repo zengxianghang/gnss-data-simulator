@@ -110,6 +110,12 @@ bool signal_carrier_frequency_hz(const SignalDefinition& definition, int glonass
 bool signal_wavelength_m(const SignalDefinition& definition, int glonass_fcn, double* wavelength_m);
 bool signal_rtklib_observation_code(const SignalDefinition& definition, int* observation_code, int* frequency_index);
 
+// Priority for the single-frequency RTKLIB SPP loopback input. Lower is
+// preferred for a satellite; negative means the signal must not be selected as
+// the primary SPP observation. The policy lives here so solution code does not
+// duplicate constellation/signal mapping rules.
+int signal_single_point_priority(SignalId signal_id);
+
 } // namespace gnss_sim
 
 #endif // GNSS_SIM_SRC_GNSS_SIGNAL_DEFINITIONS_H_

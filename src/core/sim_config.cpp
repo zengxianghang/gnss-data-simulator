@@ -3,7 +3,6 @@
 #include "gnss_sim/sim_time.h"
 
 #include <cJSON.h>
-
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -116,8 +115,7 @@ bool seconds_to_ns(double seconds, const char* field_name, std::int64_t* value_n
         return false;
     }
 
-    const long double scaled =
-        static_cast<long double>(seconds) * static_cast<long double>(NANOSECONDS_PER_SECOND);
+    const long double scaled = static_cast<long double>(seconds) * static_cast<long double>(NANOSECONDS_PER_SECOND);
     if (scaled > static_cast<long double>(std::numeric_limits<std::int64_t>::max())) {
         set_error(error_message, std::string(field_name) + " is too large");
         return false;
@@ -191,8 +189,7 @@ bool parse_ttff(const cJSON* root, SimConfig* config, std::string* error_message
     }
 
     double power_on_sec = static_cast<double>(config->ttff.power_on_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
-    double power_off_sec =
-        static_cast<double>(config->ttff.power_off_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
+    double power_off_sec = static_cast<double>(config->ttff.power_off_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
     return read_optional_number(ttff, "power_on_sec", &power_on_sec, error_message) &&
            read_optional_number(ttff, "power_off_sec", &power_off_sec, error_message) &&
            seconds_to_ns(power_on_sec, "ttff.power_on_sec", &config->ttff.power_on_ns, error_message) &&
@@ -209,8 +206,7 @@ bool parse_rea(const cJSON* root, SimConfig* config, std::string* error_message)
         return false;
     }
 
-    double signal_on_sec =
-        static_cast<double>(config->rea.signal_on_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
+    double signal_on_sec = static_cast<double>(config->rea.signal_on_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
     double signal_off_sec =
         static_cast<double>(config->rea.signal_off_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
     return read_optional_number(rea, "signal_on_sec", &signal_on_sec, error_message) &&
@@ -337,12 +333,21 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
         return false;
     }
 
-    const char* const allowed_keys[] = {"schema_version",          "scenario",          "duration_sec",
-                                        "sampling_rate_hz",       "elevation_mask_deg", "output_eph",
-                                        "output_ion",              "measurement_noise_enabled",
-                                        "multipath_enabled",       "receiver_clock_bias_m",
-                                        "receiver_clock_drift_mps", "receiver",          "ttff",
-                                        "rea",                     "seed"};
+    const char* const allowed_keys[] = {"schema_version",
+                                        "scenario",
+                                        "duration_sec",
+                                        "sampling_rate_hz",
+                                        "elevation_mask_deg",
+                                        "output_eph",
+                                        "output_ion",
+                                        "measurement_noise_enabled",
+                                        "multipath_enabled",
+                                        "receiver_clock_bias_m",
+                                        "receiver_clock_drift_mps",
+                                        "receiver",
+                                        "ttff",
+                                        "rea",
+                                        "seed"};
 
     SimConfig parsed = default_sim_config();
     bool success = validate_object_keys(root, "root", allowed_keys, 15U, error_message);
@@ -350,22 +355,23 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
     double duration_sec = static_cast<double>(parsed.duration_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
     const char* scenario_name = scenario_type_name(parsed.scenario);
     if (success) {
-        success = read_optional_int(root, "schema_version", &parsed.schema_version, error_message) &&
-                  read_optional_string(root, "scenario", &scenario_name, error_message) &&
-                  parse_scenario(scenario_name, &parsed.scenario, error_message) &&
-                  read_optional_number(root, "duration_sec", &duration_sec, error_message) &&
-                  seconds_to_ns(duration_sec, "duration_sec", &parsed.duration_ns, error_message) &&
-                  read_optional_int(root, "sampling_rate_hz", &parsed.sampling_rate_hz, error_message) &&
-                  read_optional_number(root, "elevation_mask_deg", &parsed.elevation_mask_deg, error_message) &&
-                  read_optional_bool(root, "output_eph", &parsed.output_eph, error_message) &&
-                  read_optional_bool(root, "output_ion", &parsed.output_ion, error_message) &&
-                  read_optional_bool(root, "measurement_noise_enabled", &parsed.measurement_noise_enabled, error_message) &&
-                  read_optional_bool(root, "multipath_enabled", &parsed.multipath_enabled, error_message) &&
-                  read_optional_number(root, "receiver_clock_bias_m", &parsed.receiver_clock_bias_m, error_message) &&
-                  read_optional_number(root, "receiver_clock_drift_mps", &parsed.receiver_clock_drift_mps, error_message) &&
-                  parse_receiver(root, &parsed, error_message) && parse_ttff(root, &parsed, error_message) &&
-                  parse_rea(root, &parsed, error_message) && parse_seed(root, &parsed, error_message) &&
-                  validate_sim_config(parsed, error_message);
+        success =
+            read_optional_int(root, "schema_version", &parsed.schema_version, error_message) &&
+            read_optional_string(root, "scenario", &scenario_name, error_message) &&
+            parse_scenario(scenario_name, &parsed.scenario, error_message) &&
+            read_optional_number(root, "duration_sec", &duration_sec, error_message) &&
+            seconds_to_ns(duration_sec, "duration_sec", &parsed.duration_ns, error_message) &&
+            read_optional_int(root, "sampling_rate_hz", &parsed.sampling_rate_hz, error_message) &&
+            read_optional_number(root, "elevation_mask_deg", &parsed.elevation_mask_deg, error_message) &&
+            read_optional_bool(root, "output_eph", &parsed.output_eph, error_message) &&
+            read_optional_bool(root, "output_ion", &parsed.output_ion, error_message) &&
+            read_optional_bool(root, "measurement_noise_enabled", &parsed.measurement_noise_enabled, error_message) &&
+            read_optional_bool(root, "multipath_enabled", &parsed.multipath_enabled, error_message) &&
+            read_optional_number(root, "receiver_clock_bias_m", &parsed.receiver_clock_bias_m, error_message) &&
+            read_optional_number(root, "receiver_clock_drift_mps", &parsed.receiver_clock_drift_mps, error_message) &&
+            parse_receiver(root, &parsed, error_message) && parse_ttff(root, &parsed, error_message) &&
+            parse_rea(root, &parsed, error_message) && parse_seed(root, &parsed, error_message) &&
+            validate_sim_config(parsed, error_message);
     }
 
     cJSON_Delete(root);
@@ -379,24 +385,24 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
 
 const char* scenario_type_name(ScenarioType scenario) {
     switch (scenario) {
-    case ScenarioType::KS:
-        return "KS";
-    case ScenarioType::REA:
-        return "REA";
-    case ScenarioType::TTFF:
-        return "TTFF";
+        case ScenarioType::KS:
+            return "KS";
+        case ScenarioType::REA:
+            return "REA";
+        case ScenarioType::TTFF:
+            return "TTFF";
     }
     return "UNKNOWN";
 }
 
 const char* startup_mode_name(StartupMode startup_mode) {
     switch (startup_mode) {
-    case StartupMode::HOT:
-        return "HOT";
-    case StartupMode::WARM:
-        return "WARM";
-    case StartupMode::COLD:
-        return "COLD";
+        case StartupMode::HOT:
+            return "HOT";
+        case StartupMode::WARM:
+            return "WARM";
+        case StartupMode::COLD:
+            return "COLD";
     }
     return "UNKNOWN";
 }

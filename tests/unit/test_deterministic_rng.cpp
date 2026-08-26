@@ -8,8 +8,7 @@ TEST(DeterministicRng, Pcg32ReferenceSequence) {
     gnss_sim::DeterministicRng rng{};
     gnss_sim::seed_rng(&rng, 42U, 54U);
 
-    const std::uint32_t expected[] = {2707161783U, 2068313097U, 3122475824U,
-                                      2211639955U, 3215226955U, 3421331566U};
+    const std::uint32_t expected[] = {2707161783U, 2068313097U, 3122475824U, 2211639955U, 3215226955U, 3421331566U};
     for (const std::uint32_t value : expected) {
         EXPECT_EQ(gnss_sim::rng_next_u32(&rng), value);
     }

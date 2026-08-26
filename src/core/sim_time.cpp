@@ -128,23 +128,23 @@ bool sampling_interval_ns(int sampling_rate_hz, std::int64_t* interval_ns) {
     }
 
     switch (sampling_rate_hz) {
-    case 1:
-        *interval_ns = 1000000000LL;
-        return true;
-    case 5:
-        *interval_ns = 200000000LL;
-        return true;
-    case 10:
-        *interval_ns = 100000000LL;
-        return true;
-    case 20:
-        *interval_ns = 50000000LL;
-        return true;
-    case 50:
-        *interval_ns = 20000000LL;
-        return true;
-    default:
-        return false;
+        case 1:
+            *interval_ns = 1000000000LL;
+            return true;
+        case 5:
+            *interval_ns = 200000000LL;
+            return true;
+        case 10:
+            *interval_ns = 100000000LL;
+            return true;
+        case 20:
+            *interval_ns = 50000000LL;
+            return true;
+        case 50:
+            *interval_ns = 20000000LL;
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -155,7 +155,8 @@ bool epoch_time_at_index(const SimTime& start_time, int sampling_rate_hz, std::u
         return false;
     }
 
-    const std::uint64_t maximum_index = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max() / interval_ns);
+    const std::uint64_t maximum_index =
+        static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max() / interval_ns);
     if (epoch_index > maximum_index) {
         return false;
     }

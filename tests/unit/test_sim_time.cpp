@@ -20,8 +20,8 @@ TEST(SimTime, SupportsAllFrozenSamplingRatesExactly) {
         int rate_hz;
         std::int64_t interval_ns;
     };
-    const RateCase cases[] = {{1, 1000000000LL}, {5, 200000000LL}, {10, 100000000LL},
-                              {20, 50000000LL},   {50, 20000000LL}};
+    const RateCase cases[] = {
+        {1, 1000000000LL}, {5, 200000000LL}, {10, 100000000LL}, {20, 50000000LL}, {50, 20000000LL}};
 
     for (const RateCase& test_case : cases) {
         std::int64_t interval_ns = 0;
@@ -29,8 +29,8 @@ TEST(SimTime, SupportsAllFrozenSamplingRatesExactly) {
         EXPECT_EQ(interval_ns, test_case.interval_ns);
 
         std::uint64_t epoch_count = 0;
-        ASSERT_TRUE(gnss_sim::epoch_count_for_duration(gnss_sim::NANOSECONDS_PER_SECOND, test_case.rate_hz,
-                                                       &epoch_count));
+        ASSERT_TRUE(
+            gnss_sim::epoch_count_for_duration(gnss_sim::NANOSECONDS_PER_SECOND, test_case.rate_hz, &epoch_count));
         EXPECT_EQ(epoch_count, static_cast<std::uint64_t>(test_case.rate_hz));
     }
 }

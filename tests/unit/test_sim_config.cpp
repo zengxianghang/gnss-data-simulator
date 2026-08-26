@@ -16,7 +16,7 @@ void write_test_config(const char* text) {
 }
 
 class SimConfigTest : public ::testing::Test {
-protected:
+  protected:
     void TearDown() override {
         static_cast<void>(std::remove(TEST_CONFIG_PATH));
     }

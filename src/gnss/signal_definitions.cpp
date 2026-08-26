@@ -30,8 +30,8 @@ constexpr SignalDefinition kSignalDefinitions[] = {
     {GnssConstellation::kGps, SignalId::kGpsL5Q, "GPS L5Q", "5Q", CarrierFrequencyModel::kFixed, 1176.45e6,
      NavMessageFamily::kGpsCnav, CodeBiasModel::kGpsL5Q, 14},
 
-    {GnssConstellation::kQzss, SignalId::kQzssL1Ca, "QZSS L1 C/A", "1C", CarrierFrequencyModel::kFixed,
-     1575.42e6, NavMessageFamily::kQzssLnav, CodeBiasModel::kQzssL1Ca, 0},
+    {GnssConstellation::kQzss, SignalId::kQzssL1Ca, "QZSS L1 C/A", "1C", CarrierFrequencyModel::kFixed, 1575.42e6,
+     NavMessageFamily::kQzssLnav, CodeBiasModel::kQzssL1Ca, 0},
     {GnssConstellation::kQzss, SignalId::kQzssL1C, "QZSS L1C", "1L", CarrierFrequencyModel::kFixed, 1575.42e6,
      NavMessageFamily::kQzssCnav2, CodeBiasModel::kQzssL1C, 16},
     {GnssConstellation::kQzss, SignalId::kQzssL2C, "QZSS L2C", "2S", CarrierFrequencyModel::kFixed, 1227.60e6,
@@ -43,28 +43,28 @@ constexpr SignalDefinition kSignalDefinitions[] = {
      kGlonassG1BaseHz, NavMessageFamily::kGlonassFdma, CodeBiasModel::kGlonassG1, 0},
     {GnssConstellation::kGlonass, SignalId::kGlonassG2, "GLONASS G2", "2C", CarrierFrequencyModel::kGlonassFdmaG2,
      kGlonassG2BaseHz, NavMessageFamily::kGlonassFdma, CodeBiasModel::kGlonassG2, 1},
-    {GnssConstellation::kGlonass, SignalId::kGlonassG3, "GLONASS G3", "3Q", CarrierFrequencyModel::kFixed,
-     1202.025e6, NavMessageFamily::kGlonassL3Oc, CodeBiasModel::kGlonassG3, 6},
+    {GnssConstellation::kGlonass, SignalId::kGlonassG3, "GLONASS G3", "3Q", CarrierFrequencyModel::kFixed, 1202.025e6,
+     NavMessageFamily::kGlonassL3Oc, CodeBiasModel::kGlonassG3, 6},
 
-    {GnssConstellation::kGalileo, SignalId::kGalileoE1, "Galileo E1", "1C", CarrierFrequencyModel::kFixed,
-     1575.42e6, NavMessageFamily::kGalileoInav, CodeBiasModel::kGalileoE1, 2},
-    {GnssConstellation::kGalileo, SignalId::kGalileoE5A, "Galileo E5a", "5Q", CarrierFrequencyModel::kFixed,
-     1176.45e6, NavMessageFamily::kGalileoFnav, CodeBiasModel::kGalileoE5A, 12},
-    {GnssConstellation::kGalileo, SignalId::kGalileoE5B, "Galileo E5b", "7Q", CarrierFrequencyModel::kFixed,
-     1207.14e6, NavMessageFamily::kGalileoInav, CodeBiasModel::kGalileoE5B, 17},
-    {GnssConstellation::kGalileo, SignalId::kGalileoE6, "Galileo E6", "6B", CarrierFrequencyModel::kFixed,
-     1278.75e6, NavMessageFamily::kGalileoCnav, CodeBiasModel::kGalileoE6, 6},
+    {GnssConstellation::kGalileo, SignalId::kGalileoE1, "Galileo E1", "1C", CarrierFrequencyModel::kFixed, 1575.42e6,
+     NavMessageFamily::kGalileoInav, CodeBiasModel::kGalileoE1, 2},
+    {GnssConstellation::kGalileo, SignalId::kGalileoE5A, "Galileo E5a", "5Q", CarrierFrequencyModel::kFixed, 1176.45e6,
+     NavMessageFamily::kGalileoFnav, CodeBiasModel::kGalileoE5A, 12},
+    {GnssConstellation::kGalileo, SignalId::kGalileoE5B, "Galileo E5b", "7Q", CarrierFrequencyModel::kFixed, 1207.14e6,
+     NavMessageFamily::kGalileoInav, CodeBiasModel::kGalileoE5B, 17},
+    {GnssConstellation::kGalileo, SignalId::kGalileoE6, "Galileo E6", "6B", CarrierFrequencyModel::kFixed, 1278.75e6,
+     NavMessageFamily::kGalileoCnav, CodeBiasModel::kGalileoE6, 6},
 
-    {GnssConstellation::kBeidou, SignalId::kBeidouB1I, "BeiDou B1I", "2I", CarrierFrequencyModel::kFixed,
-     1561.098e6, NavMessageFamily::kBeidouD1D2, CodeBiasModel::kBeidouB1I, 0},
-    {GnssConstellation::kBeidou, SignalId::kBeidouB3I, "BeiDou B3I", "6I", CarrierFrequencyModel::kFixed,
-     1268.52e6, NavMessageFamily::kBeidouD1D2, CodeBiasModel::kBeidouB3I, 2},
-    {GnssConstellation::kBeidou, SignalId::kBeidouB1C, "BeiDou B1C", "1P", CarrierFrequencyModel::kFixed,
-     1575.42e6, NavMessageFamily::kBeidouBcnav1, CodeBiasModel::kBeidouB1C, 7},
-    {GnssConstellation::kBeidou, SignalId::kBeidouB2A, "BeiDou B2a", "5P", CarrierFrequencyModel::kFixed,
-     1176.45e6, NavMessageFamily::kBeidouBcnav2, CodeBiasModel::kBeidouB2A, 9},
-    {GnssConstellation::kBeidou, SignalId::kBeidouB2B, "BeiDou B2b", "7D", CarrierFrequencyModel::kFixed,
-     1207.14e6, NavMessageFamily::kBeidouBcnav3, CodeBiasModel::kBeidouB2B, 11},
+    {GnssConstellation::kBeidou, SignalId::kBeidouB1I, "BeiDou B1I", "2I", CarrierFrequencyModel::kFixed, 1561.098e6,
+     NavMessageFamily::kBeidouD1D2, CodeBiasModel::kBeidouB1I, 0},
+    {GnssConstellation::kBeidou, SignalId::kBeidouB3I, "BeiDou B3I", "6I", CarrierFrequencyModel::kFixed, 1268.52e6,
+     NavMessageFamily::kBeidouD1D2, CodeBiasModel::kBeidouB3I, 2},
+    {GnssConstellation::kBeidou, SignalId::kBeidouB1C, "BeiDou B1C", "1P", CarrierFrequencyModel::kFixed, 1575.42e6,
+     NavMessageFamily::kBeidouBcnav1, CodeBiasModel::kBeidouB1C, 7},
+    {GnssConstellation::kBeidou, SignalId::kBeidouB2A, "BeiDou B2a", "5P", CarrierFrequencyModel::kFixed, 1176.45e6,
+     NavMessageFamily::kBeidouBcnav2, CodeBiasModel::kBeidouB2A, 9},
+    {GnssConstellation::kBeidou, SignalId::kBeidouB2B, "BeiDou B2b", "7D", CarrierFrequencyModel::kFixed, 1207.14e6,
+     NavMessageFamily::kBeidouBcnav3, CodeBiasModel::kBeidouB2B, 11},
 };
 
 constexpr std::size_t kSignalDefinitionCount = sizeof(kSignalDefinitions) / sizeof(kSignalDefinitions[0]);
@@ -92,7 +92,7 @@ const SignalDefinition* find_signal_definition(SignalId signal_id) {
 }
 
 const SignalDefinition* find_signal_definition_by_rinex(GnssConstellation constellation,
-                                                         const char* rinex_signal_code) {
+                                                        const char* rinex_signal_code) {
     if (rinex_signal_code == nullptr) {
         return nullptr;
     }
@@ -105,8 +105,7 @@ const SignalDefinition* find_signal_definition_by_rinex(GnssConstellation conste
     return nullptr;
 }
 
-const SignalDefinition* find_signal_definition_by_oem7(GnssConstellation constellation,
-                                                        int novatel_oem7_signal_type) {
+const SignalDefinition* find_signal_definition_by_oem7(GnssConstellation constellation, int novatel_oem7_signal_type) {
     for (const SignalDefinition& definition : kSignalDefinitions) {
         if (definition.constellation == constellation &&
             definition.novatel_oem7_signal_type == novatel_oem7_signal_type) {

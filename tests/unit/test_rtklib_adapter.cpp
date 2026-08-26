@@ -14,6 +14,7 @@ extern "C" {
 #undef unlock
 #endif
 
+#include <cstring>
 #include <string>
 
 namespace {

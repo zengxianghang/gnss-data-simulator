@@ -36,6 +36,14 @@ const gnss_sim::SignalDefinition& signal(gnss_sim::SignalId signal_id) {
     return *definition;
 }
 
+bool make_test_receiver(gnss_sim::ReceiverTruth* receiver, std::string* error_message) {
+    gnss_sim::ReceiverConfig config{};
+    config.latitude_deg = 20.0;
+    config.longitude_deg = 120.0;
+    config.height_m = 100.0;
+    return gnss_sim::make_static_receiver_truth(config, receiver, error_message);
+}
+
 gnss_sim::RtklibBroadcastBiasData bias(gnss_sim::RtklibBroadcastMessageFamily family) {
     gnss_sim::RtklibBroadcastBiasData value{};
     value.message_family = family;
@@ -194,7 +202,7 @@ TEST(ZeroNoiseMeasurement, ComponentsMatchReferenceEquationsAndAtmosphereSigns) 
     ASSERT_TRUE(gnss_sim::load_rinex_nav_file(nav.store, mixed_nav_path().c_str(), &error_message)) << error_message;
 
     gnss_sim::ReceiverTruth receiver{};
-    ASSERT_TRUE(gnss_sim::initialize_static_receiver_truth(20.0, 120.0, 100.0, &receiver, &error_message));
+    ASSERT_TRUE(make_test_receiver(&receiver, &error_message));
     gnss_sim::SimTime receive_time{};
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2041, 180100.0, &receive_time));
     int satellite_number = 0;
@@ -238,7 +246,7 @@ TEST(ZeroNoiseMeasurement, GlonassFdmaUsesSatelliteFcnForWavelengthAndDoppler) {
     std::string error_message;
     ASSERT_TRUE(gnss_sim::load_rinex_nav_file(nav.store, mixed_nav_path().c_str(), &error_message));
     gnss_sim::ReceiverTruth receiver{};
-    ASSERT_TRUE(gnss_sim::initialize_static_receiver_truth(20.0, 120.0, 100.0, &receiver, &error_message));
+    ASSERT_TRUE(make_test_receiver(&receiver, &error_message));
     gnss_sim::SimTime receive_time{};
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2041, 258300.0, &receive_time));
     int satellite_number = 0;
@@ -268,7 +276,7 @@ TEST(ZeroNoiseMeasurement, AdrAmbiguityIsContinuousWithinLockAndChangesAfterReac
     std::string error_message;
     ASSERT_TRUE(gnss_sim::load_rinex_nav_file(nav.store, mixed_nav_path().c_str(), &error_message));
     gnss_sim::ReceiverTruth receiver{};
-    ASSERT_TRUE(gnss_sim::initialize_static_receiver_truth(20.0, 120.0, 100.0, &receiver, &error_message));
+    ASSERT_TRUE(make_test_receiver(&receiver, &error_message));
     int satellite_number = 0;
     ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number("G01", &satellite_number));
     gnss_sim::SimTime t0{};

@@ -1,13 +1,11 @@
 #include "gnss/nav_message_scheduler.h"
-
 #include "gnss/navigation_state.h"
 #include "gnss/rtklib_adapter.h"
 #include "gnss/signal_definitions.h"
 #include "gnss_sim/sim_time.h"
 
-#include <gtest/gtest.h>
-
 #include <cstdint>
+#include <gtest/gtest.h>
 #include <string>
 
 namespace {
@@ -53,7 +51,7 @@ TEST(ColdNavSchedulerTiming, LegacyGpsAndQzssUseThirtySecondFramePhase) {
     gnss_sim::NavAcquisitionPlan plan{};
     std::string error_message;
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGpsL1Ca, acquisition_time, 21, &plan,
-                                                         &error_message));
+                                                          &error_message));
     EXPECT_NEAR(gnss_sim::sim_time_sow_sec(plan.availability_time), 180036.0, 1.0e-9);
     EXPECT_EQ(plan.fragment_count, 3);
     EXPECT_EQ(plan.fragments[0].fragment_id, 1);
@@ -75,9 +73,9 @@ TEST(ColdNavSchedulerTiming, CnavUsesSignalSpecificMessageRate) {
     gnss_sim::NavAcquisitionPlan l5_plan{};
     std::string error_message;
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGpsL2C, l2_acquisition, 21, &l2_plan,
-                                                         &error_message));
+                                                          &error_message));
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGpsL5Q, l5_acquisition, 21, &l5_plan,
-                                                         &error_message));
+                                                          &error_message));
     EXPECT_NEAR(gnss_sim::sim_time_sow_sec(l2_plan.availability_time), 180048.0, 1.0e-9);
     EXPECT_NEAR(gnss_sim::sim_time_sow_sec(l5_plan.availability_time), 180024.0, 1.0e-9);
     EXPECT_EQ(l2_plan.fragments[0].fragment_id, 10);
@@ -94,7 +92,7 @@ TEST(ColdNavSchedulerTiming, Cnav2RequiresCompleteEighteenSecondFrame) {
     gnss_sim::NavAcquisitionPlan plan{};
     std::string error_message;
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGpsL1C, acquisition_time, 21, &plan,
-                                                         &error_message));
+                                                          &error_message));
     EXPECT_NEAR(gnss_sim::sim_time_sow_sec(plan.availability_time), 180036.0, 1.0e-9);
     EXPECT_EQ(plan.fragment_count, 1);
 }
@@ -108,7 +106,7 @@ TEST(ColdNavSchedulerTiming, GlonassFdmaCollectsStringsOneThroughFourWithoutThir
     gnss_sim::NavAcquisitionPlan plan{};
     std::string error_message;
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGlonassG1, acquisition_time, 5, &plan,
-                                                         &error_message));
+                                                          &error_message));
     EXPECT_NEAR(gnss_sim::sim_time_sow_sec(plan.availability_time), 180032.0, 1.0e-9);
     EXPECT_LT(gnss_sim::sim_time_sow_sec(plan.availability_time) - 180000.001, 33.0);
     EXPECT_EQ(plan.fragment_count, 4);
@@ -122,7 +120,7 @@ TEST(ColdNavSchedulerTiming, GlonassL3OcCollectsThreeImmediateStrings) {
     gnss_sim::NavAcquisitionPlan plan{};
     std::string error_message;
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGlonassG3, acquisition_time, 5, &plan,
-                                                         &error_message));
+                                                          &error_message));
     EXPECT_NEAR(gnss_sim::sim_time_sow_sec(plan.availability_time), 180021.0, 1.0e-9);
     EXPECT_EQ(plan.fragments[0].fragment_id, 10);
     EXPECT_EQ(plan.fragments[1].fragment_id, 11);
@@ -135,7 +133,7 @@ TEST(ColdNavSchedulerTiming, WeekBoundaryIsHandledWithIntegerSimTime) {
     gnss_sim::NavAcquisitionPlan plan{};
     std::string error_message;
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGpsL1Ca, acquisition_time, 21, &plan,
-                                                         &error_message));
+                                                          &error_message));
     EXPECT_EQ(plan.availability_time.gps_week, 2301);
     EXPECT_NEAR(gnss_sim::sim_time_sow_sec(plan.availability_time), 18.0, 1.0e-9);
 }
@@ -167,7 +165,7 @@ TEST(ColdNavSchedulerMask, FragmentsAppearOnlyAfterTheirCompleteMessageBoundary)
     gnss_sim::NavAcquisitionPlan plan{};
     std::string error_message;
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGpsL1Ca, acquisition_time, 21, &plan,
-                                                         &error_message));
+                                                          &error_message));
 
     gnss_sim::SimTime at_six{};
     gnss_sim::SimTime before_eighteen{};
@@ -187,8 +185,8 @@ TEST(ColdNavSchedulerIntegration, ColdReceiverNavGrowsOneCompletedAcquisitionAtA
 
     gnss_sim::SimTime startup_time{};
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2041, 180000.0, &startup_time));
-    ASSERT_TRUE(gnss_sim::initialize_receiver_navigation(state, gnss_sim::StartupMode::COLD, startup_time,
-                                                        &error_message))
+    ASSERT_TRUE(
+        gnss_sim::initialize_receiver_navigation(state, gnss_sim::StartupMode::COLD, startup_time, &error_message))
         << error_message;
 
     int gps_satellite = 0;
@@ -208,15 +206,15 @@ TEST(ColdNavSchedulerIntegration, ColdReceiverNavGrowsOneCompletedAcquisitionAtA
     gnss_sim::NavAcquisitionPlan gps_plan{};
     gnss_sim::NavAcquisitionPlan glo_plan{};
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGpsL1Ca, startup_time, gps_info.iode,
-                                                         &gps_plan, &error_message));
+                                                          &gps_plan, &error_message));
     gnss_sim::SimTime glo_acquisition{};
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2041, 180020.001, &glo_acquisition));
     ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGlonassG1, glo_acquisition,
-                                                         glo_info.iode, &glo_plan, &error_message));
+                                                          glo_info.iode, &glo_plan, &error_message));
 
     bool emitted = false;
     ASSERT_TRUE(gnss_sim::deliver_cold_nav_plan_if_complete(gps_plan, gps_record, gps_plan.availability_time, state,
-                                                           nullptr, &emitted, &error_message))
+                                                            nullptr, &emitted, &error_message))
         << error_message;
     EXPECT_TRUE(emitted);
 
@@ -227,11 +225,11 @@ TEST(ColdNavSchedulerIntegration, ColdReceiverNavGrowsOneCompletedAcquisitionAtA
 
     emitted = true;
     ASSERT_TRUE(gnss_sim::deliver_cold_nav_plan_if_complete(glo_plan, glo_record, gps_plan.availability_time, state,
-                                                           nullptr, &emitted, &error_message));
+                                                            nullptr, &emitted, &error_message));
     EXPECT_FALSE(emitted);
 
     ASSERT_TRUE(gnss_sim::deliver_cold_nav_plan_if_complete(glo_plan, glo_record, glo_plan.availability_time, state,
-                                                           nullptr, &emitted, &error_message))
+                                                            nullptr, &emitted, &error_message))
         << error_message;
     EXPECT_TRUE(emitted);
     ASSERT_TRUE(gnss_sim::get_rtklib_nav_counts(gnss_sim::receiver_navigation_store(state), &counts));
@@ -240,7 +238,7 @@ TEST(ColdNavSchedulerIntegration, ColdReceiverNavGrowsOneCompletedAcquisitionAtA
 
     emitted = true;
     ASSERT_TRUE(gnss_sim::deliver_cold_nav_plan_if_complete(glo_plan, glo_record, glo_plan.availability_time, state,
-                                                           nullptr, &emitted, &error_message));
+                                                            nullptr, &emitted, &error_message));
     EXPECT_FALSE(emitted);
     gnss_sim::destroy_navigation_state(state);
 }
@@ -252,15 +250,15 @@ TEST(ColdNavSchedulerIntegration, PlanCannotDeliverDifferentIssueOfData) {
     ASSERT_TRUE(gnss_sim::load_truth_navigation(state, update_nav_path().c_str(), &error_message)) << error_message;
     gnss_sim::SimTime startup_time{};
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2041, 179000.0, &startup_time));
-    ASSERT_TRUE(gnss_sim::initialize_receiver_navigation(state, gnss_sim::StartupMode::COLD, startup_time,
-                                                        &error_message));
+    ASSERT_TRUE(
+        gnss_sim::initialize_receiver_navigation(state, gnss_sim::StartupMode::COLD, startup_time, &error_message));
 
     gnss_sim::NavAcquisitionPlan wrong_plan{};
-    ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGpsL1Ca, startup_time, 999,
-                                                         &wrong_plan, &error_message));
+    ASSERT_TRUE(gnss_sim::build_cold_nav_acquisition_plan(gnss_sim::SignalId::kGpsL1Ca, startup_time, 999, &wrong_plan,
+                                                          &error_message));
     bool emitted = false;
     EXPECT_FALSE(gnss_sim::deliver_cold_nav_plan_if_complete(wrong_plan, 0, wrong_plan.availability_time, state,
-                                                            nullptr, &emitted, &error_message));
+                                                             nullptr, &emitted, &error_message));
     EXPECT_FALSE(emitted);
     gnss_sim::destroy_navigation_state(state);
 }

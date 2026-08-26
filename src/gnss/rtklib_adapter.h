@@ -92,6 +92,7 @@ struct RtklibSolutionObservation {
     int satellite_number;
     int observation_code;
     double pseudorange_m;
+    double code_bias_m;
     double doppler_hz;
     double wavelength_m;
     double cn0_dbhz;
@@ -100,6 +101,7 @@ struct RtklibSolutionObservation {
 };
 
 struct RtklibPositionSolution {
+    bool valid;
     double position_ecef_m[3];
     double latitude_deg;
     double longitude_deg;
@@ -107,12 +109,15 @@ struct RtklibPositionSolution {
     double receiver_clock_bias_m;
     double covariance_ecef_m2[6];
     int used_satellites;
+    char diagnostic[128];
 };
 
 struct RtklibVelocitySolution {
+    bool valid;
     double velocity_ecef_mps[3];
     double receiver_clock_drift_mps;
     int used_satellites;
+    char diagnostic[128];
 };
 
 RtklibNavStore* create_rtklib_nav_store();

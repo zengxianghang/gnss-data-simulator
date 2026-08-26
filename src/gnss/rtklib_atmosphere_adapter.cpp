@@ -55,8 +55,8 @@ bool parameters_available(const double* parameters, int count) {
 
 bool rtklib_broadcast_ionosphere_reference_delay(const RtklibNavStore* store, RtklibIonosphereSystem system,
                                                  int gps_week, double sow_sec, const double receiver_ecef_m[3],
-                                                 double azimuth_rad, double elevation_rad, RtklibIonosphereResult* result,
-                                                 std::string* error_message) {
+                                                 double azimuth_rad, double elevation_rad,
+                                                 RtklibIonosphereResult* result, std::string* error_message) {
     if (store == nullptr || result == nullptr || !valid_gps_time(gps_week, sow_sec) ||
         !finite_vector3(receiver_ecef_m) || !finite_azel(azimuth_rad, elevation_rad)) {
         set_error(error_message, "broadcast ionosphere request has invalid arguments");

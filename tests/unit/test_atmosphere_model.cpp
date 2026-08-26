@@ -178,7 +178,7 @@ TEST(AtmosphereBroadcast, BeidouLegacyUsesBdtPhaseAndB1IReferenceFrequency) {
                                                         elevation, &b3i, &error_message));
     const double bds_ion[8] = {2.0e-8, -1.0e-8, 3.0e-8, -2.0e-8, 70000.0, 80000.0, -50000.0, -400000.0};
     const double expected_b1i = reference_klobuchar(normalized_gpst_sow(2041, 200014.0) - 14.0, bds_ion,
-                                                   20.0 * kPi / 180.0, 120.0 * kPi / 180.0, azimuth, elevation);
+                                                    20.0 * kPi / 180.0, 120.0 * kPi / 180.0, azimuth, elevation);
     EXPECT_EQ(b1i.ionosphere_status, gnss_sim::IonosphereCorrectionStatus::kApplied);
     EXPECT_NEAR(b1i.ionosphere_code_delay_m, expected_b1i, 1.0e-9);
     const double expected_ratio = (kBdsB1IHz / kBdsB3IHz) * (kBdsB1IHz / kBdsB3IHz);

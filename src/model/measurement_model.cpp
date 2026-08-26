@@ -73,8 +73,7 @@ std::int64_t deterministic_ambiguity_cycles(SignalId signal_id, int satellite_nu
     return static_cast<std::int64_t>(100000U + mix64(value) % 900000U);
 }
 
-bool ambiguity_matches_tracker(const CarrierAmbiguityState& state, const SignalTracker& tracker,
-                               int satellite_number) {
+bool ambiguity_matches_tracker(const CarrierAmbiguityState& state, const SignalTracker& tracker, int satellite_number) {
     return state.initialized && state.signal_id == tracker.signal_id && state.satellite_number == satellite_number &&
            compare_sim_time(state.tracking_start_time, tracker.tracking_start_time) == 0;
 }
@@ -88,8 +87,7 @@ void reset_carrier_ambiguity_state(CarrierAmbiguityState* state) {
 }
 
 bool compute_broadcast_code_bias_m(const SignalDefinition& signal, const RtklibBroadcastBiasData& bias_data,
-                                   double* code_bias_m, BroadcastCodeBiasStatus* status,
-                                   std::string* error_message) {
+                                   double* code_bias_m, BroadcastCodeBiasStatus* status, std::string* error_message) {
     if (code_bias_m == nullptr || status == nullptr) {
         set_error(error_message, "code-bias output arguments are invalid");
         return false;
@@ -161,16 +159,16 @@ bool compute_broadcast_code_bias_m(const SignalDefinition& signal, const RtklibB
             if (bias_data.message_family != RtklibBroadcastMessageFamily::kGalileoFnav) {
                 set_unavailable(code_bias_m, status);
             } else {
-                set_bias(frequency_ratio_squared(kGalileoE1Hz, signal_frequency_hz) * bias_data.tgd_sec[0],
-                         code_bias_m, status);
+                set_bias(frequency_ratio_squared(kGalileoE1Hz, signal_frequency_hz) * bias_data.tgd_sec[0], code_bias_m,
+                         status);
             }
             return true;
         case CodeBiasModel::kGalileoE5B:
             if (bias_data.message_family != RtklibBroadcastMessageFamily::kGalileoInav) {
                 set_unavailable(code_bias_m, status);
             } else {
-                set_bias(frequency_ratio_squared(kGalileoE1Hz, signal_frequency_hz) * bias_data.tgd_sec[1],
-                         code_bias_m, status);
+                set_bias(frequency_ratio_squared(kGalileoE1Hz, signal_frequency_hz) * bias_data.tgd_sec[1], code_bias_m,
+                         status);
             }
             return true;
         case CodeBiasModel::kGalileoE6:
@@ -259,8 +257,8 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
     }
 
     const double clock_corrected_range_m = result.geometric_range_m - result.satellite_clock_bias_m;
-    result.pseudorange_m = clock_corrected_range_m + result.code_bias_m + result.ionosphere_code_delay_m +
-                           result.troposphere_delay_m;
+    result.pseudorange_m =
+        clock_corrected_range_m + result.code_bias_m + result.ionosphere_code_delay_m + result.troposphere_delay_m;
     result.doppler_hz = -(result.range_rate_mps - result.satellite_clock_drift_mps) / wavelength_m;
 
     if (tracker.phase == SignalTrackingPhase::kTracking) {
@@ -268,8 +266,8 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
             ambiguity_state->signal_id = tracker.signal_id;
             ambiguity_state->satellite_number = geometry.satellite_number;
             ambiguity_state->tracking_start_time = tracker.tracking_start_time;
-            ambiguity_state->ambiguity_cycles =
-                deterministic_ambiguity_cycles(tracker.signal_id, geometry.satellite_number, tracker.tracking_start_time);
+            ambiguity_state->ambiguity_cycles = deterministic_ambiguity_cycles(
+                tracker.signal_id, geometry.satellite_number, tracker.tracking_start_time);
             ambiguity_state->initialized = true;
         }
         result.ambiguity_cycles = ambiguity_state->ambiguity_cycles;
@@ -283,8 +281,9 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
     }
 
     const bool geometry_usable = geometry.visible;
+    const bool code_bias_available = result.code_bias_status != BroadcastCodeBiasStatus::kUnavailableForMessageFamily;
     result.observation_available = geometry_usable && tracker.observation_available;
-    result.pseudorange_valid = geometry_usable && tracker.psr_valid;
+    result.pseudorange_valid = geometry_usable && tracker.psr_valid && code_bias_available;
     result.doppler_valid = geometry_usable && tracker.doppler_valid;
     result.adr_valid = geometry_usable && tracker.adr_valid && ambiguity_state->initialized;
 

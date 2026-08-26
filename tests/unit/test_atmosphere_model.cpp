@@ -17,6 +17,12 @@ extern "C" {
 #ifdef unlock
 #undef unlock
 #endif
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
 
 namespace {
 

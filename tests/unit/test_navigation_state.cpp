@@ -1,11 +1,9 @@
 #include "gnss/navigation_state.h"
-
 #include "gnss/rtklib_adapter.h"
 #include "gnss_sim/sim_time.h"
 
-#include <gtest/gtest.h>
-
 #include <cmath>
+#include <gtest/gtest.h>
 #include <string>
 
 namespace {
@@ -103,8 +101,8 @@ TEST_F(NavigationStateTest, RuntimeEphemerisUpdateEmitsExactlyOnceAndRetainsOldA
 
     gnss_sim::SimTime startup_time{};
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2041, 179000.0, &startup_time));
-    ASSERT_TRUE(gnss_sim::initialize_receiver_navigation(state_, gnss_sim::StartupMode::HOT, startup_time,
-                                                         &error_message))
+    ASSERT_TRUE(
+        gnss_sim::initialize_receiver_navigation(state_, gnss_sim::StartupMode::HOT, startup_time, &error_message))
         << error_message;
 
     gnss_sim::RtklibNavRecordInfo first_info{};
@@ -124,8 +122,7 @@ TEST_F(NavigationStateTest, RuntimeEphemerisUpdateEmitsExactlyOnceAndRetainsOldA
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2041, 180030.0, &availability_time));
     gnss_sim::NavigationUpdateEvent event{};
     bool emitted = false;
-    ASSERT_TRUE(gnss_sim::apply_truth_navigation_record(state_, 1, availability_time, &event, &emitted,
-                                                        &error_message))
+    ASSERT_TRUE(gnss_sim::apply_truth_navigation_record(state_, 1, availability_time, &event, &emitted, &error_message))
         << error_message;
     EXPECT_TRUE(emitted);
     EXPECT_EQ(event.truth_record_index, 1);
@@ -137,8 +134,7 @@ TEST_F(NavigationStateTest, RuntimeEphemerisUpdateEmitsExactlyOnceAndRetainsOldA
     EXPECT_EQ(receiver_counts.gps_eph_count, 2);
 
     emitted = true;
-    ASSERT_TRUE(gnss_sim::apply_truth_navigation_record(state_, 1, availability_time, &event, &emitted,
-                                                        &error_message))
+    ASSERT_TRUE(gnss_sim::apply_truth_navigation_record(state_, 1, availability_time, &event, &emitted, &error_message))
         << error_message;
     EXPECT_FALSE(emitted);
     ASSERT_TRUE(gnss_sim::get_rtklib_nav_counts(gnss_sim::receiver_navigation_store(state_), &receiver_counts));
@@ -171,8 +167,8 @@ TEST_F(NavigationStateTest, ColdStartAcceptsSchedulerDeliveredEphemerisAfterStar
     EXPECT_FALSE(gnss_sim::navigation_truth_record_delivered(state_, 0));
     int gps_satellite = 0;
     ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number("G01", &gps_satellite));
-    EXPECT_FALSE(gnss_sim::rtklib_nav_store_has_satellite_ephemeris(gnss_sim::receiver_navigation_store(state_),
-                                                                   gps_satellite));
+    EXPECT_FALSE(
+        gnss_sim::rtklib_nav_store_has_satellite_ephemeris(gnss_sim::receiver_navigation_store(state_), gps_satellite));
 
     gnss_sim::SimTime decoded_time{};
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2041, 179020.0, &decoded_time));
@@ -180,8 +176,8 @@ TEST_F(NavigationStateTest, ColdStartAcceptsSchedulerDeliveredEphemerisAfterStar
     ASSERT_TRUE(gnss_sim::apply_truth_navigation_record(state_, 0, decoded_time, nullptr, &emitted, &error_message))
         << error_message;
     EXPECT_TRUE(emitted);
-    EXPECT_TRUE(gnss_sim::rtklib_nav_store_has_satellite_ephemeris(gnss_sim::receiver_navigation_store(state_),
-                                                                  gps_satellite));
+    EXPECT_TRUE(
+        gnss_sim::rtklib_nav_store_has_satellite_ephemeris(gnss_sim::receiver_navigation_store(state_), gps_satellite));
 }
 
 } // namespace

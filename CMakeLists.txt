@@ -12,7 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(CTest)
 include(cmake/CompilerWarnings.cmake)
 
-set(GNSS_SIM_RTKLIB_COMMIT "47bb6cf9935b510109d16f46baa35c648e56f1b5" CACHE STRING
+set(GNSS_SIM_RTKLIB_COMMIT "07e813b72c8667350c4e80293cb6679c519ef1a6" CACHE STRING
     "Pinned RTKLIB commit used by this simulator build")
 set(GNSS_SIM_CJSON_COMMIT "acc76239bee01d8e9c858ae2cab296704e52d916" CACHE STRING
     "Pinned cJSON commit used by this simulator build")
@@ -38,6 +38,7 @@ add_library(rtklib_pinned STATIC
     third_party/RTKLIB/src/rtcm3.c
     third_party/RTKLIB/src/rtcm3e.c
     third_party/RTKLIB/src/rtkcmn.c
+    third_party/RTKLIB/src/rtklib_obs_ext.c
     third_party/RTKLIB/src/sbas.c
 )
 add_library(gnss_sim::rtklib ALIAS rtklib_pinned)
@@ -69,6 +70,7 @@ add_library(gnss_sim_core STATIC
     src/core/sim_time.cpp
     src/core/simulator.cpp
     src/gnss/rtklib_adapter.cpp
+    src/gnss/signal_definitions.cpp
 )
 add_library(gnss_sim::core ALIAS gnss_sim_core)
 target_include_directories(gnss_sim_core
@@ -101,6 +103,7 @@ if(BUILD_TESTING)
     add_executable(gnss_sim_unit_tests
         tests/unit/test_deterministic_rng.cpp
         tests/unit/test_rtklib_adapter.cpp
+        tests/unit/test_signal_definitions.cpp
         tests/unit/test_sim_config.cpp
         tests/unit/test_sim_time.cpp
     )

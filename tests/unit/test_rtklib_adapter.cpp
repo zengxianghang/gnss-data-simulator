@@ -66,7 +66,7 @@ TEST_F(RtklibAdapterTest, LoadsRepresentativeMixedNavigationFile) {
 }
 
 TEST(RtklibAdapterMetadata, ExposesExactPinnedRtklibCommit) {
-    EXPECT_STREQ(gnss_sim::rtklib_commit_sha(), "47bb6cf9935b510109d16f46baa35c648e56f1b5");
+    EXPECT_STREQ(gnss_sim::rtklib_commit_sha(), "07e813b72c8667350c4e80293cb6679c519ef1a6");
 }
 
 TEST_F(RtklibAdapterTest, SatelliteIdMappingCoversFrozenConstellations) {

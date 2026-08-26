@@ -32,6 +32,7 @@ bool load_rinex_nav_file(RtklibNavStore* store, const char* file_path, std::stri
 bool get_rtklib_nav_counts(const RtklibNavStore* store, RtklibNavCounts* counts);
 
 bool rtklib_satellite_id_to_number(const char* satellite_id, int* satellite_number);
+bool rtklib_observation_code(const char* rinex_signal_code, int* observation_code, int* frequency_index);
 bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
                                 RtklibSatelliteState* state, std::string* error_message);
 

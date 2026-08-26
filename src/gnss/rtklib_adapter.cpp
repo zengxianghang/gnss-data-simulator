@@ -2,6 +2,7 @@
 
 extern "C" {
 #include <rtklib.h>
+#include <rtklib_obs_ext.h>
 }
 
 #include <cmath>
@@ -144,6 +145,20 @@ bool rtklib_satellite_id_to_number(const char* satellite_id, int* satellite_numb
         return false;
     }
     *satellite_number = satellite;
+    return true;
+}
+
+bool rtklib_observation_code(const char* rinex_signal_code, int* observation_code, int* frequency_index) {
+    if (rinex_signal_code == nullptr || observation_code == nullptr || frequency_index == nullptr) {
+        return false;
+    }
+    int frequency = 0;
+    const unsigned char code = obs2code_ext(rinex_signal_code, &frequency);
+    if (code == CODE_NONE || frequency <= 0) {
+        return false;
+    }
+    *observation_code = static_cast<int>(code);
+    *frequency_index = frequency;
     return true;
 }
 

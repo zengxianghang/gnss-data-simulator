@@ -28,8 +28,8 @@ std::int64_t positive_mod(std::int64_t value, std::int64_t modulus) {
 }
 
 bool set_fragment(const SimTime& acquisition_time, std::int64_t cycle_ns, std::int64_t slot_start_ns,
-                  std::int64_t duration_ns, std::int64_t phase_offset_ns, int fragment_id,
-                  std::uint32_t mask_bit, NavAcquisitionFragment* fragment) {
+                  std::int64_t duration_ns, std::int64_t phase_offset_ns, int fragment_id, std::uint32_t mask_bit,
+                  NavAcquisitionFragment* fragment) {
     if (fragment == nullptr || cycle_ns <= 0 || slot_start_ns < 0 || slot_start_ns >= cycle_ns || duration_ns <= 0) {
         return false;
     }
@@ -79,8 +79,8 @@ bool add_periodic_fragment(const SimTime& acquisition_time, std::int64_t cycle_s
                            std::int64_t duration_sec, int fragment_id, NavAcquisitionPlan* plan,
                            std::int64_t phase_offset_ns = 0) {
     return add_periodic_fragment_ns(acquisition_time, cycle_sec * NANOSECONDS_PER_SECOND,
-                                    slot_start_sec * NANOSECONDS_PER_SECOND,
-                                    duration_sec * NANOSECONDS_PER_SECOND, phase_offset_ns, fragment_id, plan);
+                                    slot_start_sec * NANOSECONDS_PER_SECOND, duration_sec * NANOSECONDS_PER_SECOND,
+                                    phase_offset_ns, fragment_id, plan);
 }
 
 bool build_lnav_plan(const SimTime& acquisition_time, NavAcquisitionPlan* plan) {
@@ -93,8 +93,7 @@ bool build_cnav_plan(const SimTime& acquisition_time, std::int64_t message_durat
     const std::int64_t cycle_sec = 3 * message_duration_sec;
     return add_periodic_fragment(acquisition_time, cycle_sec, 0, message_duration_sec, 10, plan) &&
            add_periodic_fragment(acquisition_time, cycle_sec, message_duration_sec, message_duration_sec, 11, plan) &&
-           add_periodic_fragment(acquisition_time, cycle_sec, 2 * message_duration_sec, message_duration_sec, 30,
-                                 plan);
+           add_periodic_fragment(acquisition_time, cycle_sec, 2 * message_duration_sec, message_duration_sec, 30, plan);
 }
 
 bool build_cnav2_plan(const SimTime& acquisition_time, NavAcquisitionPlan* plan) {

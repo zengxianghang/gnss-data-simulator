@@ -30,6 +30,23 @@ Navigation output must reflect the simulated Receiver NAV state:
 - CN0 is still generated from the elevation/signal model and is still used by the tracking/acquisition state machine. It does not introduce measurement noise into PSR, Doppler, or ADR in V1.
 - This zero-noise policy is intended to make V1 a deterministic physics/format/state-machine validation baseline and to permit near-zero RTKLIB loopback residuals where the same physical corrections are applied consistently.
 
+## Receiver clock
+
+- **V1 receiver clock bias is fixed to zero.**
+- **V1 receiver clock drift is fixed to zero.**
+- V1 does not implement receiver clock random walk, oscillator noise, drift instability, or power-cycle-dependent clock offsets.
+- The observation equations must still keep receiver clock bias/drift as explicit model terms so a realistic oscillator model can be added later without changing the measurement-model interfaces.
+- Satellite clock bias and satellite clock drift remain active and must come from the selected navigation truth model; this section only disables simulated **receiver** clock error.
+
+Therefore the V1 receiver-side clock contribution is:
+
+```text
+receiver_clock_bias_m   = 0.0
+receiver_clock_drift_mps = 0.0
+```
+
+For REA, the receiver remains powered, but the zero-valued V1 receiver clock state simply remains zero through the signal outage. For TTFF power cycles it is reinitialized to the same zero-valued V1 state.
+
 ## Multipath
 
 - **V1 does not add a multipath error model.**
@@ -114,22 +131,25 @@ WARM extra search-uncertainty delay
   P95 ~= 12-15 s
 ```
 
-All stochastic timing behavior must use the deterministic seeded PRNG and remain configurable. This timing randomness is independent of the V1 zero measurement-noise policy.
+All stochastic timing behavior must use the deterministic seeded PRNG and remain configurable. This timing randomness is independent of the V1 zero measurement-noise and zero receiver-clock-error policies.
 
 ## Summary
 
 ```text
-elevation_mask_deg     = 3.0
-output_eph             = true
-output_ion             = true
-measurement_noise      = false
-psr_noise_m            = 0.0
-doppler_noise          = 0.0
-adr_noise              = 0.0
-multipath_enabled      = false
-duration_sec           = 28800  # 8 h
+elevation_mask_deg       = 3.0
+output_eph               = true
+output_ion               = true
+measurement_noise        = false
+psr_noise_m              = 0.0
+doppler_noise            = 0.0
+adr_noise                = 0.0
+receiver_clock_bias_m    = 0.0
+receiver_clock_drift_mps = 0.0
+receiver_clock_random_walk = false
+multipath_enabled        = false
+duration_sec             = 28800  # 8 h
 
-ttff.default_mode      = HOT
+ttff.default_mode        = HOT
 
 HOT target:
   P50 ~= 2 s

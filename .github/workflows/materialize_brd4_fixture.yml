@@ -1,0 +1,94 @@
+name: materialize-brd4-fixture
+
+on:
+  push:
+    branches:
+      - issue-40-v1-short-acceptance
+    paths:
+      - .github/workflows/materialize_brd4_fixture.yml
+      - tools/download_igs/materialize_brd4_fixture.py
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: issue-40-v1-short-acceptance
+
+      - name: Download BRD400DLR and reduce fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          fixture="tests/data/minimal/brd400dlr_rinex4_acceptance_nav.rnx"
+          metadata="tests/data/minimal/brd400dlr_rinex4_acceptance_nav.meta.json"
+          if [[ -s "$fixture" && -s "$metadata" ]]; then
+            echo "BRD4 fixture already exists; nothing to materialize."
+            exit 0
+          fi
+
+          filename="BRD400DLR_S_20250030000_01D_MN.rnx.gz"
+          urls=(
+            "https://igs.gnsswhu.cn/pub/gps/data/daily/2025/brdc/${filename}"
+            "https://igs.gnsswhu.cn/pub/gps/data/daily/2025/003/25p/${filename}"
+            "ftp://igs.gnsswhu.cn/pub/gps/data/daily/2025/brdc/${filename}"
+            "https://igs.bkg.bund.de/root_ftp/IGS/BRDC/2025/003/${filename}"
+          )
+
+          source_url=""
+          for candidate in "${urls[@]}"; do
+            echo "Trying ${candidate}"
+            if curl --fail --location --retry 2 --connect-timeout 15 --max-time 180 \
+              --output "$filename" "$candidate"; then
+              source_url="$candidate"
+              break
+            fi
+          done
+          if [[ -z "$source_url" ]]; then
+            echo "Unable to download ${filename} from WHU or the official BKG mirror." >&2
+            exit 1
+          fi
+
+          compressed_sha256="$(sha256sum "$filename" | awk '{print $1}')"
+          python3 - "$filename" <<'PY'
+          import gzip
+          import pathlib
+          import sys
+
+          src = pathlib.Path(sys.argv[1])
+          dst = pathlib.Path(src.name[:-3])
+          with gzip.open(src, "rb") as input_file:
+              dst.write_bytes(input_file.read())
+          PY
+
+          python3 tools/download_igs/materialize_brd4_fixture.py \
+            "${filename%.gz}" "$fixture" "$metadata" \
+            --source-url "$source_url" \
+            --compressed-sha256 "$compressed_sha256"
+
+          grep -q '^     4\.' "$fixture"
+          grep -q '^> EPH ' "$fixture"
+          grep -q ' CNAV' "$fixture"
+          grep -q ' CNV1' "$fixture"
+          grep -q ' CNV2' "$fixture"
+          grep -q ' CNV3' "$fixture"
+
+      - name: Commit generated fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add tests/data/minimal/brd400dlr_rinex4_acceptance_nav.rnx \
+                  tests/data/minimal/brd400dlr_rinex4_acceptance_nav.meta.json
+          if git diff --cached --quiet; then
+            echo "No generated changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "test: add real BRD400DLR RINEX4 fixture"
+          git push origin HEAD:issue-40-v1-short-acceptance

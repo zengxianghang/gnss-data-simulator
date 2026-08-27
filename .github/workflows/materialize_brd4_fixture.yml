@@ -27,11 +27,6 @@ jobs:
           set -euo pipefail
           fixture="tests/data/minimal/brd400dlr_rinex4_acceptance_nav.rnx"
           metadata="tests/data/minimal/brd400dlr_rinex4_acceptance_nav.meta.json"
-          if [[ -s "$fixture" && -s "$metadata" ]]; then
-            echo "BRD4 fixture already exists; nothing to materialize."
-            exit 0
-          fi
-
           filename="BRD400DLR_S_20250030000_01D_MN.rnx.gz"
           urls=(
             "https://igs.gnsswhu.cn/pub/gps/data/daily/2025/brdc/${filename}"
@@ -90,5 +85,5 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "test: add real BRD400DLR RINEX4 fixture"
+          git commit -m "test: refresh compact BRD400DLR RINEX4 fixture"
           git push origin HEAD:issue-40-v1-short-acceptance

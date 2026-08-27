@@ -12,8 +12,9 @@
 namespace {
 
 void print_usage(const char* program) {
-    std::cerr << "Usage:\n  " << program
-              << " --config <config.json> --nav <input.rnx> --output <simulated.log> --week <gps-week> --sow <seconds>\n";
+    std::cerr
+        << "Usage:\n  " << program
+        << " --config <config.json> --nav <input.rnx> --output <simulated.log> --week <gps-week> --sow <seconds>\n";
 }
 
 bool parse_int(const char* text, int* value) {

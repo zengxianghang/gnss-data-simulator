@@ -16,6 +16,7 @@
 #include "output/novatel_nav_writer.h"
 #include "output/novatel_range_writer.h"
 #include "output/novatel_solution_writer.h"
+#include "output/truth_writer.h"
 #include "scenario/scenario_engine.h"
 #include "solution/solution_engine.h"
 
@@ -28,6 +29,9 @@
 
 #ifndef GNSS_SIM_RTKLIB_COMMIT
 #define GNSS_SIM_RTKLIB_COMMIT "unknown"
+#endif
+#ifndef GNSS_SIM_SOURCE_COMMIT
+#define GNSS_SIM_SOURCE_COMMIT "unknown"
 #endif
 
 namespace gnss_sim {
@@ -639,7 +643,7 @@ bool process_receiver_nav(RuntimeState* runtime, const SimConfig& config, const 
 bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& config,
                                       const ScenarioEpochState& scenario,
                                       std::vector<MeasurementObservation>* measurements, int* tracked_satellites,
-                                      std::string* error_message) {
+                                      TruthWriter* truth_writer, std::string* error_message) {
     measurements->clear();
     *tracked_satellites = 0;
     const RtklibNavStore* truth_nav = truth_navigation_store(runtime->navigation);
@@ -688,7 +692,9 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
             }
             MeasurementObservation observation{};
             if (!generate_zero_noise_measurement(truth_nav, geometry, signal.tracker, atmosphere, &signal.ambiguity,
-                                                 &observation, error_message)) {
+                                                 &observation, error_message) ||
+                !truth_writer_write_observation(truth_writer, runtime->receiver, geometry, signal.tracker, observation,
+                                                error_message)) {
                 return false;
             }
             measurements->push_back(observation);
@@ -775,9 +781,18 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         return false;
     }
 
+    TruthWriter* truth_writer =
+        create_truth_writer(options.output_log_path, options.rinex_nav_path, config, options.start_time, error_message);
+    if (truth_writer == nullptr) {
+        output.close();
+        destroy_navigation_state(runtime.navigation);
+        return false;
+    }
+
     std::uint64_t epoch_count = 0;
     if (!epoch_count_for_duration(config.duration_ns, config.sampling_rate_hz, &epoch_count)) {
         set_error(error_message, "cannot compute simulator epoch count");
+        destroy_truth_writer(truth_writer);
         destroy_navigation_state(runtime.navigation);
         return false;
     }
@@ -796,7 +811,8 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
             break;
         }
         ScenarioEpochState scenario{};
-        if (!update_scenario_engine(&scenario_engine, current_time, &scenario, error_message)) {
+        if (!update_scenario_engine(&scenario_engine, current_time, &scenario, error_message) ||
+            !truth_writer_write_scenario_events(truth_writer, scenario, scenario_startup_mode(config), error_message)) {
             ok = false;
             break;
         }
@@ -833,7 +849,7 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
 
         int tracked_satellites = 0;
         if (!update_tracking_and_measurements(&runtime, config, scenario, &measurements, &tracked_satellites,
-                                              error_message) ||
+                                              truth_writer, error_message) ||
             !process_receiver_nav(&runtime, config, current_time, &output, &result, error_message)) {
             ok = false;
             break;
@@ -847,6 +863,7 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         if (!solve_receiver_epoch(receiver_navigation_store(runtime.navigation), current_time, data,
                                   static_cast<int>(measurements.size()), config.elevation_mask_deg,
                                   config.atmosphere_mode, &runtime.solution_state, &solution, error_message) ||
+            !truth_writer_write_solution(truth_writer, solution, tracked_satellites, error_message) ||
             !emit_epoch_logs(config, scenario, measurements, tracked_satellites, solution, &output, &result,
                              error_message)) {
             ok = false;
@@ -866,6 +883,11 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         ok = false;
     }
     output.close();
+    if (ok && !finalize_truth_writer(truth_writer, result, simulator_version(), simulator_commit_sha(),
+                                     rtklib_commit_sha(), error_message)) {
+        ok = false;
+    }
+    destroy_truth_writer(truth_writer);
     destroy_navigation_state(runtime.navigation);
     if (!ok) {
         return false;
@@ -876,6 +898,10 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
 
 const char* simulator_version() {
     return "0.1.0-dev";
+}
+
+const char* simulator_commit_sha() {
+    return GNSS_SIM_SOURCE_COMMIT;
 }
 
 const char* rtklib_commit_sha() {

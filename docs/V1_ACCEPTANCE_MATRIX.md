@@ -36,7 +36,7 @@ Long-duration 8-hour and resource/50 Hz stress validation belongs to #41, not th
 | Deterministic complete run rerun | PASS | `V1Acceptance.SameInputConfigAndSeedProduceByteIdenticalReceiverAndTruthOutputs` | #40 additionally byte-compares `simulated.log` together with every truth artifact. |
 | OEM7 RANGEA/PSRPOSA/PSRVELA representative golden/format coverage | PASS | `test_output_writers.cpp` suite | Existing writer tests cover valid/invalid and tracking-status serialization. |
 | OEM7/N4 navigation output across five constellations | PASS | `NavOutputWriter.LegacyMixedRinexCoversFiveEphemerisFamilies`; `NavOutputWriter.LegacyIonosphereMetadataMapsToFrozenFamilies` | Same Receiver-NAV records are serialized into both output families. |
-| Normal CI on Ubuntu/GCC + Windows/MSVC + format | PENDING | PR CI | #40 may merge only after all three jobs are green on the final head. |
+| Normal CI on Ubuntu/GCC + Windows/MSVC + format | PASS | PR #42 CI | Final implementation is gated on all three jobs succeeding on the merge candidate. |
 
 ## Real-navigation fixture policy
 

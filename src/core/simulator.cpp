@@ -650,6 +650,13 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
     const AcquisitionContext initial_context = startup_context(runtime->startup_mode);
 
     for (SatelliteRuntime& satellite : runtime->satellites) {
+        const double receive_sow_sec =
+            static_cast<double>(scenario.time.tow_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
+        if (!rtklib_satellite_state_available(truth_nav, scenario.time.gps_week, receive_sow_sec,
+                                              satellite.satellite_number)) {
+            continue;
+        }
+
         SatelliteGeometry geometry{};
         if (!compute_satellite_geometry(truth_nav, runtime->receiver, scenario.time, satellite.satellite_number,
                                         config.elevation_mask_deg, &geometry, error_message)) {

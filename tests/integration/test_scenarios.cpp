@@ -145,6 +145,23 @@ TEST(StreamingSimulator, ColdTtffAcquiresEphemerisBeforeSolutionBecomesValid) {
     std::remove(test_output_path("ttff_cold").c_str());
 }
 
+TEST(StreamingSimulator, FutureOnlyEphemerisDoesNotAbortEarlierEpochs) {
+    gnss_sim::SimConfig config = base_config(gnss_sim::ScenarioType::KS);
+    config.sampling_rate_hz = 1;
+    config.duration_ns = 4LL * gnss_sim::NANOSECONDS_PER_SECOND;
+    const std::string output_path = test_output_path("future_sat");
+    std::remove(output_path.c_str());
+    const std::string input_path = std::string(GNSS_SIM_TEST_DATA_DIR) + "/gps_loopback_nav_future_sat.rnx";
+    const gnss_sim::SimulatorRunOptions options{input_path.c_str(), output_path.c_str(), start_time()};
+    gnss_sim::SimulatorRunSummary summary{};
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::run_simulator(config, options, &summary, &error_message)) << error_message;
+    EXPECT_EQ(summary.scheduled_epochs, 4U);
+    EXPECT_EQ(summary.range_messages, 4U);
+    EXPECT_GT(summary.valid_position_epochs, 0U);
+    std::remove(output_path.c_str());
+}
+
 TEST(StreamingSimulator, OneSecondDurationHasExactEpochCountAtEveryFrozenRate) {
     for (const int rate : {1, 5, 10, 20, 50}) {
         std::uint64_t count = 0;

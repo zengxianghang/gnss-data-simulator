@@ -1,3 +1,4 @@
+#include "gnss/signal_definitions.h"
 #include "gnss_sim/sim_config.h"
 #include "gnss_sim/sim_time.h"
 #include "gnss_sim/simulator.h"
@@ -6,7 +7,10 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <set>
+#include <sstream>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -97,6 +101,86 @@ void expect_five_system_observations(const std::filesystem::path& truth_path) {
     EXPECT_NE(observations.find(",QZSS,"), std::string::npos);
 }
 
+unsigned int range_constellation_bits(gnss_sim::GnssConstellation constellation) {
+    switch (constellation) {
+        case gnss_sim::GnssConstellation::kGps:
+            return 0U;
+        case gnss_sim::GnssConstellation::kGlonass:
+            return 1U;
+        case gnss_sim::GnssConstellation::kGalileo:
+            return 3U;
+        case gnss_sim::GnssConstellation::kBeidou:
+            return 4U;
+        case gnss_sim::GnssConstellation::kQzss:
+            return 5U;
+    }
+    return 7U;
+}
+
+unsigned int range_signal_key(const gnss_sim::SignalDefinition& definition) {
+    return (range_constellation_bits(definition.constellation) << 5U) |
+           (static_cast<unsigned int>(definition.novatel_oem7_signal_type) & 0x1FU);
+}
+
+std::set<unsigned int> emitted_range_signal_keys(const std::string& log_text) {
+    std::set<unsigned int> keys;
+    std::istringstream lines(log_text);
+    std::string line;
+    while (std::getline(lines, line)) {
+        if (line.rfind("#RANGEA", 0) != 0) {
+            continue;
+        }
+        const std::size_t semicolon = line.find(';');
+        if (semicolon == std::string::npos) {
+            continue;
+        }
+        std::string body = line.substr(semicolon + 1);
+        const std::size_t crc_separator = body.find('*');
+        if (crc_separator != std::string::npos) {
+            body.resize(crc_separator);
+        }
+
+        std::vector<std::string> fields;
+        std::istringstream body_stream(body);
+        std::string field;
+        while (std::getline(body_stream, field, ',')) {
+            fields.push_back(field);
+        }
+        if (fields.empty()) {
+            continue;
+        }
+
+        const int observation_count = std::stoi(fields[0]);
+        constexpr std::size_t kFieldsPerObservation = 10;
+        const std::size_t expected_fields = 1U + static_cast<std::size_t>(observation_count) * kFieldsPerObservation;
+        EXPECT_EQ(fields.size(), expected_fields) << "malformed RANGEA body: " << body;
+        if (fields.size() < expected_fields) {
+            continue;
+        }
+        for (int index = 0; index < observation_count; ++index) {
+            const std::size_t status_index = 1U + static_cast<std::size_t>(index) * kFieldsPerObservation + 9U;
+            const unsigned long status = std::stoul(fields[status_index], nullptr, 16);
+            const unsigned int constellation = static_cast<unsigned int>((status >> 16U) & 0x7UL);
+            const unsigned int signal_type = static_cast<unsigned int>((status >> 21U) & 0x1FUL);
+            keys.insert((constellation << 5U) | signal_type);
+        }
+    }
+    return keys;
+}
+
+void expect_every_frozen_signal_in_range_output(const std::filesystem::path& log_path) {
+    const std::set<unsigned int> emitted = emitted_range_signal_keys(read_file(log_path));
+    std::size_t definition_count = 0;
+    const gnss_sim::SignalDefinition* definitions = gnss_sim::signal_definitions(&definition_count);
+    ASSERT_NE(definitions, nullptr);
+    ASSERT_EQ(definition_count, 21U);
+    for (std::size_t index = 0; index < definition_count; ++index) {
+        const gnss_sim::SignalDefinition& definition = definitions[index];
+        EXPECT_EQ(emitted.count(range_signal_key(definition)), 1U)
+            << "missing signal=" << definition.name << " from simulator->measurement->RANGEA path at GPST 2347/436500";
+    }
+}
+
 void cleanup(const std::filesystem::path& path) {
     std::error_code error;
     std::filesystem::remove_all(path, error);
@@ -172,6 +256,7 @@ TEST(V1Acceptance, RealBrd400DlrRinex4RunsFiveSystemReceiverNavLoopback) {
         << error_message;
 
     expect_five_system_observations(directory / "observation_truth.csv");
+    expect_every_frozen_signal_in_range_output(directory / "simulated.log");
     EXPECT_GT(summary.max_observations_per_epoch, 0);
     EXPECT_GT(summary.valid_position_epochs, 0U);
     EXPECT_GT(summary.valid_velocity_epochs, 0U);

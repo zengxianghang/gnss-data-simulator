@@ -18,23 +18,25 @@ void set_error(std::string* error_message, const char* message) {
 
 bool consistent_position(const PositionSolution& position) {
     if (position.valid) {
-        return position.status == ReceiverSolutionStatus::kSolComputed && position.type == ReceiverSolutionType::kSingle &&
-               std::isfinite(position.latitude_deg) && std::isfinite(position.longitude_deg) &&
-               std::isfinite(position.height_m) && std::isfinite(position.latitude_std_m) &&
-               std::isfinite(position.longitude_std_m) && std::isfinite(position.height_std_m) &&
-               position.latitude_std_m >= 0.0 && position.longitude_std_m >= 0.0 && position.height_std_m >= 0.0 &&
-               position.used_satellites >= 0 && position.used_satellites <= 255;
+        return position.status == ReceiverSolutionStatus::kSolComputed &&
+               position.type == ReceiverSolutionType::kSingle && std::isfinite(position.latitude_deg) &&
+               std::isfinite(position.longitude_deg) && std::isfinite(position.height_m) &&
+               std::isfinite(position.latitude_std_m) && std::isfinite(position.longitude_std_m) &&
+               std::isfinite(position.height_std_m) && position.latitude_std_m >= 0.0 &&
+               position.longitude_std_m >= 0.0 && position.height_std_m >= 0.0 && position.used_satellites >= 0 &&
+               position.used_satellites <= 255;
     }
     return position.status == ReceiverSolutionStatus::kInsufficientObs && position.type == ReceiverSolutionType::kNone;
 }
 
 bool consistent_velocity(const VelocitySolution& velocity) {
     if (velocity.valid) {
-        return velocity.status == ReceiverSolutionStatus::kSolComputed && velocity.type == ReceiverSolutionType::kSingle &&
-               std::isfinite(velocity.horizontal_speed_mps) && velocity.horizontal_speed_mps >= 0.0 &&
-               std::isfinite(velocity.track_over_ground_deg) && velocity.track_over_ground_deg >= 0.0 &&
-               velocity.track_over_ground_deg < 360.0 && std::isfinite(velocity.vertical_speed_mps) &&
-               velocity.used_satellites >= 0 && velocity.used_satellites <= 255;
+        return velocity.status == ReceiverSolutionStatus::kSolComputed &&
+               velocity.type == ReceiverSolutionType::kSingle && std::isfinite(velocity.horizontal_speed_mps) &&
+               velocity.horizontal_speed_mps >= 0.0 && std::isfinite(velocity.track_over_ground_deg) &&
+               velocity.track_over_ground_deg >= 0.0 && velocity.track_over_ground_deg < 360.0 &&
+               std::isfinite(velocity.vertical_speed_mps) && velocity.used_satellites >= 0 &&
+               velocity.used_satellites <= 255;
     }
     return velocity.status == ReceiverSolutionStatus::kInsufficientObs && velocity.type == ReceiverSolutionType::kNone;
 }
@@ -86,8 +88,8 @@ bool format_novatel_psrvela(const SolutionEpoch& solution, std::string* message,
     std::ostringstream body;
     body.imbue(std::locale::classic());
     body << receiver_solution_status_name(velocity.status) << ',' << receiver_solution_type_name(velocity.type)
-         << ",0.000,0.000," << std::fixed << std::setprecision(4) << horizontal_speed_mps << ','
-         << std::setprecision(6) << track_over_ground_deg << ',' << std::setprecision(4) << vertical_speed_mps << ",0";
+         << ",0.000,0.000," << std::fixed << std::setprecision(4) << horizontal_speed_mps << ',' << std::setprecision(6)
+         << track_over_ground_deg << ',' << std::setprecision(4) << vertical_speed_mps << ",0";
 
     if (!novatel_ascii::frame("PSRVELA", solution.time, body.str(), message)) {
         set_error(error_message, "PSRVELA header time cannot be represented");

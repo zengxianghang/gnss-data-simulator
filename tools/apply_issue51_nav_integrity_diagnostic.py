@@ -10,7 +10,7 @@ new = '''    nav_t nav{};
 
     nav_t original_nav{};
     ASSERT_TRUE(load_nav(brd4_nav_path(), &original_nav));
-    const gtime_t debug_epoch = gpst2time(start.gps_week, static_cast<double>(start.nanoseconds_of_week) / 1.0e9);
+    const gtime_t debug_epoch = gpst2time(start.gps_week, static_cast<double>(start.tow_ns) / 1.0e9);
     const auto dump_nav_integrity = [&](const char* label, const nav_t& debug_nav) {
         int gps23_count = 0;
         int gps23_lnav = 0;

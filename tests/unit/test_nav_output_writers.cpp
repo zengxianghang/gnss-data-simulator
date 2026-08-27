@@ -7,9 +7,9 @@
 #include "output/novatel_nav_writer.h"
 #include "output/unicore_nav_writer.h"
 
-#include <gtest/gtest.h>
-
 #include <cstdint>
+#include <cstdlib>
+#include <gtest/gtest.h>
 #include <set>
 #include <string>
 #include <vector>
@@ -39,7 +39,7 @@ bool valid_ascii_crc(const std::string& message) {
         return false;
     }
     const std::size_t star = message.rfind('*');
-    if (star == std::string::npos || star + 10 != message.size()) {
+    if (star == std::string::npos || star + 11 != message.size()) {
         return false;
     }
     const std::string payload = message.substr(1, star - 1);
@@ -59,15 +59,17 @@ void collect_supported_names(const gnss_sim::RtklibNavStore* store, bool unicore
         std::string second;
         bool first_supported = false;
         bool second_supported = false;
-        const bool first_ok = unicore ? gnss_sim::format_unicore_receiver_nav_record(
-                                           store, index, output_time(), &first, &first_supported, &error_message)
-                                     : gnss_sim::format_novatel_receiver_nav_record(
-                                           store, index, output_time(), &first, &first_supported, &error_message);
+        const bool first_ok = unicore
+                                  ? gnss_sim::format_unicore_receiver_nav_record(store, index, output_time(), &first,
+                                                                                 &first_supported, &error_message)
+                                  : gnss_sim::format_novatel_receiver_nav_record(store, index, output_time(), &first,
+                                                                                 &first_supported, &error_message);
         ASSERT_TRUE(first_ok) << error_message;
-        const bool second_ok = unicore ? gnss_sim::format_unicore_receiver_nav_record(
-                                            store, index, output_time(), &second, &second_supported, &error_message)
-                                      : gnss_sim::format_novatel_receiver_nav_record(
-                                            store, index, output_time(), &second, &second_supported, &error_message);
+        const bool second_ok = unicore
+                                   ? gnss_sim::format_unicore_receiver_nav_record(store, index, output_time(), &second,
+                                                                                  &second_supported, &error_message)
+                                   : gnss_sim::format_novatel_receiver_nav_record(store, index, output_time(), &second,
+                                                                                  &second_supported, &error_message);
         ASSERT_TRUE(second_ok) << error_message;
         EXPECT_EQ(first_supported, second_supported);
         EXPECT_EQ(first, second);
@@ -79,7 +81,7 @@ void collect_supported_names(const gnss_sim::RtklibNavStore* store, bool unicore
 }
 
 gnss_sim::NavOutputRecord synthetic_ephemeris(gnss_sim::NavOutputSystem system,
-                                                gnss_sim::RtklibBroadcastMessageFamily family) {
+                                               gnss_sim::RtklibBroadcastMessageFamily family) {
     gnss_sim::NavOutputRecord record{};
     record.kind = gnss_sim::RtklibNavRecordKind::kEphemeris;
     record.ephemeris.system = system;
@@ -185,8 +187,8 @@ TEST(NavOutputWriter, ColdUsesReceiverAvailabilityAndSuppressesDuplicateDelivery
     std::string message;
     bool supported = false;
     ASSERT_TRUE(gnss_sim::format_novatel_receiver_nav_record(gnss_sim::receiver_navigation_store(state),
-                                                             event.receiver_record_index, available, &message, &supported,
-                                                             &error_message))
+                                                             event.receiver_record_index, available, &message,
+                                                             &supported, &error_message))
         << error_message;
     EXPECT_TRUE(supported);
     EXPECT_EQ(log_name(message), "GPSEPHEMA");
@@ -218,7 +220,7 @@ TEST(NavOutputWriter, HotAndWarmRestoreTheSameDeterministicReceiverNavBytes) {
             std::string message;
             bool supported = false;
             ASSERT_TRUE(gnss_sim::format_unicore_receiver_nav_record(receiver, index, startup, &message, &supported,
-                                                                      &error_message))
+                                                                     &error_message))
                 << error_message;
             if (supported) {
                 current.push_back(message);
@@ -239,8 +241,8 @@ TEST(NavOutputWriter, SyntheticModernBdsAndNavicStayWithinFrozenOutputScope) {
     std::string error_message;
     bool supported = false;
 
-    gnss_sim::NavOutputRecord bds = synthetic_ephemeris(gnss_sim::NavOutputSystem::kBeidou,
-                                                         gnss_sim::RtklibBroadcastMessageFamily::kBeidouBcnav1);
+    gnss_sim::NavOutputRecord bds =
+        synthetic_ephemeris(gnss_sim::NavOutputSystem::kBeidou, gnss_sim::RtklibBroadcastMessageFamily::kBeidouBcnav1);
     ASSERT_TRUE(gnss_sim::format_unicore_nav_output_record(bds, output_time(), &message, &supported, &error_message))
         << error_message;
     EXPECT_TRUE(supported);
@@ -251,8 +253,8 @@ TEST(NavOutputWriter, SyntheticModernBdsAndNavicStayWithinFrozenOutputScope) {
     EXPECT_FALSE(supported);
     EXPECT_TRUE(message.empty());
 
-    gnss_sim::NavOutputRecord navic = synthetic_ephemeris(gnss_sim::NavOutputSystem::kNavic,
-                                                           gnss_sim::RtklibBroadcastMessageFamily::kLegacy);
+    gnss_sim::NavOutputRecord navic =
+        synthetic_ephemeris(gnss_sim::NavOutputSystem::kNavic, gnss_sim::RtklibBroadcastMessageFamily::kLegacy);
     ASSERT_TRUE(gnss_sim::format_unicore_nav_output_record(navic, output_time(), &message, &supported, &error_message))
         << error_message;
     EXPECT_TRUE(supported);
@@ -277,11 +279,10 @@ TEST(NavOutputWriter, Bd3IonHasByteLevelGoldenRecord) {
     ASSERT_TRUE(gnss_sim::format_unicore_nav_output_record(record, output_time(), &message, &supported, &error_message))
         << error_message;
     ASSERT_TRUE(supported);
-    EXPECT_EQ(message,
-              "#BD3IONA,0,GPS,FINE,2041,180000000,0,0,18,0;"
-              "0.000000000000000e+00,0.000000000000000e+00,0.000000000000000e+00,"
-              "0.000000000000000e+00,0.000000000000000e+00,0.000000000000000e+00,"
-              "0.000000000000000e+00,0.000000000000000e+00,0.000000000000000e+00,0*bdf5809e\r\n");
+    EXPECT_EQ(message, "#BD3IONA,0,GPS,FINE,2041,180000000,0,0,18,0;"
+                       "0.000000000000000e+00,0.000000000000000e+00,0.000000000000000e+00,"
+                       "0.000000000000000e+00,0.000000000000000e+00,0.000000000000000e+00,"
+                       "0.000000000000000e+00,0.000000000000000e+00,0.000000000000000e+00,0*bdf5809e\r\n");
 }
 
 TEST(NavOutputWriter, GalileoHealthBitsAreDecodedBeforeSerialization) {

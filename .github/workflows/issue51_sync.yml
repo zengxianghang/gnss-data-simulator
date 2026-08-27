@@ -1,0 +1,113 @@
+name: issue51-sync
+
+on:
+  push:
+    branches: [issue-51-all-signal-residuals]
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-51-all-signal-residuals
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Sync reviewed RTKLIB candidate and integration fixes
+        run: |
+          set -euxo pipefail
+          git -C third_party/RTKLIB fetch origin issue-6-all-signal-residuals-bds-tgd
+          git -C third_party/RTKLIB checkout 7c37e902a5d7e812ddc043199b48a6d7ffe99195
+          git add third_party/RTKLIB
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          sha='7c37e902a5d7e812ddc043199b48a6d7ffe99195'
+          p=Path('CMakeLists.txt'); s=p.read_text()
+          s,n=re.subn(r'set\(GNSS_SIM_RTKLIB_COMMIT "[0-9a-f]{40}"',f'set(GNSS_SIM_RTKLIB_COMMIT "{sha}"',s,count=1)
+          if n!=1: raise SystemExit('CMake pin not found')
+          p.write_text(s)
+
+          p=Path('src/gnss/rtklib_adapter.h'); s=p.read_text()
+          old='''bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,\n                                RtklibBroadcastBiasData* data, std::string* error_message);'''
+          new='''bool rtklib_broadcast_bias_data_for_family(const RtklibNavStore* store, int gps_week, double sow_sec,\n                                           int satellite_number,\n                                           RtklibBroadcastMessageFamily requested_message_family,\n                                           RtklibBroadcastBiasData* data, std::string* error_message);\nbool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,\n                                RtklibBroadcastBiasData* data, std::string* error_message);'''
+          if 'rtklib_broadcast_bias_data_for_family' not in s:
+              if old not in s: raise SystemExit('adapter header anchor not found')
+              s=s.replace(old,new,1)
+          p.write_text(s)
+
+          p=Path('src/gnss/rtklib_bias_adapter.cpp'); s=p.read_text()
+          helper='''\nconst eph_t* select_ephemeris_for_family(const nav_t& nav, gtime_t time, int satellite_number,\n                                         RtklibBroadcastMessageFamily requested_family) {\n    if (requested_family == RtklibBroadcastMessageFamily::kUnknown) {\n        return select_ephemeris(nav, time, satellite_number);\n    }\n    const int system = satsys(satellite_number, nullptr);\n    const double maximum_age_sec = maximum_ephemeris_age_sec(system);\n    const eph_t* selected = nullptr;\n    double selected_age_sec = maximum_age_sec + 1.0;\n    for (int index = 0; index < nav.n; ++index) {\n        const eph_t& eph = nav.eph[index];\n        if (eph.sat != satellite_number || message_family(eph, system) != requested_family) continue;\n        const double age_sec = std::fabs(timediff(eph.toe, time));\n        if (age_sec > maximum_age_sec) continue;\n        if (selected == nullptr || age_sec < selected_age_sec ||\n            (std::fabs(age_sec - selected_age_sec) < 1.0e-9 && timediff(eph.toc, selected->toc) > 0.0)) {\n            selected = &eph;\n            selected_age_sec = age_sec;\n        }\n    }\n    return selected;\n}\n'''
+          if 'select_ephemeris_for_family' not in s:
+              anchor='    return RtklibBroadcastMessageFamily::kUnknown;\n}\n\n} // namespace\n'
+              if anchor not in s: raise SystemExit('bias helper anchor not found')
+              s=s.replace(anchor,'    return RtklibBroadcastMessageFamily::kUnknown;\n}\n'+helper+'\n} // namespace\n',1)
+          oldsig='''bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,\n                                RtklibBroadcastBiasData* data, std::string* error_message) {'''
+          newsig='''bool rtklib_broadcast_bias_data_for_family(const RtklibNavStore* store, int gps_week, double sow_sec,\n                                           int satellite_number,\n                                           RtklibBroadcastMessageFamily requested_message_family,\n                                           RtklibBroadcastBiasData* data, std::string* error_message) {'''
+          if oldsig in s: s=s.replace(oldsig,newsig,1)
+          s=s.replace('const eph_t* eph = select_ephemeris(store->nav, time, satellite_number);','const eph_t* eph = select_ephemeris_for_family(store->nav, time, satellite_number, requested_message_family);',1)
+          wrapper='''\nbool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,\n                                RtklibBroadcastBiasData* data, std::string* error_message) {\n    return rtklib_broadcast_bias_data_for_family(store, gps_week, sow_sec, satellite_number,\n                                                 RtklibBroadcastMessageFamily::kUnknown, data, error_message);\n}\n'''
+          if s.count('bool rtklib_broadcast_bias_data(')==0:
+              s=s.replace('\n} // namespace gnss_sim\n',wrapper+'\n} // namespace gnss_sim\n',1)
+          p.write_text(s)
+
+          p=Path('src/model/measurement_model.cpp'); s=p.read_text()
+          family='''\nRtklibBroadcastMessageFamily requested_bias_family(NavMessageFamily family) {\n    switch (family) {\n        case NavMessageFamily::kGpsLnav:\n        case NavMessageFamily::kQzssLnav:\n        case NavMessageFamily::kBeidouD1D2: return RtklibBroadcastMessageFamily::kLegacy;\n        case NavMessageFamily::kGpsCnav:\n        case NavMessageFamily::kQzssCnav: return RtklibBroadcastMessageFamily::kCnav;\n        case NavMessageFamily::kGpsCnav2:\n        case NavMessageFamily::kQzssCnav2: return RtklibBroadcastMessageFamily::kCnav2;\n        case NavMessageFamily::kGlonassFdma: return RtklibBroadcastMessageFamily::kGlonassFdma;\n        case NavMessageFamily::kGalileoInav: return RtklibBroadcastMessageFamily::kGalileoInav;\n        case NavMessageFamily::kGalileoFnav: return RtklibBroadcastMessageFamily::kGalileoFnav;\n        case NavMessageFamily::kBeidouBcnav1: return RtklibBroadcastMessageFamily::kBeidouBcnav1;\n        case NavMessageFamily::kBeidouBcnav2: return RtklibBroadcastMessageFamily::kBeidouBcnav2;\n        case NavMessageFamily::kBeidouBcnav3: return RtklibBroadcastMessageFamily::kBeidouBcnav3;\n        case NavMessageFamily::kGlonassL3Oc:\n        case NavMessageFamily::kGalileoCnav: return RtklibBroadcastMessageFamily::kUnknown;\n    }\n    return RtklibBroadcastMessageFamily::kUnknown;\n}\n'''
+          if 'requested_bias_family(' not in s:
+              anchor='''bool family_is_beidou_modern(RtklibBroadcastMessageFamily family) {\n    return family == RtklibBroadcastMessageFamily::kBeidouBcnav1 ||\n           family == RtklibBroadcastMessageFamily::kBeidouBcnav2 ||\n           family == RtklibBroadcastMessageFamily::kBeidouBcnav3;\n}\n'''
+              if anchor not in s: raise SystemExit('measurement helper anchor not found')
+              s=s.replace(anchor,anchor+family,1)
+          old='''    if (!rtklib_broadcast_bias_data(nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec,\n                                    geometry.satellite_number, &bias_data, error_message)) {'''
+          new='''    if (!rtklib_broadcast_bias_data_for_family(\n            nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec, geometry.satellite_number,\n            requested_bias_family(signal->nav_message_family), &bias_data, error_message)) {'''
+          if old in s: s=s.replace(old,new,1)
+          p.write_text(s)
+
+          p=Path('src/gnss/rtklib_solution_adapter.cpp'); s=p.read_text()
+          if '#include <rtklib_signal_bias_ext.h>' not in s:
+              s=s.replace('#include <rtklib_pntvel_ext.h>\n','#include <rtklib_pntvel_ext.h>\n#include <rtklib_signal_bias_ext.h>\n',1)
+          pattern=re.compile(r'bool solver_pseudorange_m\(const nav_t& nav, const RtklibSolutionObservation& observation, double\* pseudorange_m\) \{.*?\n\}\n\nvoid fill_common_observation',re.S)
+          repl='''bool solver_pseudorange_m(const nav_t& nav, gtime_t time, const RtklibSolutionObservation& observation,\n                          double* pseudorange_m) {\n    if (pseudorange_m == nullptr || !std::isfinite(observation.pseudorange_m) || observation.pseudorange_m <= 0.0 ||\n        !std::isfinite(observation.code_bias_m) || observation.satellite_number <= 0 ||\n        observation.satellite_number > MAXSAT) return false;\n\n    const int satellite_index = observation.satellite_number - 1;\n    const bool external_dcb = nav.cbias[satellite_index][0] != 0.0 ||\n                              (observation.observation_code == CODE_L1C && nav.cbias[satellite_index][1] != 0.0);\n    if (external_dcb) {\n        double legacy_adjustment_m = 0.0;\n        if (!legacy_prange_adjustment_m(nav, observation.satellite_number, observation.observation_code,\n                                        &legacy_adjustment_m)) return false;\n        *pseudorange_m = observation.pseudorange_m - observation.code_bias_m - legacy_adjustment_m;\n    } else {\n        double rtklib_code_bias_m = 0.0;\n        const int status = rtklib_signal_code_bias_ext(time, observation.satellite_number,\n                                                       static_cast<unsigned char>(observation.observation_code), 0,\n                                                       &nav, &rtklib_code_bias_m, nullptr);\n        if (status <= 0) return false;\n        *pseudorange_m = observation.pseudorange_m - observation.code_bias_m + rtklib_code_bias_m;\n    }\n    return std::isfinite(*pseudorange_m) && *pseudorange_m > 0.0;\n}\n\nvoid fill_common_observation'''
+          s,n=pattern.subn(repl,s,count=1)
+          if n!=1 and 'bool solver_pseudorange_m(const nav_t& nav, gtime_t time' not in s: raise SystemExit('solver anchor not found')
+          s=s.replace('solver_pseudorange_m(receiver_nav->nav, source, &pseudorange_m)','solver_pseudorange_m(receiver_nav->nav, epoch_time, source, &pseudorange_m)',1)
+          p.write_text(s)
+
+          p=Path('tests/integration/test_truth_outputs.cpp'); s=p.read_text()
+          s=s.replace('EXPECT_NE(manifest.find("\\\"rtklib_commit_sha\\\": \\\"dc596ba725ccaa5ab5963d7e7ec85b52ae743969\\\""), std::string::npos);','EXPECT_NE(manifest.find(std::string("\\\"rtklib_commit_sha\\\": \\\"") + GNSS_SIM_RTKLIB_COMMIT + "\\\""), std::string::npos);')
+          p.write_text(s)
+
+          p=Path('tests/integration/test_all_signal_residuals.cpp'); s=p.read_text()
+          if 'required_rtklib_message_type' not in s:
+              anchor='''void free_nav(nav_t* nav) {\n    if (nav != nullptr) {\n        freenav(nav, 0xFF);\n    }\n}\n\n'''
+              helper='''int required_rtklib_message_type(const gnss_sim::SignalDefinition& definition, const std::string& family) {\n    if (family == "LEGACY") {\n        if (definition.constellation == gnss_sim::GnssConstellation::kGps ||\n            definition.constellation == gnss_sim::GnssConstellation::kQzss) return NAV_LNAV;\n        if (definition.constellation == gnss_sim::GnssConstellation::kBeidou) return NAV_D1 | NAV_D2 | NAV_D1D2;\n    }\n    if (family == "CNAV") return NAV_CNAV;\n    if (family == "CNAV2") return NAV_CNV2;\n    if (family == "GALILEO_INAV") return NAV_INAV;\n    if (family == "GALILEO_FNAV") return NAV_FNAV;\n    if (family == "BEIDOU_BCNAV1") return NAV_CNV1;\n    if (family == "BEIDOU_BCNAV2") return NAV_CNV2;\n    if (family == "BEIDOU_BCNAV3") return NAV_CNV3;\n    if (family == "GLONASS_FDMA") return NAV_FDMA;\n    return 0;\n}\n\n'''
+              if anchor not in s: raise SystemExit('test helper anchor not found')
+              s=s.replace(anchor,anchor+helper,1)
+          if '"broadcast_message_family"' not in s:
+              s=s.replace('"pseudorange_valid", "doppler_valid", "pseudorange_m", "doppler_hz"','"broadcast_message_family", "pseudorange_valid", "doppler_valid", "pseudorange_m", "doppler_hz"',1)
+          if 'const int required_message_type = required_rtklib_message_type' not in s:
+              anchor='        rtklib_signal_bias_info_ext_t bias_info{};\n'
+              setup='''        const std::string message_family = fields[column.at("broadcast_message_family")];\n        const int required_message_type = required_rtklib_message_type(*definition, message_family);\n\n'''
+              if anchor not in s: raise SystemExit('test bias anchor not found')
+              s=s.replace(anchor,setup+anchor,1)
+          s=s.replace('receiver_position_m, 0.0, 0.0, wavelength_m, &code_residual_m,','receiver_position_m, 0.0, 0.0, required_message_type, wavelength_m, &code_residual_m,',1)
+          s=s.replace('std::max(signal_stats.max_abs_code_m, std::fabs(code_residual_m))','(std::max)(signal_stats.max_abs_code_m, std::fabs(code_residual_m))')
+          s=s.replace('std::max(signal_stats.max_abs_doppler_mps, std::fabs(doppler_residual_mps))','(std::max)(signal_stats.max_abs_doppler_mps, std::fabs(doppler_residual_mps))')
+          p.write_text(s)
+          PY
+
+          clang-format -i src/gnss/rtklib_adapter.h src/gnss/rtklib_bias_adapter.cpp src/gnss/rtklib_solution_adapter.cpp src/model/measurement_model.cpp tests/integration/test_all_signal_residuals.cpp tests/integration/test_truth_outputs.cpp
+          git diff --check
+          git add CMakeLists.txt src tests third_party/RTKLIB
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: sync all-signal residual integration with RTKLIB issue 6'
+          git rm .github/workflows/issue51_sync.yml
+          git commit -m 'ci: remove issue 51 sync workflow'
+          git push origin HEAD:issue-51-all-signal-residuals

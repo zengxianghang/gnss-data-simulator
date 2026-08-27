@@ -16,6 +16,7 @@ on:
       - tools/apply_issue51_code_state_family.py
       - tools/apply_issue51_code_state_availability.py
       - tools/apply_issue51_solution_engine_signature.py
+      - tools/apply_issue51_spp_family_nav.py
       - .github/workflows/apply-issue51-glo-l3oc.yml
 
 permissions:
@@ -50,6 +51,7 @@ jobs:
           tools/apply_issue51_code_state_family.py
           tools/apply_issue51_code_state_availability.py
           tools/apply_issue51_solution_engine_signature.py
+          tools/apply_issue51_spp_family_nav.py
 
       - name: Apply guarded implementation changes and diagnostic
         run: |
@@ -59,6 +61,7 @@ jobs:
           python tools/apply_issue51_code_state_family.py
           python tools/apply_issue51_code_state_availability.py
           python tools/apply_issue51_solution_engine_signature.py
+          python tools/apply_issue51_spp_family_nav.py
           python tools/apply_issue51_requested_family_validation.py
           python tools/apply_issue51_doppler_diagnostic.py
           python tools/apply_issue51_nav_integrity_diagnostic.py
@@ -69,6 +72,8 @@ jobs:
           clang-format -i
           src/gnss/rtklib_adapter.h
           src/gnss/rtklib_bias_adapter.cpp
+          src/gnss/rtklib_solution_adapter.cpp
+          src/solution/solution_engine.cpp
           src/model/measurement_model.h
           src/model/measurement_model.cpp
           src/output/truth_writer.cpp
@@ -102,9 +107,10 @@ jobs:
           python tools/apply_issue51_code_state_family.py
           python tools/apply_issue51_code_state_availability.py
           python tools/apply_issue51_solution_engine_signature.py
+          python tools/apply_issue51_spp_family_nav.py
           python tools/apply_issue51_requested_family_validation.py
-          clang-format -i tests/integration/test_all_signal_residuals.cpp tests/unit/test_solution_engine.cpp
-          rm -f tools/apply_issue51_glo_l3oc_patch.py tools/apply_issue51_rtklib_link_fix.py tools/apply_issue51_doppler_family_policy.py tools/apply_issue51_doppler_diagnostic.py tools/apply_issue51_nav_integrity_diagnostic.py tools/apply_issue51_modern_visibility_diagnostic.py tools/apply_issue51_requested_family_validation.py tools/apply_issue51_code_state_family.py tools/apply_issue51_code_state_availability.py tools/apply_issue51_solution_engine_signature.py .github/workflows/apply-issue51-glo-l3oc.yml
+          clang-format -i src/gnss/rtklib_solution_adapter.cpp src/solution/solution_engine.cpp tests/integration/test_all_signal_residuals.cpp tests/unit/test_solution_engine.cpp
+          rm -f tools/apply_issue51_glo_l3oc_patch.py tools/apply_issue51_rtklib_link_fix.py tools/apply_issue51_doppler_family_policy.py tools/apply_issue51_doppler_diagnostic.py tools/apply_issue51_nav_integrity_diagnostic.py tools/apply_issue51_modern_visibility_diagnostic.py tools/apply_issue51_requested_family_validation.py tools/apply_issue51_code_state_family.py tools/apply_issue51_code_state_availability.py tools/apply_issue51_solution_engine_signature.py tools/apply_issue51_spp_family_nav.py .github/workflows/apply-issue51-glo-l3oc.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A

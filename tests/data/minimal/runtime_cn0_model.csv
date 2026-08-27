@@ -1,0 +1,4 @@
+schema_version,constellation,signal,elevation_min_deg,elevation_max_deg,upper_edge_inclusive,status,count,p05_dbhz,p10_dbhz,p25_dbhz,p50_dbhz,p75_dbhz,p90_dbhz,p95_dbhz,mean_dbhz,stddev_dbhz,mad_dbhz,delta_count,delta_p50_dbhz,delta_p90_dbhz,delta_p99_dbhz,ar1_status,ar1
+gnss-cn0-model-v1,GPS,1C,0.000000,30.000000,0,READY,100,29.000000,29.000000,29.000000,30.000000,31.000000,31.000000,31.000000,30.000000,1.000000,1.000000,0,,,,INSUFFICIENT_SUPPORT,
+gnss-cn0-model-v1,GPS,1C,30.000000,60.000000,0,READY,100,39.000000,39.000000,39.000000,40.000000,41.000000,41.000000,41.000000,40.000000,1.000000,1.000000,0,,,,INSUFFICIENT_SUPPORT,
+gnss-cn0-model-v1,GPS,1C,60.000000,90.000000,1,READY,100,49.000000,49.000000,49.000000,50.000000,51.000000,51.000000,51.000000,50.000000,1.000000,1.000000,0,,,,INSUFFICIENT_SUPPORT,

@@ -41,12 +41,12 @@ std::string legacy_kepler_body(const KeplerianNavOutputData& eph, bool beidou) {
     body.imbue(std::locale::classic());
     body << eph.prn << ',' << std::fixed << std::setprecision(1) << eph.transmit_sow_sec << ',' << eph.svh << ','
          << eph.iode << ',' << eph.iode << ',' << eph.toe_week << ',' << eph.toe_week << ',' << eph.toe_sow_sec << ','
-         << std::scientific << std::setprecision(15) << eph.semi_major_axis_m << ',' << eph.delta_mean_motion_radps << ','
-         << eph.mean_anomaly_rad << ',' << eph.eccentricity << ',' << eph.argument_of_perigee_rad << ',' << eph.cuc_rad
-         << ',' << eph.cus_rad << ',' << eph.crc_m << ',' << eph.crs_m << ',' << eph.cic_rad << ',' << eph.cis_rad << ','
-         << eph.inclination_rad << ',' << eph.inclination_dot_radps << ',' << eph.omega0_rad << ',' << eph.omega_dot_radps
-         << ',' << eph.iodc << ',' << std::fixed << std::setprecision(1) << eph.toc_sow_sec << ',' << std::scientific
-         << std::setprecision(15) << eph.tgd_sec[0];
+         << std::scientific << std::setprecision(15) << eph.semi_major_axis_m << ',' << eph.delta_mean_motion_radps
+         << ',' << eph.mean_anomaly_rad << ',' << eph.eccentricity << ',' << eph.argument_of_perigee_rad << ','
+         << eph.cuc_rad << ',' << eph.cus_rad << ',' << eph.crc_m << ',' << eph.crs_m << ',' << eph.cic_rad << ','
+         << eph.cis_rad << ',' << eph.inclination_rad << ',' << eph.inclination_dot_radps << ',' << eph.omega0_rad
+         << ',' << eph.omega_dot_radps << ',' << eph.iodc << ',' << std::fixed << std::setprecision(1)
+         << eph.toc_sow_sec << ',' << std::scientific << std::setprecision(15) << eph.tgd_sec[0];
     if (beidou) {
         body << ',' << eph.tgd_sec[1];
     }
@@ -63,12 +63,13 @@ std::string bd3_ephemeris_body(const KeplerianNavOutputData& eph) {
          << std::setprecision(1) << eph.toe_sow_sec << ',' << eph.toc_sow_sec << ',' << std::scientific
          << std::setprecision(15) << eph.sqrt_semi_major_axis_sqrt_m << ',' << eph.delta_mean_motion_radps << ','
          << eph.mean_anomaly_rad << ',' << eph.eccentricity << ',' << eph.argument_of_perigee_rad << ',' << eph.cuc_rad
-         << ',' << eph.cus_rad << ',' << eph.crc_m << ',' << eph.crs_m << ',' << eph.cic_rad << ',' << eph.cis_rad << ','
-         << eph.inclination_rad << ',' << eph.inclination_dot_radps << ',' << eph.omega0_rad << ',' << eph.omega_dot_radps
-         << ',' << eph.tgd_sec[0] << ',' << eph.tgd_sec[1] << ',' << eph.isc_sec[0] << ',' << eph.isc_sec[1] << ','
-         << eph.isc_sec[2] << ',' << eph.isc_sec[3] << ',' << eph.isc_sec[4] << ',' << eph.isc_sec[5] << ','
-         << eph.clock_bias_sec << ',' << eph.clock_drift_sec_per_sec << ',' << eph.clock_drift_rate_sec_per_sec2 << ','
-         << std::fixed << std::setprecision(0) << eph.transmit_sow_sec << ",0,0,0,0,0,0," << bds_frequency_type(eph);
+         << ',' << eph.cus_rad << ',' << eph.crc_m << ',' << eph.crs_m << ',' << eph.cic_rad << ',' << eph.cis_rad
+         << ',' << eph.inclination_rad << ',' << eph.inclination_dot_radps << ',' << eph.omega0_rad << ','
+         << eph.omega_dot_radps << ',' << eph.tgd_sec[0] << ',' << eph.tgd_sec[1] << ',' << eph.isc_sec[0] << ','
+         << eph.isc_sec[1] << ',' << eph.isc_sec[2] << ',' << eph.isc_sec[3] << ',' << eph.isc_sec[4] << ','
+         << eph.isc_sec[5] << ',' << eph.clock_bias_sec << ',' << eph.clock_drift_sec_per_sec << ','
+         << eph.clock_drift_rate_sec_per_sec2 << ',' << std::fixed << std::setprecision(0) << eph.transmit_sow_sec
+         << ",0,0,0,0,0,0," << bds_frequency_type(eph);
     return body.str();
 }
 
@@ -82,8 +83,8 @@ std::string galileo_body(const KeplerianNavOutputData& eph) {
          << std::setprecision(0) << eph.toe_sow_sec << ',' << std::scientific << std::setprecision(15)
          << eph.sqrt_semi_major_axis_sqrt_m << ',' << eph.delta_mean_motion_radps << ',' << eph.mean_anomaly_rad << ','
          << eph.eccentricity << ',' << eph.argument_of_perigee_rad << ',' << eph.cuc_rad << ',' << eph.cus_rad << ','
-         << eph.crc_m << ',' << eph.crs_m << ',' << eph.cic_rad << ',' << eph.cis_rad << ',' << eph.inclination_rad << ','
-         << eph.inclination_dot_radps << ',' << eph.omega0_rad << ',' << eph.omega_dot_radps << ',' << std::fixed
+         << eph.crc_m << ',' << eph.crs_m << ',' << eph.cic_rad << ',' << eph.cis_rad << ',' << eph.inclination_rad
+         << ',' << eph.inclination_dot_radps << ',' << eph.omega0_rad << ',' << eph.omega_dot_radps << ',' << std::fixed
          << std::setprecision(0) << eph.galileo_fnav_toc_sow_sec << ',' << std::scientific << std::setprecision(15)
          << eph.galileo_fnav_clock[0] << ',' << eph.galileo_fnav_clock[1] << ',' << eph.galileo_fnav_clock[2] << ','
          << std::fixed << std::setprecision(0) << eph.galileo_inav_toc_sow_sec << ',' << std::scientific
@@ -98,12 +99,13 @@ std::string glonass_body(const GlonassNavOutputData& glo) {
     const std::int64_t toe_ms = static_cast<std::int64_t>(std::llround(glo.toe_sow_sec * 1000.0));
     body << glo.slot_offset << ',' << glo.frequency_offset << ",1,0," << glo.toe_week << ',' << toe_ms << ','
          << glo.gps_glonass_time_offset_sec << ',' << glo.calendar_day_number << ",0,0," << glo.iode << ',' << glo.svh
-         << ',' << std::scientific << std::setprecision(15) << glo.position_ecef_m[0] << ',' << glo.position_ecef_m[1] << ','
-         << glo.position_ecef_m[2] << ',' << glo.velocity_ecef_mps[0] << ',' << glo.velocity_ecef_mps[1] << ','
-         << glo.velocity_ecef_mps[2] << ',' << glo.acceleration_ecef_mps2[0] << ',' << glo.acceleration_ecef_mps2[1] << ','
-         << glo.acceleration_ecef_mps2[2] << ',' << glo.clock_bias_sec << ',' << glo.relative_frequency_bias << ','
-         << glo.differential_delay_sec << ',' << std::fixed << std::setprecision(0) << glo.frame_time_glonass_day_sec << ','
-         << glo.flags << ',' << glo.sva << ',' << glo.age_days << ',' << glo.flags;
+         << ',' << std::scientific << std::setprecision(15) << glo.position_ecef_m[0] << ',' << glo.position_ecef_m[1]
+         << ',' << glo.position_ecef_m[2] << ',' << glo.velocity_ecef_mps[0] << ',' << glo.velocity_ecef_mps[1] << ','
+         << glo.velocity_ecef_mps[2] << ',' << glo.acceleration_ecef_mps2[0] << ',' << glo.acceleration_ecef_mps2[1]
+         << ',' << glo.acceleration_ecef_mps2[2] << ',' << glo.clock_bias_sec << ',' << glo.relative_frequency_bias
+         << ',' << glo.differential_delay_sec << ',' << std::fixed << std::setprecision(0)
+         << glo.frame_time_glonass_day_sec << ',' << glo.flags << ',' << glo.sva << ',' << glo.age_days << ','
+         << glo.flags;
     return body.str();
 }
 

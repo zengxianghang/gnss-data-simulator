@@ -5,10 +5,9 @@ on:
   push:
     branches:
       - main
-      - issue-39-runtime-cn0-model
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   format:
@@ -16,9 +15,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'push' && github.ref_name || github.event.pull_request.head.ref }}
-      - name: Apply clang-format
+      - name: Check clang-format
         shell: bash
         run: |
           mapfile -t files < <(find include src tests tools -type f \( -name '*.h' -o -name '*.c' -o -name '*.cpp' \) | sort)
@@ -27,25 +24,8 @@ jobs:
             exit 1
           fi
           clang-format -i "${files[@]}"
-      - name: Commit formatting on temporary branch push
-        if: github.event_name == 'push' && github.ref_name == 'issue-39-runtime-cn0-model'
-        shell: bash
-        run: |
-          if git diff --quiet -- include src tests tools; then
-            echo "Formatting already clean"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add include src tests tools
-          git commit -m "style: apply clang-format"
-          git push origin HEAD:issue-39-runtime-cn0-model
-      - name: Check clang-format
-        if: github.event_name != 'push' || github.ref_name != 'issue-39-runtime-cn0-model'
-        shell: bash
-        run: |
-          if ! git diff --exit-code -- include src tests tools; then
-            echo "C/C++ formatting differs from .clang-format."
+          if ! git diff --exit-code -- "${files[@]}"; then
+            echo "C/C++ formatting differs from .clang-format. Apply the diff above."
             exit 1
           fi
 

@@ -12,6 +12,7 @@ on:
       - tools/apply_issue51_doppler_diagnostic.py
       - tools/apply_issue51_nav_integrity_diagnostic.py
       - tools/apply_issue51_requested_family_validation.py
+      - tools/apply_issue51_code_state_family.py
       - .github/workflows/apply-issue51-glo-l3oc.yml
 
 permissions:
@@ -42,12 +43,14 @@ jobs:
           tools/apply_issue51_doppler_diagnostic.py
           tools/apply_issue51_nav_integrity_diagnostic.py
           tools/apply_issue51_requested_family_validation.py
+          tools/apply_issue51_code_state_family.py
 
       - name: Apply guarded implementation changes and diagnostic
         run: |
           python tools/apply_issue51_glo_l3oc_patch.py
           python tools/apply_issue51_rtklib_link_fix.py
           python tools/apply_issue51_doppler_family_policy.py
+          python tools/apply_issue51_code_state_family.py
           python tools/apply_issue51_requested_family_validation.py
           python tools/apply_issue51_doppler_diagnostic.py
           python tools/apply_issue51_nav_integrity_diagnostic.py
@@ -57,6 +60,7 @@ jobs:
           clang-format -i
           src/gnss/rtklib_adapter.h
           src/gnss/rtklib_bias_adapter.cpp
+          src/model/measurement_model.h
           src/model/measurement_model.cpp
           src/output/truth_writer.cpp
           src/gnss/nav_output_record.h
@@ -85,9 +89,10 @@ jobs:
           git checkout -- tests/integration/test_all_signal_residuals.cpp
           python tools/apply_issue51_glo_l3oc_patch.py
           python tools/apply_issue51_doppler_family_policy.py
+          python tools/apply_issue51_code_state_family.py
           python tools/apply_issue51_requested_family_validation.py
           clang-format -i tests/integration/test_all_signal_residuals.cpp
-          rm -f tools/apply_issue51_glo_l3oc_patch.py tools/apply_issue51_rtklib_link_fix.py tools/apply_issue51_doppler_family_policy.py tools/apply_issue51_doppler_diagnostic.py tools/apply_issue51_nav_integrity_diagnostic.py tools/apply_issue51_requested_family_validation.py .github/workflows/apply-issue51-glo-l3oc.yml
+          rm -f tools/apply_issue51_glo_l3oc_patch.py tools/apply_issue51_rtklib_link_fix.py tools/apply_issue51_doppler_family_policy.py tools/apply_issue51_doppler_diagnostic.py tools/apply_issue51_nav_integrity_diagnostic.py tools/apply_issue51_requested_family_validation.py tools/apply_issue51_code_state_family.py .github/workflows/apply-issue51-glo-l3oc.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A

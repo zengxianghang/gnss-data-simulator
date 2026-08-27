@@ -16,93 +16,107 @@ jobs:
           ref: issue-51-all-signal-residuals
           fetch-depth: 0
           submodules: recursive
-      - name: Pin latest RTKLIB issue 6 candidate
+
+      - name: Pin validated RTKLIB issue 6 candidate
         run: |
+          set -euxo pipefail
           git -C third_party/RTKLIB fetch origin issue-6-all-signal-residuals-bds-tgd
-          git -C third_party/RTKLIB checkout a2847e1d10b41d02170b3ca477cc6a676e189d00
+          git -C third_party/RTKLIB checkout 3fe2befa608c4f728d3e9951d98c095da9eff340
           git add third_party/RTKLIB
-      - name: Update CMake and message-family-aware residual test
+
+      - name: Refresh CMake pin and message-family-aware residual test
         run: |
-          python - <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
 
           cmake = Path('CMakeLists.txt')
           s = cmake.read_text()
-          old_commit = 'set(GNSS_SIM_RTKLIB_COMMIT "94cda3254ab5f1f4ee923456ebf96065820dc23d"'
-          new_commit = 'set(GNSS_SIM_RTKLIB_COMMIT "a2847e1d10b41d02170b3ca477cc6a676e189d00"'
-          if old_commit not in s:
+          import re
+          s, n = re.subn(r'set\(GNSS_SIM_RTKLIB_COMMIT "[0-9a-f]{40}"',
+                         'set(GNSS_SIM_RTKLIB_COMMIT "3fe2befa608c4f728d3e9951d98c095da9eff340"',
+                         s, count=1)
+          if n != 1:
               raise SystemExit('CMake RTKLIB commit anchor not found')
-          s = s.replace(old_commit, new_commit, 1)
-          old_sources = '    third_party/RTKLIB/src/rtklib_pntvel_ext.c\n    third_party/RTKLIB/src/rtklib_residual_ext.c\n'
-          new_sources = '    third_party/RTKLIB/src/rtklib_pntvel_ext.c\n    third_party/RTKLIB/src/rtklib_signal_bias_ext.c\n    third_party/RTKLIB/src/rtklib_residual_ext.c\n'
-          if old_sources not in s:
-              raise SystemExit('CMake RTKLIB source anchor not found')
-          cmake.write_text(s.replace(old_sources, new_sources, 1))
+          s = s.replace('    third_party/RTKLIB/src/rtklib_signal_bias_ext.c\n', '')
+          cmake.write_text(s)
 
           test = Path('tests/integration/test_all_signal_residuals.cpp')
           s = test.read_text()
-          free_nav = 'void free_nav(nav_t* nav) {\n    if (nav != nullptr) {\n        freenav(nav, 0xFF);\n    }\n}\n\n'
-          helper = (
-              'int required_rtklib_message_type(const gnss_sim::SignalDefinition& definition,\n'
-              '                                 const std::string& family) {\n'
-              '    if (family == "LEGACY") {\n'
-              '        if (definition.constellation == gnss_sim::GnssConstellation::kGps ||\n'
-              '            definition.constellation == gnss_sim::GnssConstellation::kQzss) {\n'
-              '            return NAV_LNAV;\n'
-              '        }\n'
-              '        if (definition.constellation == gnss_sim::GnssConstellation::kBeidou) {\n'
-              '            return NAV_D1D2;\n'
-              '        }\n'
-              '    }\n'
-              '    if (family == "CNAV") return NAV_CNAV;\n'
-              '    if (family == "CNAV2") return NAV_CNV2;\n'
-              '    if (family == "GALILEO_INAV") return NAV_INAV;\n'
-              '    if (family == "GALILEO_FNAV") return NAV_FNAV;\n'
-              '    if (family == "BEIDOU_BCNAV1") return NAV_CNV1;\n'
-              '    if (family == "BEIDOU_BCNAV2") return NAV_CNV2;\n'
-              '    if (family == "BEIDOU_BCNAV3") return NAV_CNV3;\n'
-              '    if (family == "GLONASS_FDMA") return NAV_FDMA;\n'
-              '    return 0;\n'
-              '}\n\n'
-          )
+          free_nav = '''void free_nav(nav_t* nav) {
+              if (nav != nullptr) {
+                  freenav(nav, 0xFF);
+              }
+          }
+
+          '''.replace('          ', '')
+          helper = '''int required_rtklib_message_type(const gnss_sim::SignalDefinition& definition,
+                                           const std::string& family) {
+              if (family == "LEGACY") {
+                  if (definition.constellation == gnss_sim::GnssConstellation::kGps ||
+                      definition.constellation == gnss_sim::GnssConstellation::kQzss) {
+                      return NAV_LNAV;
+                  }
+                  if (definition.constellation == gnss_sim::GnssConstellation::kBeidou) {
+                      return NAV_D1 | NAV_D2 | NAV_D1D2;
+                  }
+              }
+              if (family == "CNAV") return NAV_CNAV;
+              if (family == "CNAV2") return NAV_CNV2;
+              if (family == "GALILEO_INAV") return NAV_INAV;
+              if (family == "GALILEO_FNAV") return NAV_FNAV;
+              if (family == "BEIDOU_BCNAV1") return NAV_CNV1;
+              if (family == "BEIDOU_BCNAV2") return NAV_CNV2;
+              if (family == "BEIDOU_BCNAV3") return NAV_CNV3;
+              if (family == "GLONASS_FDMA") return NAV_FDMA;
+              return 0;
+          }
+
+          '''.replace('          ', '')
           if 'int required_rtklib_message_type(' not in s:
               if free_nav not in s:
-                  raise SystemExit('test helper anchor not found')
+                  raise SystemExit('free_nav helper anchor not found')
               s = s.replace(free_nav, free_nav + helper, 1)
 
           old_columns = '                                 "pseudorange_valid", "doppler_valid", "pseudorange_m", "doppler_hz"}) {'
           new_columns = '                                 "broadcast_message_family", "pseudorange_valid", "doppler_valid", "pseudorange_m",\n                                 "doppler_hz"}) {'
-          if old_columns not in s:
-              raise SystemExit('required-columns anchor not found')
-          s = s.replace(old_columns, new_columns, 1)
+          if '"broadcast_message_family"' not in s:
+              if old_columns not in s:
+                  raise SystemExit('required-columns anchor not found')
+              s = s.replace(old_columns, new_columns, 1)
 
           bias_anchor = '        rtklib_signal_bias_info_ext_t bias_info{};\n'
-          bias_setup = (
-              '        const std::string message_family = fields[column.at("broadcast_message_family")];\n'
-              '        const int required_message_type = required_rtklib_message_type(*definition, message_family);\n'
-              '        ASSERT_NE(required_message_type, 0) << "signal=" << signal_name << " family=" << message_family;\n\n'
-          )
-          if bias_anchor not in s:
-              raise SystemExit('bias-info anchor not found')
-          s = s.replace(bias_anchor, bias_setup + bias_anchor, 1)
+          if 'const std::string message_family = fields[column.at("broadcast_message_family")];' not in s:
+              setup = ('        const std::string message_family = fields[column.at("broadcast_message_family")];\n'
+                       '        const int required_message_type = required_rtklib_message_type(*definition, message_family);\n'
+                       '        ASSERT_NE(required_message_type, 0) << "signal=" << signal_name << " family=" << message_family;\n\n')
+              if bias_anchor not in s:
+                  raise SystemExit('bias-info anchor not found')
+              s = s.replace(bias_anchor, setup + bias_anchor, 1)
 
           old_args = 'receiver_position_m, 0.0, 0.0, wavelength_m, &code_residual_m,'
           new_args = 'receiver_position_m, 0.0, 0.0, required_message_type, wavelength_m, &code_residual_m,'
-          if old_args not in s:
-              raise SystemExit('rescode arguments anchor not found')
-          test.write_text(s.replace(old_args, new_args, 1))
+          if old_args in s:
+              s = s.replace(old_args, new_args, 1)
+          elif new_args not in s:
+              raise SystemExit('rescode signature anchor not found')
+          test.write_text(s)
           PY
+
       - name: Configure and run all tests
         run: |
+          set -euxo pipefail
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build -j2
           ctest --test-dir build --output-on-failure
+          git diff --check
+
       - name: Commit validated refresh and remove helper workflow
         run: |
-          rm .github/workflows/issue51_refresh.yml
+          set -euxo pipefail
+          git rm .github/workflows/issue51_refresh.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'test: validate all signals against message-family-aware RTKLIB residuals'
+          git commit -m 'test: pin validated RTKLIB all-signal residual candidate'
+          git pull --rebase origin issue-51-all-signal-residuals
           git push origin HEAD:issue-51-all-signal-residuals

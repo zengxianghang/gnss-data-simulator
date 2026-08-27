@@ -2,12 +2,13 @@ from pathlib import Path
 
 path = Path("tests/integration/test_all_signal_residuals.cpp")
 text = path.read_text()
-old = '''    nav_t nav{};
-    ASSERT_TRUE(load_nav(nav_text, &nav));
-
-    std::ifstream input(directory / "observation_truth.csv");'''
-new = '''    nav_t nav{};
-    ASSERT_TRUE(load_nav(nav_text, &nav));
+old = '''    dump_nav_integrity("original", original_nav);
+    dump_nav_integrity("overlay", nav);
+    free_nav(&original_nav);
+'''
+new = '''    dump_nav_integrity("original", original_nav);
+    dump_nav_integrity("overlay", nav);
+    free_nav(&original_nav);
 
     // Diagnostic only: distinguish absent modern NAV families from real
     // family records that are simply below the compact scenario horizon.
@@ -41,8 +42,7 @@ new = '''    nav_t nav{};
         std::fprintf(stderr, "MODERN_EPH sat=%s type=%d toe_age=%.3f elev_deg=%.6f\\n", satellite_id, type,
                      std::fabs(timediff(eph.toe, diagnostic_time)), azel[1] * R2D);
     }
-
-    std::ifstream input(directory / "observation_truth.csv");'''
+'''
 count = text.count(old)
 if count != 1:
     raise RuntimeError(f"modern visibility diagnostic anchor: expected 1, found {count}")

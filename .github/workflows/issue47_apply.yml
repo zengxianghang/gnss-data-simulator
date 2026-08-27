@@ -1,0 +1,83 @@
+name: issue47-apply
+
+on:
+  push:
+    branches:
+      - issue-47-full-day-nav-availability
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-47-full-day-nav-availability
+          submodules: recursive
+      - name: Apply fix and regression
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          header = Path('src/gnss/rtklib_adapter.h')
+          text = header.read_text()
+          anchor = '''bool rtklib_nav_store_has_satellite_ephemeris(const RtklibNavStore* store, int satellite_number);\n\n'''
+          insert = anchor + '''bool rtklib_satellite_state_available(const RtklibNavStore* store, int gps_week, double sow_sec,\n                                      int satellite_number);\n'''
+          assert text.count(anchor) == 1
+          header.write_text(text.replace(anchor, insert))
+
+          adapter = Path('src/gnss/rtklib_adapter.cpp')
+          text = adapter.read_text()
+          anchor = '''bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,\n                                RtklibSatelliteState* state, std::string* error_message) {\n'''
+          helper = '''bool rtklib_satellite_state_available(const RtklibNavStore* store, int gps_week, double sow_sec,\n                                      int satellite_number) {\n    if (store == nullptr || satellite_number <= 0 || !valid_gps_time(gps_week, sow_sec)) {\n        return false;\n    }\n    const gtime_t time = gpst2time(gps_week, sow_sec);\n    double state_and_velocity[6]{};\n    double clock[2]{};\n    double variance_m2 = 0.0;\n    int health = 0;\n    return satpos(time, time, satellite_number, EPHOPT_BRDC, &store->nav, state_and_velocity, clock, &variance_m2,\n                  &health) != 0;\n}\n\n'''
+          assert text.count(anchor) == 1
+          adapter.write_text(text.replace(anchor, helper + anchor))
+
+          simulator = Path('src/core/simulator.cpp')
+          text = simulator.read_text()
+          anchor = '''    for (SatelliteRuntime& satellite : runtime->satellites) {\n        SatelliteGeometry geometry{};\n        if (!compute_satellite_geometry(truth_nav, runtime->receiver, scenario.time, satellite.satellite_number,\n                                        config.elevation_mask_deg, &geometry, error_message)) {\n            return false;\n        }\n'''
+          replacement = '''    for (SatelliteRuntime& satellite : runtime->satellites) {\n        const double receive_sow_sec =\n            static_cast<double>(scenario.time.tow_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);\n        if (!rtklib_satellite_state_available(truth_nav, scenario.time.gps_week, receive_sow_sec,\n                                              satellite.satellite_number)) {\n            continue;\n        }\n\n        SatelliteGeometry geometry{};\n        if (!compute_satellite_geometry(truth_nav, runtime->receiver, scenario.time, satellite.satellite_number,\n                                        config.elevation_mask_deg, &geometry, error_message)) {\n            return false;\n        }\n'''
+          assert text.count(anchor) == 1
+          simulator.write_text(text.replace(anchor, replacement))
+
+          source = Path('tests/data/minimal/gps_loopback_nav.rnx').read_text().splitlines()
+          end_header = next(i for i, line in enumerate(source) if 'END OF HEADER' in line)
+          first = end_header + 1
+          block = source[first:first + 8]
+          assert block[0].startswith('G01 ')
+          block[0] = block[0].replace('G01 2023 03 14 00 00 00', 'G19 2023 03 14 00 01 45', 1)
+          block[3] = block[3].replace('1.728000000000e+05', '1.729050000000e+05', 1)
+          block[7] = block[7].replace('1.656180000000e+05', '1.729050000000e+05', 1)
+          fixture = Path('tests/data/minimal/gps_loopback_nav_future_sat.rnx')
+          fixture.write_text('\n'.join(source + block) + '\n')
+
+          tests = Path('tests/integration/test_scenarios.cpp')
+          text = tests.read_text()
+          anchor = '''TEST(StreamingSimulator, OneSecondDurationHasExactEpochCountAtEveryFrozenRate) {\n'''
+          test = '''TEST(StreamingSimulator, FutureOnlyEphemerisDoesNotAbortEarlierEpochs) {\n    gnss_sim::SimConfig config = base_config(gnss_sim::ScenarioType::KS);\n    config.sampling_rate_hz = 1;\n    config.duration_ns = 4LL * gnss_sim::NANOSECONDS_PER_SECOND;\n    const std::string output_path = test_output_path("future_sat");\n    std::remove(output_path.c_str());\n    const std::string input_path =\n        std::string(GNSS_SIM_TEST_DATA_DIR) + "/gps_loopback_nav_future_sat.rnx";\n    const gnss_sim::SimulatorRunOptions options{input_path.c_str(), output_path.c_str(), start_time()};\n    gnss_sim::SimulatorRunSummary summary{};\n    std::string error_message;\n    ASSERT_TRUE(gnss_sim::run_simulator(config, options, &summary, &error_message)) << error_message;\n    EXPECT_EQ(summary.scheduled_epochs, 4U);\n    EXPECT_EQ(summary.range_messages, 4U);\n    EXPECT_GT(summary.valid_position_epochs, 0U);\n    std::remove(output_path.c_str());\n}\n\n'''
+          assert text.count(anchor) == 1
+          tests.write_text(text.replace(anchor, test + anchor))
+          PY
+          mapfile -t files < <(find include src tests tools -type f \( -name '*.h' -o -name '*.c' -o -name '*.cpp' \) | sort)
+          clang-format -i "${files[@]}"
+          git diff --check
+          git diff --stat
+      - name: Build and test
+        shell: bash
+        run: |
+          cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/gnss/rtklib_adapter.h src/gnss/rtklib_adapter.cpp src/core/simulator.cpp \
+            tests/integration/test_scenarios.cpp tests/data/minimal/gps_loopback_nav_future_sat.rnx
+          git commit -m "fix: skip satellites without epoch-valid ephemeris"
+          git push origin HEAD:issue-47-full-day-nav-availability

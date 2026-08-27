@@ -130,6 +130,8 @@ target_link_libraries(gnss-data-simulator PRIVATE gnss_sim::core)
 gnss_sim_set_project_warnings(gnss-data-simulator)
 
 add_library(cn0_model_builder_core STATIC
+    tools/build_cn0_model/cn0_builder.cpp
+    tools/build_cn0_model/cn0_statistics.cpp
     tools/build_cn0_model/rinex_obs_stream.cpp
 )
 target_include_directories(cn0_model_builder_core
@@ -163,6 +165,7 @@ if(BUILD_TESTING)
     add_executable(gnss_sim_unit_tests
         tests/unit/test_atmosphere_model.cpp
         tests/unit/test_cn0_model.cpp
+        tests/unit/test_cn0_statistics.cpp
         tests/unit/test_deterministic_rng.cpp
         tests/unit/test_measurement_model.cpp
         tests/unit/test_nav_message_scheduler.cpp

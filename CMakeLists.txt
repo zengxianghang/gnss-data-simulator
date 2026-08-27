@@ -12,7 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(CTest)
 include(cmake/CompilerWarnings.cmake)
 
-set(GNSS_SIM_RTKLIB_COMMIT "07e813b72c8667350c4e80293cb6679c519ef1a6" CACHE STRING
+set(GNSS_SIM_RTKLIB_COMMIT "dc596ba725ccaa5ab5963d7e7ec85b52ae743969" CACHE STRING
     "Pinned RTKLIB commit used by this simulator build")
 set(GNSS_SIM_CJSON_COMMIT "acc76239bee01d8e9c858ae2cab296704e52d916" CACHE STRING
     "Pinned cJSON commit used by this simulator build")
@@ -30,6 +30,8 @@ find_package(Threads REQUIRED)
 
 add_library(rtklib_pinned STATIC
     third_party/RTKLIB/src/ephemeris.c
+    third_party/RTKLIB/src/ionex.c
+    third_party/RTKLIB/src/pntpos.c
     third_party/RTKLIB/src/preceph.c
     third_party/RTKLIB/src/qzslex.c
     third_party/RTKLIB/src/rinex.c
@@ -39,6 +41,7 @@ add_library(rtklib_pinned STATIC
     third_party/RTKLIB/src/rtcm3e.c
     third_party/RTKLIB/src/rtkcmn.c
     third_party/RTKLIB/src/rtklib_obs_ext.c
+    third_party/RTKLIB/src/rtklib_pntvel_ext.c
     third_party/RTKLIB/src/sbas.c
 )
 add_library(gnss_sim::rtklib ALIAS rtklib_pinned)
@@ -75,6 +78,7 @@ add_library(gnss_sim_core STATIC
     src/gnss/rtklib_adapter.cpp
     src/gnss/rtklib_atmosphere_adapter.cpp
     src/gnss/rtklib_bias_adapter.cpp
+    src/gnss/rtklib_solution_adapter.cpp
     src/gnss/satellite_engine.cpp
     src/gnss/signal_definitions.cpp
     src/model/atmosphere_model.cpp
@@ -82,6 +86,7 @@ add_library(gnss_sim_core STATIC
     src/model/measurement_model.cpp
     src/model/receiver_truth.cpp
     src/model/signal_tracking.cpp
+    src/solution/solution_engine.cpp
 )
 add_library(gnss_sim::core ALIAS gnss_sim_core)
 target_include_directories(gnss_sim_core
@@ -126,6 +131,8 @@ if(BUILD_TESTING)
         tests/unit/test_signal_tracking.cpp
         tests/unit/test_sim_config.cpp
         tests/unit/test_sim_time.cpp
+        tests/unit/test_solution_engine.cpp
+        tests/unit/test_solution_signal_policy.cpp
     )
     target_include_directories(gnss_sim_unit_tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src")

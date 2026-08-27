@@ -197,7 +197,8 @@ TEST_F(NavigationStateTest, MixedTypeAppendReportsActualReceiverPartitionIndex) 
         ASSERT_TRUE(gnss_sim::rtklib_nav_record_info(gnss_sim::truth_navigation_store(state_), index, &info));
         if (info.kind == gnss_sim::RtklibNavRecordKind::kGlonassEphemeris && glo_index < 0) {
             glo_index = index;
-        } else if (info.kind == gnss_sim::RtklibNavRecordKind::kEphemeris && info.satellite_number > 0 && gps_index < 0) {
+        } else if (info.kind == gnss_sim::RtklibNavRecordKind::kEphemeris && info.satellite_number > 0 &&
+                   gps_index < 0) {
             char satellite_id[4]{};
             ASSERT_TRUE(gnss_sim::rtklib_satellite_number_to_id(info.satellite_number, satellite_id));
             if (satellite_id[0] == 'G') {
@@ -210,15 +211,15 @@ TEST_F(NavigationStateTest, MixedTypeAppendReportsActualReceiverPartitionIndex) 
 
     bool emitted = false;
     gnss_sim::NavigationUpdateEvent glo_event{};
-    ASSERT_TRUE(gnss_sim::apply_truth_navigation_record(state_, glo_index, startup_time, &glo_event, &emitted,
-                                                         &error_message))
+    ASSERT_TRUE(
+        gnss_sim::apply_truth_navigation_record(state_, glo_index, startup_time, &glo_event, &emitted, &error_message))
         << error_message;
     ASSERT_TRUE(emitted);
 
     gnss_sim::NavigationUpdateEvent gps_event{};
     emitted = false;
-    ASSERT_TRUE(gnss_sim::apply_truth_navigation_record(state_, gps_index, startup_time, &gps_event, &emitted,
-                                                         &error_message))
+    ASSERT_TRUE(
+        gnss_sim::apply_truth_navigation_record(state_, gps_index, startup_time, &gps_event, &emitted, &error_message))
         << error_message;
     ASSERT_TRUE(emitted);
 

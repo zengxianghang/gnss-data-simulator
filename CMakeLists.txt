@@ -150,6 +150,7 @@ if(BUILD_TESTING)
         tests/unit/test_navigation_state.cpp
         tests/unit/test_output_writers.cpp
         tests/unit/test_receiver_truth.cpp
+        tests/unit/test_rinex4_brd400.cpp
         tests/unit/test_rtklib_adapter.cpp
         tests/unit/test_satellite_engine.cpp
         tests/unit/test_scenario_engine.cpp

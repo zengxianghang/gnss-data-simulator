@@ -30,6 +30,9 @@ struct PositionSolution {
     double height_m;
     double receiver_clock_bias_m;
     double covariance_ecef_m2[6];
+    double latitude_std_m;
+    double longitude_std_m;
+    double height_std_m;
     int used_satellites;
     char diagnostic[128];
 };
@@ -39,6 +42,9 @@ struct VelocitySolution {
     ReceiverSolutionStatus status;
     ReceiverSolutionType type;
     double velocity_ecef_mps[3];
+    double horizontal_speed_mps;
+    double track_over_ground_deg;
+    double vertical_speed_mps;
     double receiver_clock_drift_mps;
     int used_satellites;
     char diagnostic[128];

@@ -81,7 +81,7 @@ void collect_supported_names(const gnss_sim::RtklibNavStore* store, bool unicore
 }
 
 gnss_sim::NavOutputRecord synthetic_ephemeris(gnss_sim::NavOutputSystem system,
-                                               gnss_sim::RtklibBroadcastMessageFamily family) {
+                                              gnss_sim::RtklibBroadcastMessageFamily family) {
     gnss_sim::NavOutputRecord record{};
     record.kind = gnss_sim::RtklibNavRecordKind::kEphemeris;
     record.ephemeris.system = system;

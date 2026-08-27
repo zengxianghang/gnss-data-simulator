@@ -12,7 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(CTest)
 include(cmake/CompilerWarnings.cmake)
 
-set(GNSS_SIM_RTKLIB_COMMIT "7c37e902a5d7e812ddc043199b48a6d7ffe99195" CACHE STRING
+set(GNSS_SIM_RTKLIB_COMMIT "11983a3504c6da89b201f4ff7b3ec78dd0db6051" CACHE STRING
     "Pinned RTKLIB commit used by this simulator build")
 set(GNSS_SIM_CJSON_COMMIT "acc76239bee01d8e9c858ae2cab296704e52d916" CACHE STRING
     "Pinned cJSON commit used by this simulator build")

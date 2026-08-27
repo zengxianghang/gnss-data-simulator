@@ -3,32 +3,6 @@ from pathlib import Path
 path = Path("tests/integration/test_all_signal_residuals.cpp")
 text = path.read_text()
 
-old_helper = '''int required_rtklib_message_type(const gnss_sim::SignalDefinition& definition, const std::string& family) {
-    if (family == "LEGACY") {
-        if (definition.constellation == gnss_sim::GnssConstellation::kGps ||
-            definition.constellation == gnss_sim::GnssConstellation::kQzss)
-            return NAV_LNAV;
-        if (definition.constellation == gnss_sim::GnssConstellation::kBeidou)
-            return NAV_D1 | NAV_D2 | NAV_D1D2;
-    }
-    if (family == "CNAV")
-        return NAV_CNAV;
-    if (family == "CNAV2")
-        return NAV_CNV2;
-    if (family == "GALILEO_INAV")
-        return NAV_INAV;
-    if (family == "GALILEO_FNAV")
-        return NAV_FNAV;
-    if (family == "BEIDOU_BCNAV1")
-        return NAV_CNV1;
-    if (family == "BEIDOU_BCNAV2")
-        return NAV_CNV2;
-    if (family == "BEIDOU_BCNAV3")
-        return NAV_CNV3;
-    if (family == "GLONASS_FDMA")
-        return NAV_FDMA;
-    return 0;
-}'''
 new_helper = '''int required_rtklib_message_type(const gnss_sim::SignalDefinition& definition) {
     switch (definition.nav_message_family) {
         case gnss_sim::NavMessageFamily::kGpsLnav:
@@ -61,9 +35,13 @@ new_helper = '''int required_rtklib_message_type(const gnss_sim::SignalDefinitio
     }
     return 0;
 }'''
-if text.count(old_helper) != 1:
-    raise RuntimeError("required_rtklib_message_type helper anchor mismatch")
-text = text.replace(old_helper, new_helper, 1)
+start_marker = "int required_rtklib_message_type("
+end_marker = "\n\nTEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks)"
+start = text.find(start_marker)
+end = text.find(end_marker, start)
+if start < 0 or end < 0 or text.find(start_marker, start + 1) >= 0:
+    raise RuntimeError("required_rtklib_message_type function boundary mismatch")
+text = text[:start] + new_helper + text[end:]
 
 old_family = '''        const std::string message_family = fields[column.at("broadcast_message_family")];
         const int required_message_type = required_rtklib_message_type(*definition, message_family);'''

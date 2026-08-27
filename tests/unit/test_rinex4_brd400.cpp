@@ -1,11 +1,11 @@
 #include "gnss/rtklib_adapter.h"
 
+#include <gtest/gtest.h>
+#include <string>
+
 extern "C" {
 #include <rtklib.h>
 }
-
-#include <gtest/gtest.h>
-#include <string>
 
 namespace {
 

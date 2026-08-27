@@ -125,8 +125,8 @@ double covariance_axis_variance(const double covariance[6], const double axis[3]
     const double xy = covariance[3];
     const double yz = covariance[4];
     const double zx = covariance[5];
-    return axis[0] * axis[0] * xx + axis[1] * axis[1] * yy + axis[2] * axis[2] * zz +
-           2.0 * axis[0] * axis[1] * xy + 2.0 * axis[1] * axis[2] * yz + 2.0 * axis[2] * axis[0] * zx;
+    return axis[0] * axis[0] * xx + axis[1] * axis[1] * yy + axis[2] * axis[2] * zz + 2.0 * axis[0] * axis[1] * xy +
+           2.0 * axis[1] * axis[2] * yz + 2.0 * axis[2] * axis[0] * zx;
 }
 
 double nonnegative_std(double variance) {

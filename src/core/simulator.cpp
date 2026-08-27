@@ -662,6 +662,15 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                                         config.elevation_mask_deg, &geometry, error_message)) {
             return false;
         }
+        int glonass_fcn = 0;
+        if (satellite.constellation == GnssConstellation::kGlonass) {
+            RtklibBroadcastBiasData bias_data{};
+            if (!rtklib_broadcast_bias_data(truth_nav, geometry.transmit_gps_week, geometry.transmit_sow_sec,
+                                            satellite.satellite_number, &bias_data, error_message)) {
+                return false;
+            }
+            glonass_fcn = bias_data.glonass_fcn;
+        }
         const double elevation_deg = geometry.elevation_rad * kRadiansToDegrees;
         bool satellite_tracking = false;
         for (SignalRuntime& signal : satellite.signals) {
@@ -692,7 +701,7 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
             satellite_tracking = true;
             AtmosphereCorrection atmosphere{};
             if (!compute_atmosphere_correction(config.atmosphere_mode, truth_nav, scenario.time,
-                                               signal.tracker.signal_id, 0, runtime->receiver.position_ecef_m,
+                                               signal.tracker.signal_id, glonass_fcn, runtime->receiver.position_ecef_m,
                                                geometry.azimuth_rad, geometry.elevation_rad, &atmosphere,
                                                error_message)) {
                 return false;

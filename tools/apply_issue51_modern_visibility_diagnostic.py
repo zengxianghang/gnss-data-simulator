@@ -35,16 +35,20 @@ new = '''    dump_nav_integrity("original", original_nav);
         double los[3]{};
         double azel[2]{};
         double position_rad_m[3]{};
+        double satellite_pos[3]{};
         char satellite_id[16]{};
         eph2pos(diagnostic_time, &eph, rs, &dts, &var);
         const double range = geodist(rs, diagnostic_receiver, los);
         ecef2pos(diagnostic_receiver, position_rad_m);
+        ecef2pos(rs, satellite_pos);
         if (range > 0.0) {
             satazel(position_rad_m, los, azel);
         }
         satno2id(eph.sat, satellite_id);
-        std::fprintf(stderr, "MODERN_EPH sat=%s type=%d toe_age=%.3f elev_deg=%.6f\\n", satellite_id, type,
-                     std::fabs(timediff(eph.toe, diagnostic_time)), azel[1] * R2D);
+        std::fprintf(stderr,
+                     "MODERN_EPH sat=%s type=%d toe_age=%.3f elev_deg=%.6f sub_lat=%.6f sub_lon=%.6f\\n",
+                     satellite_id, type, std::fabs(timediff(eph.toe, diagnostic_time)), azel[1] * R2D,
+                     satellite_pos[0] * R2D, satellite_pos[1] * R2D);
         if (std::string(satellite_id) == "J04" && type == NAV_CNAV) target_j04 = &eph;
         if (std::string(satellite_id) == "G17" && type == NAV_CNAV) target_g17 = &eph;
         if (std::string(satellite_id) == "C22" && type == NAV_CNV1) target_c22 = &eph;
@@ -102,4 +106,4 @@ count = text.count(old)
 if count != 1:
     raise RuntimeError(f"modern visibility diagnostic anchor: expected 1, found {count}")
 path.write_text(text.replace(old, new, 1))
-print("modern NAV visibility and shared-position grid diagnostic injected")
+print("modern NAV visibility, subpoints, and shared-position grid diagnostic injected")

@@ -60,7 +60,8 @@ bool finalize_nav_output_record_metadata(NavOutputRecord* record) {
             return false;
         }
         eph.sqrt_semi_major_axis_sqrt_m = std::sqrt(eph.semi_major_axis_m);
-        const double mu = eph.system == NavOutputSystem::kGps || eph.system == NavOutputSystem::kQzss ? kGpsMu : kOtherMu;
+        const double mu =
+            eph.system == NavOutputSystem::kGps || eph.system == NavOutputSystem::kQzss ? kGpsMu : kOtherMu;
         eph.corrected_mean_motion_radps =
             std::sqrt(mu / (eph.semi_major_axis_m * eph.semi_major_axis_m * eph.semi_major_axis_m)) +
             eph.delta_mean_motion_radps;

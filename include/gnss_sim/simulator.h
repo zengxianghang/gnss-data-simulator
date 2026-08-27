@@ -1,7 +1,40 @@
 #ifndef GNSS_SIM_SIMULATOR_H_
 #define GNSS_SIM_SIMULATOR_H_
 
+#include "gnss_sim/sim_config.h"
+#include "gnss_sim/sim_types.h"
+
+#include <cstdint>
+#include <string>
+
 namespace gnss_sim {
+
+struct SimulatorRunOptions {
+    const char* rinex_nav_path;
+    const char* output_log_path;
+    SimTime start_time;
+};
+
+struct SimulatorRunSummary {
+    std::uint64_t scheduled_epochs;
+    std::uint64_t powered_epochs;
+    std::uint64_t signal_on_epochs;
+    std::uint64_t signal_off_epochs;
+    std::uint64_t range_messages;
+    std::uint64_t psrpos_messages;
+    std::uint64_t psrvel_messages;
+    std::uint64_t nav_messages;
+    std::uint64_t power_on_events;
+    std::uint64_t power_off_events;
+    std::uint64_t signal_on_events;
+    std::uint64_t signal_off_events;
+    std::uint64_t valid_position_epochs;
+    std::uint64_t valid_velocity_epochs;
+    int max_observations_per_epoch;
+};
+
+bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, SimulatorRunSummary* summary,
+                   std::string* error_message);
 
 const char* simulator_version();
 const char* rtklib_commit_sha();

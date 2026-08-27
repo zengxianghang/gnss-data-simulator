@@ -72,17 +72,17 @@ TEST(TruthOutputs, HeadersAreVersionedAndExplicit) {
     ASSERT_TRUE(run_in_directory(directory, &summary, &error_message)) << error_message;
 
     EXPECT_EQ(first_line(directory / "event_truth.csv"),
-              "gps_week,tow_ns,sow_sec,event_type,cycle_index,receiver_powered,signal_available,startup_mode,"
-              "truth_record_index,receiver_record_index,nav_kind,satellite_number,iode,iodc");
+              "gps_week,tow_ns,sow_sec,event_type,cycle_index,receiver_powered,signal_available,startup_mode");
     EXPECT_EQ(first_line(directory / "observation_truth.csv"),
-              "gps_week,tow_ns,sow_sec,observation_index,system,prn,satellite_number,signal_id,signal_name,"
-              "receiver_x_m,receiver_y_m,receiver_z_m,receiver_vx_mps,receiver_vy_mps,receiver_vz_mps,"
+              "gps_week,tow_ns,sow_sec,observation_index,system,prn,satellite_number,signal_id,signal_name,glonass_fcn,"
+              "wavelength_m,receiver_x_m,receiver_y_m,receiver_z_m,receiver_vx_mps,receiver_vy_mps,receiver_vz_mps,"
               "transmit_week,transmit_tow_ns,transmit_sow_sec,satellite_x_m,satellite_y_m,satellite_z_m,"
               "satellite_vx_mps,satellite_vy_mps,satellite_vz_mps,azimuth_deg,elevation_deg,geometric_range_m,"
               "range_rate_mps,satellite_clock_bias_m,satellite_clock_drift_mps,receiver_clock_bias_m,"
-              "receiver_clock_drift_mps,ionosphere_m,troposphere_m,code_bias_m,code_bias_status,cn0_dbhz,"
-              "tracking_phase,lock_time_ns,pseudorange_valid,doppler_valid,adr_valid,ambiguity_cycles,"
-              "ambiguity_epoch_week,ambiguity_epoch_tow_ns,cycle_slip,pseudorange_m,doppler_hz,adr_cycles");
+              "receiver_clock_drift_mps,ionosphere_m,troposphere_m,broadcast_message_family,tgd_sec_0,tgd_sec_1,"
+              "tgd_sec_2,tgd_sec_3,isc_sec_0,isc_sec_1,isc_sec_2,isc_sec_3,isc_sec_4,isc_sec_5,glonass_dtaun_sec,"
+              "code_bias_m,code_bias_status,cn0_dbhz,tracking_phase,lock_time_ns,pseudorange_valid,doppler_valid,adr_valid,"
+              "ambiguity_cycles,ambiguity_epoch_week,ambiguity_epoch_tow_ns,cycle_slip,pseudorange_m,doppler_hz,adr_cycles");
     EXPECT_EQ(first_line(directory / "solution_truth.csv"),
               "gps_week,tow_ns,sow_sec,tracked_satellites,position_valid,position_status,position_type,"
               "latitude_deg,longitude_deg,height_m,position_x_m,position_y_m,position_z_m,latitude_std_m,"
@@ -93,6 +93,7 @@ TEST(TruthOutputs, HeadersAreVersionedAndExplicit) {
 
     const std::string scenario = read_file(directory / "scenario.json");
     const std::string manifest = read_file(directory / "run_manifest.json");
+    const std::string observations = read_file(directory / "observation_truth.csv");
     EXPECT_NE(scenario.find("\"truth_schema_version\": 1"), std::string::npos);
     EXPECT_NE(scenario.find("\"atmosphere_mode\": \"none\""), std::string::npos);
     EXPECT_NE(manifest.find("\"output_format_version\": 1"), std::string::npos);
@@ -101,7 +102,8 @@ TEST(TruthOutputs, HeadersAreVersionedAndExplicit) {
     EXPECT_NE(manifest.find("\"hash_algorithm\": \"fnv1a64\""), std::string::npos);
     EXPECT_NE(manifest.find("\"random_seed\": 7"), std::string::npos);
     EXPECT_NE(read_file(directory / "event_truth.csv").find("POWER_ON"), std::string::npos);
-    EXPECT_GT(read_file(directory / "observation_truth.csv").size(), first_line(directory / "observation_truth.csv").size());
+    EXPECT_NE(observations.find(",LEGACY,"), std::string::npos);
+    EXPECT_GT(observations.size(), first_line(directory / "observation_truth.csv").size());
     EXPECT_GT(read_file(directory / "solution_truth.csv").size(), first_line(directory / "solution_truth.csv").size());
     cleanup(directory);
 }
@@ -115,8 +117,8 @@ TEST(TruthOutputs, SameInputConfigAndSeedAreByteIdenticalAcrossOutputDirectories
     ASSERT_TRUE(run_in_directory(first_directory, &first_summary, &error_message)) << error_message;
     ASSERT_TRUE(run_in_directory(second_directory, &second_summary, &error_message)) << error_message;
 
-    for (const char* file_name : {"scenario.json", "event_truth.csv", "observation_truth.csv", "solution_truth.csv",
-                                  "run_manifest.json"}) {
+    for (const char* file_name :
+         {"scenario.json", "event_truth.csv", "observation_truth.csv", "solution_truth.csv", "run_manifest.json"}) {
         EXPECT_EQ(read_file(first_directory / file_name), read_file(second_directory / file_name)) << file_name;
     }
     EXPECT_EQ(first_summary.scheduled_epochs, second_summary.scheduled_epochs);

@@ -50,6 +50,7 @@ struct RinexCn0Sample {
     double azimuth_rad{};
     double elevation_rad{};
     Cn0SampleValidity validity{Cn0SampleValidity::kGeometryUnavailable};
+    const RinexObsProvenance* provenance{};
 };
 
 struct RinexObsStreamSummary {

@@ -142,6 +142,9 @@ bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, doubl
                                 RtklibSatelliteState* state, std::string* error_message);
 bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
                                 RtklibBroadcastBiasData* data, std::string* error_message);
+bool rtklib_broadcast_bias_data_for_family(const RtklibNavStore* store, int gps_week, double sow_sec,
+                                           int satellite_number, RtklibBroadcastMessageFamily required_family,
+                                           RtklibBroadcastBiasData* data, std::string* error_message);
 
 bool rtklib_solve_single_position(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
                                   const RtklibSolutionObservation* observations, int observation_count,

@@ -65,14 +65,28 @@ const char* constellation_name(GnssConstellation constellation) {
     return "UNKNOWN";
 }
 
-const char* nav_kind_name(RtklibNavRecordKind kind) {
-    switch (kind) {
-        case RtklibNavRecordKind::kEphemeris:
-            return "EPHEMERIS";
-        case RtklibNavRecordKind::kGlonassEphemeris:
-            return "GLONASS_EPHEMERIS";
-        case RtklibNavRecordKind::kIonosphere:
-            return "IONOSPHERE";
+const char* broadcast_message_family_name(RtklibBroadcastMessageFamily family) {
+    switch (family) {
+        case RtklibBroadcastMessageFamily::kUnknown:
+            return "UNKNOWN";
+        case RtklibBroadcastMessageFamily::kLegacy:
+            return "LEGACY";
+        case RtklibBroadcastMessageFamily::kCnav:
+            return "CNAV";
+        case RtklibBroadcastMessageFamily::kCnav2:
+            return "CNAV2";
+        case RtklibBroadcastMessageFamily::kGalileoInav:
+            return "GALILEO_INAV";
+        case RtklibBroadcastMessageFamily::kGalileoFnav:
+            return "GALILEO_FNAV";
+        case RtklibBroadcastMessageFamily::kBeidouBcnav1:
+            return "BEIDOU_BCNAV1";
+        case RtklibBroadcastMessageFamily::kBeidouBcnav2:
+            return "BEIDOU_BCNAV2";
+        case RtklibBroadcastMessageFamily::kBeidouBcnav3:
+            return "BEIDOU_BCNAV3";
+        case RtklibBroadcastMessageFamily::kGlonassFdma:
+            return "GLONASS_FDMA";
     }
     return "UNKNOWN";
 }
@@ -223,7 +237,8 @@ bool input_identity(const char* path, std::string* name, std::string* hash, std:
     return true;
 }
 
-bool open_csv(std::ofstream* stream, const std::filesystem::path& path, const char* header, std::string* error_message) {
+bool open_csv(std::ofstream* stream, const std::filesystem::path& path, const char* header,
+              std::string* error_message) {
     stream->open(path, std::ios::binary | std::ios::trunc);
     if (!*stream) {
         set_error(error_message, std::string("cannot open truth CSV: ") + path.generic_string());
@@ -260,24 +275,11 @@ int satellite_prn(int satellite_number) {
 }
 
 bool write_event_row(TruthWriter* writer, const SimTime& time, const char* event_type,
-                     const ScenarioEpochState* scenario, StartupMode startup_mode, const NavigationUpdateEvent* nav_event,
-                     std::string* error_message) {
+                     const ScenarioEpochState& scenario, StartupMode startup_mode, std::string* error_message) {
     write_time_prefix(writer->event_stream, time);
-    writer->event_stream << ',' << event_type << ',';
-    if (scenario != nullptr) {
-        writer->event_stream << scenario->cycle_index << ',' << (scenario->receiver_powered ? 1 : 0) << ','
-                             << (scenario->signal_available ? 1 : 0) << ',' << startup_mode_name(startup_mode) << ',';
-    } else {
-        writer->event_stream << ",,,,";
-    }
-    if (nav_event != nullptr) {
-        writer->event_stream << nav_event->truth_record_index << ',' << nav_event->receiver_record_index << ','
-                             << nav_kind_name(nav_event->kind) << ',' << nav_event->satellite_number << ','
-                             << nav_event->iode << ',' << nav_event->iodc;
-    } else {
-        writer->event_stream << ",,,,,";
-    }
-    writer->event_stream << '\n';
+    writer->event_stream << ',' << event_type << ',' << scenario.cycle_index << ','
+                         << (scenario.receiver_powered ? 1 : 0) << ',' << (scenario.signal_available ? 1 : 0) << ','
+                         << startup_mode_name(startup_mode) << '\n';
     return stream_ok(writer->event_stream, "event_truth.csv", error_message);
 }
 
@@ -310,17 +312,17 @@ TruthWriter* create_truth_writer(const char* receiver_log_path, const char* rine
     }
 
     const char* event_header =
-        "gps_week,tow_ns,sow_sec,event_type,cycle_index,receiver_powered,signal_available,startup_mode,"
-        "truth_record_index,receiver_record_index,nav_kind,satellite_number,iode,iodc";
+        "gps_week,tow_ns,sow_sec,event_type,cycle_index,receiver_powered,signal_available,startup_mode";
     const char* observation_header =
-        "gps_week,tow_ns,sow_sec,observation_index,system,prn,satellite_number,signal_id,signal_name,"
-        "receiver_x_m,receiver_y_m,receiver_z_m,receiver_vx_mps,receiver_vy_mps,receiver_vz_mps,"
+        "gps_week,tow_ns,sow_sec,observation_index,system,prn,satellite_number,signal_id,signal_name,glonass_fcn,"
+        "wavelength_m,receiver_x_m,receiver_y_m,receiver_z_m,receiver_vx_mps,receiver_vy_mps,receiver_vz_mps,"
         "transmit_week,transmit_tow_ns,transmit_sow_sec,satellite_x_m,satellite_y_m,satellite_z_m,"
         "satellite_vx_mps,satellite_vy_mps,satellite_vz_mps,azimuth_deg,elevation_deg,geometric_range_m,"
         "range_rate_mps,satellite_clock_bias_m,satellite_clock_drift_mps,receiver_clock_bias_m,"
-        "receiver_clock_drift_mps,ionosphere_m,troposphere_m,code_bias_m,code_bias_status,cn0_dbhz,"
-        "tracking_phase,lock_time_ns,pseudorange_valid,doppler_valid,adr_valid,ambiguity_cycles,"
-        "ambiguity_epoch_week,ambiguity_epoch_tow_ns,cycle_slip,pseudorange_m,doppler_hz,adr_cycles";
+        "receiver_clock_drift_mps,ionosphere_m,troposphere_m,broadcast_message_family,tgd_sec_0,tgd_sec_1,"
+        "tgd_sec_2,tgd_sec_3,isc_sec_0,isc_sec_1,isc_sec_2,isc_sec_3,isc_sec_4,isc_sec_5,glonass_dtaun_sec,"
+        "code_bias_m,code_bias_status,cn0_dbhz,tracking_phase,lock_time_ns,pseudorange_valid,doppler_valid,adr_valid,"
+        "ambiguity_cycles,ambiguity_epoch_week,ambiguity_epoch_tow_ns,cycle_slip,pseudorange_m,doppler_hz,adr_cycles";
     const char* solution_header =
         "gps_week,tow_ns,sow_sec,tracked_satellites,position_valid,position_status,position_type,"
         "latitude_deg,longitude_deg,height_m,position_x_m,position_y_m,position_z_m,latitude_std_m,"
@@ -364,32 +366,22 @@ bool truth_writer_write_scenario_events(TruthWriter* writer, const ScenarioEpoch
         return false;
     }
     if (scenario.power_on_transition &&
-        !write_event_row(writer, scenario.time, "POWER_ON", &scenario, startup_mode, nullptr, error_message)) {
+        !write_event_row(writer, scenario.time, "POWER_ON", scenario, startup_mode, error_message)) {
         return false;
     }
     if (scenario.power_off_transition &&
-        !write_event_row(writer, scenario.time, "POWER_OFF", &scenario, startup_mode, nullptr, error_message)) {
+        !write_event_row(writer, scenario.time, "POWER_OFF", scenario, startup_mode, error_message)) {
         return false;
     }
     if (scenario.signal_on_transition &&
-        !write_event_row(writer, scenario.time, "SIGNAL_ON", &scenario, startup_mode, nullptr, error_message)) {
+        !write_event_row(writer, scenario.time, "SIGNAL_ON", scenario, startup_mode, error_message)) {
         return false;
     }
     if (scenario.signal_off_transition &&
-        !write_event_row(writer, scenario.time, "SIGNAL_OFF", &scenario, startup_mode, nullptr, error_message)) {
+        !write_event_row(writer, scenario.time, "SIGNAL_OFF", scenario, startup_mode, error_message)) {
         return false;
     }
     return true;
-}
-
-bool truth_writer_write_nav_event(TruthWriter* writer, const NavigationUpdateEvent& event,
-                                  std::string* error_message) {
-    if (writer == nullptr || writer->finalized) {
-        set_error(error_message, "truth NAV event writer is unavailable");
-        return false;
-    }
-    return write_event_row(writer, event.availability_time, "NAV_UPDATE", nullptr, StartupMode::HOT, &event,
-                           error_message);
 }
 
 bool truth_writer_write_observation(TruthWriter* writer, const ReceiverTruth& receiver,
@@ -420,12 +412,13 @@ bool truth_writer_write_observation(TruthWriter* writer, const ReceiverTruth& re
     write_time_prefix(output, geometry.receive_time);
     output << ',' << writer->observation_index++ << ',' << constellation_name(definition->constellation) << ','
            << satellite_prn(observation.satellite_number) << ',' << observation.satellite_number << ','
-           << static_cast<int>(observation.signal_id) << ',' << csv_escape(definition->name) << ',' << std::scientific
-           << std::setprecision(17) << receiver.position_ecef_m[0] << ',' << receiver.position_ecef_m[1] << ','
-           << receiver.position_ecef_m[2] << ',' << receiver.velocity_ecef_mps[0] << ',' << receiver.velocity_ecef_mps[1]
-           << ',' << receiver.velocity_ecef_mps[2] << ',' << transmit_time.gps_week << ',' << transmit_time.tow_ns << ','
-           << std::fixed << std::setprecision(9) << geometry.transmit_sow_sec << ',' << std::scientific
-           << std::setprecision(17) << geometry.satellite_state.position_ecef_m[0] << ','
+           << static_cast<int>(observation.signal_id) << ',' << csv_escape(definition->name) << ','
+           << observation.glonass_fcn << ',' << std::scientific << std::setprecision(17) << observation.wavelength_m
+           << ',' << receiver.position_ecef_m[0] << ',' << receiver.position_ecef_m[1] << ','
+           << receiver.position_ecef_m[2] << ',' << receiver.velocity_ecef_mps[0] << ','
+           << receiver.velocity_ecef_mps[1] << ',' << receiver.velocity_ecef_mps[2] << ',' << transmit_time.gps_week
+           << ',' << transmit_time.tow_ns << ',' << std::fixed << std::setprecision(9) << geometry.transmit_sow_sec << ','
+           << std::scientific << std::setprecision(17) << geometry.satellite_state.position_ecef_m[0] << ','
            << geometry.satellite_state.position_ecef_m[1] << ',' << geometry.satellite_state.position_ecef_m[2] << ','
            << geometry.satellite_state.velocity_ecef_mps[0] << ',' << geometry.satellite_state.velocity_ecef_mps[1]
            << ',' << geometry.satellite_state.velocity_ecef_mps[2] << ',' << geometry.azimuth_rad * kRadiansToDegrees
@@ -433,7 +426,12 @@ bool truth_writer_write_observation(TruthWriter* writer, const ReceiverTruth& re
            << observation.range_rate_mps << ',' << observation.satellite_clock_bias_m << ','
            << observation.satellite_clock_drift_mps << ',' << writer->config.receiver_clock_bias_m << ','
            << writer->config.receiver_clock_drift_mps << ',' << observation.ionosphere_code_delay_m << ','
-           << observation.troposphere_delay_m << ',' << observation.code_bias_m << ','
+           << observation.troposphere_delay_m << ','
+           << broadcast_message_family_name(observation.broadcast_message_family) << ',' << observation.tgd_sec[0] << ','
+           << observation.tgd_sec[1] << ',' << observation.tgd_sec[2] << ',' << observation.tgd_sec[3] << ','
+           << observation.isc_sec[0] << ',' << observation.isc_sec[1] << ',' << observation.isc_sec[2] << ','
+           << observation.isc_sec[3] << ',' << observation.isc_sec[4] << ',' << observation.isc_sec[5] << ','
+           << observation.glonass_dtaun_sec << ',' << observation.code_bias_m << ','
            << broadcast_code_bias_status_name(observation.code_bias_status) << ',' << observation.cn0_dbhz << ','
            << signal_tracking_phase_name(tracker.phase) << ',' << observation.lock_time_ns << ','
            << (observation.pseudorange_valid ? 1 : 0) << ',' << (observation.doppler_valid ? 1 : 0) << ','
@@ -471,7 +469,8 @@ bool truth_writer_write_solution(TruthWriter* writer, const SolutionEpoch& solut
 
 bool finalize_truth_writer(TruthWriter* writer, const SimulatorRunSummary& summary, const char* version,
                            const char* commit_sha, const char* rtklib_sha, std::string* error_message) {
-    if (writer == nullptr || writer->finalized || version == nullptr || commit_sha == nullptr || rtklib_sha == nullptr) {
+    if (writer == nullptr || writer->finalized || version == nullptr || commit_sha == nullptr ||
+        rtklib_sha == nullptr) {
         set_error(error_message, "truth writer finalization request has invalid arguments");
         return false;
     }
@@ -499,8 +498,8 @@ bool finalize_truth_writer(TruthWriter* writer, const SimulatorRunSummary& summa
              << "    \"hash\": \"" << writer->rinex_nav_hash << "\",\n"
              << "    \"size_bytes\": " << writer->rinex_nav_size << "\n"
              << "  },\n"
-             << "  \"start_time\": {\"gps_week\": " << writer->start_time.gps_week << ", \"tow_ns\": "
-             << writer->start_time.tow_ns << "},\n"
+             << "  \"start_time\": {\"gps_week\": " << writer->start_time.gps_week
+             << ", \"tow_ns\": " << writer->start_time.tow_ns << "},\n"
              << "  \"random_seed\": " << writer->config.seed << ",\n"
              << "  \"resolved_config\": " << config_json(writer->config, 2) << ",\n"
              << "  \"run_summary\": {\n"

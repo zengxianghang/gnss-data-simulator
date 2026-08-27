@@ -35,6 +35,10 @@ struct MeasurementObservation {
     double range_rate_mps;
     double satellite_clock_bias_m;
     double satellite_clock_drift_mps;
+    RtklibBroadcastMessageFamily broadcast_message_family;
+    double tgd_sec[4];
+    double isc_sec[6];
+    double glonass_dtaun_sec;
     double code_bias_m;
     double ionosphere_code_delay_m;
     double troposphere_delay_m;

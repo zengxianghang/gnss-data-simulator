@@ -344,8 +344,8 @@ TruthWriter* create_truth_writer(const char* receiver_log_path, const char* rine
     scenario.imbue(std::locale::classic());
     scenario << "{\n"
              << "  \"truth_schema_version\": " << TRUTH_OUTPUT_SCHEMA_VERSION << ",\n"
-             << "  \"start_time\": {\"gps_week\": " << start_time.gps_week << ", \"tow_ns\": "
-             << start_time.tow_ns << "},\n"
+             << "  \"start_time\": {\"gps_week\": " << start_time.gps_week << ", \"tow_ns\": " << start_time.tow_ns
+             << "},\n"
              << "  \"resolved_config\": " << config_json(config, 2) << "\n"
              << "}\n";
     if (!write_text_file(writer->output_directory / "scenario.json", scenario.str(), error_message)) {
@@ -417,8 +417,8 @@ bool truth_writer_write_observation(TruthWriter* writer, const ReceiverTruth& re
            << ',' << receiver.position_ecef_m[0] << ',' << receiver.position_ecef_m[1] << ','
            << receiver.position_ecef_m[2] << ',' << receiver.velocity_ecef_mps[0] << ','
            << receiver.velocity_ecef_mps[1] << ',' << receiver.velocity_ecef_mps[2] << ',' << transmit_time.gps_week
-           << ',' << transmit_time.tow_ns << ',' << std::fixed << std::setprecision(9) << geometry.transmit_sow_sec << ','
-           << std::scientific << std::setprecision(17) << geometry.satellite_state.position_ecef_m[0] << ','
+           << ',' << transmit_time.tow_ns << ',' << std::fixed << std::setprecision(9) << geometry.transmit_sow_sec
+           << ',' << std::scientific << std::setprecision(17) << geometry.satellite_state.position_ecef_m[0] << ','
            << geometry.satellite_state.position_ecef_m[1] << ',' << geometry.satellite_state.position_ecef_m[2] << ','
            << geometry.satellite_state.velocity_ecef_mps[0] << ',' << geometry.satellite_state.velocity_ecef_mps[1]
            << ',' << geometry.satellite_state.velocity_ecef_mps[2] << ',' << geometry.azimuth_rad * kRadiansToDegrees
@@ -427,8 +427,8 @@ bool truth_writer_write_observation(TruthWriter* writer, const ReceiverTruth& re
            << observation.satellite_clock_drift_mps << ',' << writer->config.receiver_clock_bias_m << ','
            << writer->config.receiver_clock_drift_mps << ',' << observation.ionosphere_code_delay_m << ','
            << observation.troposphere_delay_m << ','
-           << broadcast_message_family_name(observation.broadcast_message_family) << ',' << observation.tgd_sec[0] << ','
-           << observation.tgd_sec[1] << ',' << observation.tgd_sec[2] << ',' << observation.tgd_sec[3] << ','
+           << broadcast_message_family_name(observation.broadcast_message_family) << ',' << observation.tgd_sec[0]
+           << ',' << observation.tgd_sec[1] << ',' << observation.tgd_sec[2] << ',' << observation.tgd_sec[3] << ','
            << observation.isc_sec[0] << ',' << observation.isc_sec[1] << ',' << observation.isc_sec[2] << ','
            << observation.isc_sec[3] << ',' << observation.isc_sec[4] << ',' << observation.isc_sec[5] << ','
            << observation.glonass_dtaun_sec << ',' << observation.code_bias_m << ','

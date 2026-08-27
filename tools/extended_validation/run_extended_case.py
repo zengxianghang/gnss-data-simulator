@@ -37,6 +37,7 @@ def expected_epoch_counts(config):
     if scenario == "KS":
         powered = scheduled
         signal_on = scheduled
+        signal_off = 0
     elif scenario == "REA":
         powered = scheduled
         signal_on = periodic_on_epochs(
@@ -45,6 +46,7 @@ def expected_epoch_counts(config):
             float(config["rea"]["signal_on_sec"]),
             float(config["rea"]["signal_off_sec"]),
         )
+        signal_off = scheduled - signal_on
     elif scenario == "TTFF":
         powered = periodic_on_epochs(
             scheduled,
@@ -53,13 +55,17 @@ def expected_epoch_counts(config):
             float(config["ttff"]["power_off_sec"]),
         )
         signal_on = powered
+        # SimulatorRunSummary counts RF-off epochs only while the receiver is
+        # powered. TTFF power-off epochs are therefore represented by
+        # scheduled-powered, not by signal_off_epochs.
+        signal_off = 0
     else:
         raise ValueError(f"unsupported scenario: {scenario}")
     return {
         "scheduled_epochs": scheduled,
         "powered_epochs": powered,
         "signal_on_epochs": signal_on,
-        "signal_off_epochs": scheduled - signal_on,
+        "signal_off_epochs": signal_off,
         "range_messages": powered,
         "psrpos_messages": powered,
         "psrvel_messages": powered,
@@ -167,12 +173,6 @@ def materialize_continuous_long_gps_nav(source, destination, week, start_sow, du
 
 def case_definition(name):
     config, nav_kind, week, sow = ORIGINAL_CASE_DEFINITION(name)
-    # The committed BRD400DLR fixture is deliberately reduced for short RINEX4
-    # correctness regression and does not carry a full hour of fresh ephemeris.
-    # Use the continuously refreshed full-sky GPS fixture for the 1 h resource
-    # stress so the load remains valid for all 180,000 epochs. BRD400DLR remains
-    # exercised by the 10 min determinism and 15 min memory-trend cases, while
-    # its five-system semantics are covered by the normal #40 acceptance suite.
     if name == "stress_50hz_1h":
         return config, "long_gps", 2253, 172900
     return config, nav_kind, week, sow
@@ -207,7 +207,8 @@ def self_test():
     assert counts["scheduled_epochs"] == 80
     assert counts["powered_epochs"] == 60
     assert counts["signal_on_epochs"] == 60
-    assert counts["signal_off_epochs"] == 20
+    assert counts["signal_off_epochs"] == 0
+    assert counts["scheduled_epochs"] - counts["powered_epochs"] == 20
     assert counts["range_messages"] == 60
 
     sample = [

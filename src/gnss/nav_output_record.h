@@ -36,6 +36,7 @@ struct KeplerianNavOutputData {
     double toc_sow_sec;
     double transmit_sow_sec;
     double semi_major_axis_m;
+    double sqrt_semi_major_axis_sqrt_m;
     double eccentricity;
     double inclination_rad;
     double omega0_rad;
@@ -59,6 +60,12 @@ struct KeplerianNavOutputData {
     double fit_hours;
     bool galileo_fnav_received;
     bool galileo_inav_received;
+    int galileo_e1b_dvs;
+    int galileo_e1b_health;
+    int galileo_e5a_dvs;
+    int galileo_e5a_health;
+    int galileo_e5b_dvs;
+    int galileo_e5b_health;
     double galileo_fnav_toc_sow_sec;
     double galileo_fnav_clock[3];
     double galileo_inav_toc_sow_sec;

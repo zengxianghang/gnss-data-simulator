@@ -256,9 +256,12 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
     }
 
     RtklibBroadcastBiasData bias_data{};
-    if (!rtklib_broadcast_bias_data_for_family(
-            nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec, geometry.satellite_number,
-            requested_bias_family(signal->nav_message_family), &bias_data, error_message)) {
+    const bool signal_family_bias_available = rtklib_broadcast_bias_data_for_family(
+        nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec, geometry.satellite_number,
+        requested_bias_family(signal->nav_message_family), &bias_data, nullptr);
+    if (!signal_family_bias_available &&
+        !rtklib_broadcast_bias_data(nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec,
+                                    geometry.satellite_number, &bias_data, error_message)) {
         return false;
     }
 
@@ -291,8 +294,10 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
     result.cn0_dbhz = tracker.cn0_dbhz;
     result.lock_time_ns = tracker.lock_time_ns;
 
-    if (!compute_broadcast_code_bias_m(*signal, bias_data, &result.code_bias_m, &result.code_bias_status,
-                                       error_message)) {
+    if (!signal_family_bias_available) {
+        set_unavailable(&result.code_bias_m, &result.code_bias_status);
+    } else if (!compute_broadcast_code_bias_m(*signal, bias_data, &result.code_bias_m, &result.code_bias_status,
+                                              error_message)) {
         return false;
     }
 

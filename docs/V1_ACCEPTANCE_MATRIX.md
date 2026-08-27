@@ -15,7 +15,9 @@ Long-duration 8-hour and resource/50 Hz stress validation belongs to #41, not th
 | Requirement | Status | Evidence / executable test | Notes |
 | --- | --- | --- | --- |
 | GPS-only ideal static loopback | PASS | `SolutionEngine.IdealStaticZeroNoiseLoopbackRecoversTruth`; `StreamingSimulator.KsProducesOneLogSetPerEpoch` | Solver test uses eight GPS satellites and tight zero-noise position/velocity tolerances; streaming test exercises the simulator orchestration path. |
-| Five-system ideal static loopback | PENDING | `NavOutputWriter.LegacyMixedRinexCoversFiveEphemerisFamilies` proves NAV parsing/writer coverage only | A compact five-system NAV fixture exists, but it contains only one non-GPS satellite per system and does not yet prove a five-system full simulator/SPP loopback. #40 must add an end-to-end case before closing. |
+| Five-system ideal static loopback from real RINEX 3 NAV | PASS | `V1Acceptance.RealMixedNavProducesAllFiveV1ConstellationsAndValidSolution` | GPS, GLONASS, Galileo, BeiDou and QZSS are verified from simulator-produced `observation_truth.csv`; position and velocity must both become valid through Receiver NAV. |
+| Real BRD400DLR RINEX 4 parsing | PASS | `Rinex4Brd400.ProjectLoaderPreservesFiveSystemsAndModernEphemerisFamilies`; `Rinex4Brd400.PinnedRtklibConsumesStoEopAndIonRecords` | Reduced real WHU BRD400DLR RINEX 4.02 data covers all five V1 constellations, GPS CNAV, QZSS CNAV/CNV2, BDS CNV1/CNV2/CNV3 and STO/EOP/ION records. |
+| Five-system simulator loopback from real BRD400DLR RINEX 4 NAV | PASS | `V1Acceptance.RealBrd400DlrRinex4RunsFiveSystemReceiverNavLoopback` | The BRD400DLR fixture goes through the normal pinned-RTKLIB Truth-NAV/Receiver-NAV, satellite, measurement, RANGE and solution path; all five systems must appear and position/velocity must become valid. |
 | Every frozen V1 signal mapping | PASS | `SignalDefinitions.CoversEveryFrozenV1SignalExactlyOnce`; `SignalDefinitions.FrozenMappingsMatchExpectedValuesAndRoundTrip` | Explicit table contains all 21 frozen V1 signals. |
 | 1/5/10/20/50 Hz full streaming pipeline | PASS | `V1Acceptance.FrozenRatesRunThroughFullStreamingPipeline` | #40 runs the actual simulator for 10 s at each frozen rate and checks exact message/epoch counts plus truth artifacts. |
 | GPST week crossover | PASS | `ScenarioEngine.KsRemainsPoweredAndSignalOn`; satellite-engine cross-week tests | Integer-time scenario state already crosses week 2300 -> 2301 without false transitions. |
@@ -34,15 +36,19 @@ Long-duration 8-hour and resource/50 Hz stress validation belongs to #41, not th
 | Deterministic complete run rerun | PASS | `V1Acceptance.SameInputConfigAndSeedProduceByteIdenticalReceiverAndTruthOutputs` | #40 additionally byte-compares `simulated.log` together with every truth artifact. |
 | OEM7 RANGEA/PSRPOSA/PSRVELA representative golden/format coverage | PASS | `test_output_writers.cpp` suite | Existing writer tests cover valid/invalid and tracking-status serialization. |
 | OEM7/N4 navigation output across five constellations | PASS | `NavOutputWriter.LegacyMixedRinexCoversFiveEphemerisFamilies`; `NavOutputWriter.LegacyIonosphereMetadataMapsToFrozenFamilies` | Same Receiver-NAV records are serialized into both output families. |
-| Normal CI on Ubuntu/GCC + Windows/MSVC + format | PENDING | PR CI | #40 may merge only after all three jobs are green. |
+| Normal CI on Ubuntu/GCC + Windows/MSVC + format | PENDING | PR CI | #40 may merge only after all three jobs are green on the final head. |
+
+## Real-navigation fixture policy
+
+The short suite deliberately contains both RINEX 3 and RINEX 4 real broadcast-navigation fixtures. The RINEX 4 case is derived from `BRD400DLR`, not from a hand-authored synthetic navigation file, so modern message-family parsing is exercised with real field layouts.
+
+Large upstream products are never fetched during normal CI. `tools/download_igs/materialize_brd4_fixture.py` deterministically reduces the selected BRD400DLR day to a compact checked-in fixture and writes source/fixture hashes and the selected message inventory to `brd400dlr_rinex4_acceptance_nav.meta.json`.
 
 ## Five-system loopback completion rule
 
-Issue #40 remains open until one deterministic short end-to-end run proves that GPS, GLONASS, Galileo, BeiDou and QZSS observations are all produced from a common truth state in the same run and the receiver solution is valid without bypassing the normal simulator/Receiver-NAV path.
+Issue #40 requires deterministic short end-to-end runs proving that GPS, GLONASS, Galileo, BeiDou and QZSS observations are all produced from a common truth state in the same run and that the receiver solution is valid without bypassing the normal simulator/Receiver-NAV path. This is now exercised independently with real RINEX 3 mixed NAV and real BRD400DLR RINEX 4 NAV.
 
-The acceptance test must record the participating systems from `observation_truth.csv` (or an equivalent simulator-produced truth artifact) rather than inferring participation merely because the NAV fixture contains records for five constellations.
-
-If the current compact fixtures cannot provide sufficient simultaneously visible satellites and Receiver-NAV observability for a five-system SPP solution, #40 must add a compact deterministic fixture. It must not relax solver validity or use Truth NAV directly to manufacture a PASS.
+The acceptance tests record participating systems from `observation_truth.csv` rather than inferring participation merely because a NAV fixture contains records for five constellations. They do not relax solver validity or use Truth NAV directly to manufacture a PASS.
 
 ## Numerical policy
 

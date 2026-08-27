@@ -1,8 +1,8 @@
 #ifndef GNSS_SIM_TOOLS_BUILD_CN0_MODEL_RINEX_OBS_STREAM_H_
 #define GNSS_SIM_TOOLS_BUILD_CN0_MODEL_RINEX_OBS_STREAM_H_
 
-#include "gnss/signal_definitions.h"
 #include "gnss_sim/sim_time.h"
+#include "src/gnss/signal_definitions.h"
 
 #include <cstdint>
 #include <functional>

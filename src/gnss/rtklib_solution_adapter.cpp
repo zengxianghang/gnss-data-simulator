@@ -68,63 +68,16 @@ unsigned char snr_quarter_dbhz(double cn0_dbhz) {
     return static_cast<unsigned char>(scaled + 0.5);
 }
 
-bool legacy_prange_adjustment_m(const nav_t& nav, int satellite_number, int observation_code, double* adjustment_m) {
-    if (adjustment_m == nullptr || satellite_number <= 0 || satellite_number > MAXSAT || observation_code <= 0 ||
-        observation_code > 255) {
+bool raw_solver_pseudorange_m(const RtklibSolutionObservation& observation, double* pseudorange_m) {
+    if (pseudorange_m == nullptr || !std::isfinite(observation.pseudorange_m) || observation.pseudorange_m <= 0.0) {
         return false;
     }
-
-    const int system = satsys(satellite_number, nullptr);
-    const int second_frequency_index = (system & (SYS_GAL | SYS_SBS)) ? 2 : 1;
-    const double first_wavelength_m = nav.lam[satellite_number - 1][0];
-    const double second_wavelength_m = nav.lam[satellite_number - 1][second_frequency_index];
-    if (!(first_wavelength_m > 0.0) || !(second_wavelength_m > 0.0)) {
-        return false;
-    }
-
-    const double ratio = second_wavelength_m / first_wavelength_m;
-    const double gamma = ratio * ratio;
-    if (!std::isfinite(gamma) || std::fabs(1.0 - gamma) < 1.0e-12) {
-        return false;
-    }
-
-    double p1_p2_m = nav.cbias[satellite_number - 1][0];
-    const double p1_c1_m = nav.cbias[satellite_number - 1][1];
-    if (p1_p2_m == 0.0 && (system & (SYS_GPS | SYS_GAL | SYS_QZS))) {
-        for (int index = 0; index < nav.n; ++index) {
-            if (nav.eph[index].sat == satellite_number) {
-                p1_p2_m = (1.0 - gamma) * kSpeedOfLightMps * nav.eph[index].tgd[0];
-                break;
-            }
-        }
-    }
-
-    double adjustment = -p1_p2_m / (1.0 - gamma);
-    if (observation_code == CODE_L1C) {
-        adjustment += p1_c1_m;
-    }
-    *adjustment_m = adjustment;
-    return std::isfinite(adjustment);
-}
-
-bool solver_pseudorange_m(const nav_t& nav, const RtklibSolutionObservation& observation, double* pseudorange_m) {
-    if (pseudorange_m == nullptr || !std::isfinite(observation.pseudorange_m) || observation.pseudorange_m <= 0.0 ||
-        !std::isfinite(observation.code_bias_m)) {
-        return false;
-    }
-
-    double legacy_adjustment_m = 0.0;
-    if (!legacy_prange_adjustment_m(nav, observation.satellite_number, observation.observation_code,
-                                    &legacy_adjustment_m)) {
-        return false;
-    }
-
-    // #11 emits raw signal-specific pseudorange. Remove its explicit
-    // TGD/BGD/ISC term, then pre-compensate the adjustment that the pinned
-    // RTKLIB prange() applies. The PC seen by rescode() is therefore the
-    // broadcast-clock-referenced pseudorange without modifying pntpos().
-    *pseudorange_m = observation.pseudorange_m - observation.code_bias_m - legacy_adjustment_m;
-    return std::isfinite(*pseudorange_m) && *pseudorange_m > 0.0;
+    // RTKLIB Issue #6 makes the receiver model itself responsible for the
+    // signal-specific broadcast code-bias correction. Keep RANGEA/raw
+    // pseudorange physical and do not pre-compensate it at the simulator
+    // boundary.
+    *pseudorange_m = observation.pseudorange_m;
+    return true;
 }
 
 void fill_common_observation(const RtklibSolutionObservation& source, gtime_t time, obsd_t* destination) {
@@ -163,7 +116,7 @@ bool rtklib_solve_single_position(const RtklibNavStore* receiver_nav, int gps_we
             continue;
         }
         double pseudorange_m = 0.0;
-        if (!solver_pseudorange_m(receiver_nav->nav, source, &pseudorange_m)) {
+        if (!raw_solver_pseudorange_m(source, &pseudorange_m)) {
             continue;
         }
         fill_common_observation(source, epoch_time, &rtklib_observations[usable_count]);

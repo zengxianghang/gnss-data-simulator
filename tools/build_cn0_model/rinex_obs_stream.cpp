@@ -10,17 +10,19 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <limits>
 #include <memory>
 #include <set>
 #include <sstream>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace gnss_sim::cn0_builder {
 namespace {
 
-constexpr std::int64_t kNanosecondsPerSecond = 1000000000LL;
 constexpr int kObservationSlotCount = NFREQ + NEXOBS;
 static_assert(kObservationSlotCount >= 5, "CN0 builder needs enough RTKLIB observation slots for V1 signals");
 
@@ -47,10 +49,17 @@ struct RinexControlGuard {
     }
 };
 
+struct HeaderIndexEntry {
+    unsigned char code{};
+    int frequency{};
+    int priority{};
+    int slot{-1};
+};
+
 struct DeclaredSignal {
     int rtklib_system{};
     GnssConstellation constellation{GnssConstellation::kGps};
-    unsigned char observation_code{};
+    int slot{-1};
     const SignalDefinition* definition{};
 };
 
@@ -61,11 +70,11 @@ void set_error(std::string* error_message, const std::string& message) {
 }
 
 std::string trim(std::string value) {
-    const auto begin = value.find_first_not_of(" \t\r\n");
+    const std::size_t begin = value.find_first_not_of(" \t\r\n");
     if (begin == std::string::npos) {
         return {};
     }
-    const auto end = value.find_last_not_of(" \t\r\n");
+    const std::size_t end = value.find_last_not_of(" \t\r\n");
     return value.substr(begin, end - begin + 1);
 }
 
@@ -154,8 +163,8 @@ bool constellation_from_rtklib(int system, GnssConstellation* constellation) {
 
 std::string normalize_rinex_signal_code(GnssConstellation constellation, std::string code) {
     // The pinned RTKLIB parser normalizes RINEX-3 BeiDou B1I 2I to its
-    // historical internal alias 1I. Convert that internal alias back to the
-    // authoritative RINEX signal identifier used by the simulator table.
+    // historical internal alias 1I. Convert that alias back to the simulator's
+    // authoritative RINEX signal identifier.
     if (constellation == GnssConstellation::kBeidou && code == "1I") {
         return "2I";
     }
@@ -186,34 +195,97 @@ std::string unsupported_key(int rtklib_system, const char* observation_type) {
     return std::string(1, system) + ":" + (observation_type != nullptr ? observation_type : "");
 }
 
+void remap_beidou_frequency(int system, int* frequency) {
+    if (system != SYS_CMP || frequency == nullptr) {
+        return;
+    }
+    if (*frequency == 5) {
+        *frequency = 2;
+    } else if (*frequency == 4) {
+        *frequency = 3;
+    }
+}
+
+std::vector<HeaderIndexEntry> build_header_index(int system, const char tobs[MAXOBSTYPE][4]) {
+    std::vector<HeaderIndexEntry> entries;
+    for (int index = 0; index < MAXOBSTYPE && tobs[index][0] != '\0'; ++index) {
+        int frequency = 0;
+        const unsigned char code = obs2code_ext(tobs[index] + 1, &frequency);
+        remap_beidou_frequency(system, &frequency);
+        const int priority = code != CODE_NONE ? getcodepri_ext(system, code, "") : 0;
+        entries.push_back({code, frequency, priority, -1});
+    }
+
+    for (int frequency_slot = 0; frequency_slot < NFREQ; ++frequency_slot) {
+        int selected = -1;
+        for (int index = 0; index < static_cast<int>(entries.size()); ++index) {
+            if (entries[index].frequency != frequency_slot + 1 || entries[index].priority <= 0) {
+                continue;
+            }
+            if (selected < 0 || entries[index].priority > entries[selected].priority) {
+                selected = index;
+            }
+        }
+        if (selected < 0) {
+            continue;
+        }
+        const unsigned char selected_code = entries[selected].code;
+        for (HeaderIndexEntry& entry : entries) {
+            if (entry.code == selected_code) {
+                entry.slot = frequency_slot;
+            }
+        }
+    }
+
+    for (int extended_slot = 0; extended_slot < NEXOBS; ++extended_slot) {
+        int selected = -1;
+        for (int index = 0; index < static_cast<int>(entries.size()); ++index) {
+            if (entries[index].code != CODE_NONE && entries[index].priority > 0 && entries[index].slot < 0) {
+                selected = index;
+                break;
+            }
+        }
+        if (selected < 0) {
+            break;
+        }
+        const unsigned char selected_code = entries[selected].code;
+        for (HeaderIndexEntry& entry : entries) {
+            if (entry.code == selected_code) {
+                entry.slot = NFREQ + extended_slot;
+            }
+        }
+    }
+    return entries;
+}
+
 std::vector<DeclaredSignal> declared_cn0_signals(const rnxctr_t& control, RinexObsStreamSummary* summary) {
     const int systems[6] = {SYS_GPS, SYS_GLO, SYS_GAL, SYS_QZS, SYS_SBS, SYS_CMP};
     std::vector<DeclaredSignal> signals;
     std::set<std::string> unsupported;
 
     for (int system_index = 0; system_index < 6; ++system_index) {
+        const int system = systems[system_index];
         GnssConstellation constellation{};
-        const bool supported_constellation = constellation_from_rtklib(systems[system_index], &constellation);
-        for (int type_index = 0; type_index < MAXOBSTYPE && control.tobs[system_index][type_index][0] != '\0';
-             ++type_index) {
+        const bool supported_constellation = constellation_from_rtklib(system, &constellation);
+        const std::vector<HeaderIndexEntry> entries = build_header_index(system, control.tobs[system_index]);
+        for (int type_index = 0; type_index < static_cast<int>(entries.size()); ++type_index) {
             const char* observation_type = control.tobs[system_index][type_index];
             if (observation_type[0] != 'S') {
                 continue;
             }
             if (!supported_constellation) {
-                unsupported.insert(unsupported_key(systems[system_index], observation_type));
+                unsupported.insert(unsupported_key(system, observation_type));
                 continue;
             }
 
-            int frequency = 0;
-            const unsigned char observation_code = obs2code_ext(observation_type + 1, &frequency);
             const std::string rinex_code = normalize_rinex_signal_code(constellation, observation_type + 1);
             const SignalDefinition* definition = find_signal_definition_by_rinex(constellation, rinex_code.c_str());
-            if (observation_code == CODE_NONE || frequency <= 0 || definition == nullptr) {
-                unsupported.insert(unsupported_key(systems[system_index], observation_type));
+            if (entries[type_index].code == CODE_NONE || entries[type_index].priority <= 0 ||
+                entries[type_index].slot < 0 || definition == nullptr) {
+                unsupported.insert(unsupported_key(system, observation_type));
                 continue;
             }
-            signals.push_back({systems[system_index], constellation, observation_code, definition});
+            signals.push_back({system, constellation, entries[type_index].slot, definition});
         }
     }
 
@@ -231,8 +303,8 @@ gtime_t observation_time_to_gpst(gtime_t time, int time_system) {
     if (time_system == TSYS_CMP) {
         return bdt2gpst(time);
     }
-    // Match RTKLIB readrnxobs(): GPS, Galileo and QZSS observation epochs are
-    // used directly on the GPST-aligned timeline; only UTC is converted there.
+    // GPST, GST and QZST share the same coarse epoch timeline for this
+    // simulator boundary. BeiDou and UTC/GLONASS require explicit conversion.
     return time;
 }
 
@@ -261,29 +333,7 @@ bool gtime_to_sim_time(gtime_t time, SimTime* sim_time) {
     }
     int week = 0;
     const double sow_sec = time2gpst(time, &week);
-    if (week < 0 || !std::isfinite(sow_sec)) {
-        return false;
-    }
-
-    std::int64_t tow_ns = static_cast<std::int64_t>(std::llround(sow_sec * static_cast<double>(kNanosecondsPerSecond)));
-    while (tow_ns >= GPS_WEEK_NANOSECONDS) {
-        tow_ns -= GPS_WEEK_NANOSECONDS;
-        ++week;
-    }
-    while (tow_ns < 0) {
-        if (week == 0) {
-            return false;
-        }
-        tow_ns += GPS_WEEK_NANOSECONDS;
-        --week;
-    }
-    sim_time->gps_week = week;
-    sim_time->tow_ns = tow_ns;
-    return true;
-}
-
-bool time_precedes(const SimTime& lhs, const SimTime& rhs) {
-    return lhs.gps_week < rhs.gps_week || (lhs.gps_week == rhs.gps_week && lhs.tow_ns < rhs.tow_ns);
+    return week >= 0 && std::isfinite(sow_sec) && sim_time_from_week_sow(week, sow_sec, sim_time);
 }
 
 bool make_receiver_truth(const sta_t& station, ReceiverTruth* receiver, std::string* error_message) {
@@ -321,13 +371,13 @@ int satellite_prn(int satellite_number) {
     return static_cast<int>(value);
 }
 
-int find_observation_slot(const obsd_t& observation, unsigned char observation_code) {
-    for (int slot = 0; slot < kObservationSlotCount; ++slot) {
-        if (observation.code[slot] == observation_code) {
-            return slot;
+bool slot_is_declared(const std::vector<DeclaredSignal>& signals, int system, int slot) {
+    for (const DeclaredSignal& declared : signals) {
+        if (declared.rtklib_system == system && declared.slot == slot) {
+            return true;
         }
     }
-    return -1;
+    return false;
 }
 
 } // namespace
@@ -457,11 +507,11 @@ bool stream_rinex_cn0_samples(const std::string& observation_path, const std::st
             set_error(error_message, "cannot normalize RINEX observation epoch to GPST");
             return false;
         }
-        if (have_previous_epoch && time_precedes(epoch, previous_epoch)) {
+        if (have_previous_epoch && compare_sim_time(epoch, previous_epoch) < 0) {
             ++summary->out_of_order_epochs;
             std::ostringstream message;
             message << "RINEX observation epochs are out of order at GPST " << epoch.gps_week << ':'
-                    << static_cast<double>(epoch.tow_ns) / static_cast<double>(kNanosecondsPerSecond);
+                    << sim_time_sow_sec(epoch);
             set_error(error_message, message.str());
             return false;
         }
@@ -487,7 +537,7 @@ bool stream_rinex_cn0_samples(const std::string& observation_path, const std::st
             }
 
             for (int slot = 0; slot < kObservationSlotCount; ++slot) {
-                if (observation.SNR[slot] != 0 && observation.code[slot] == CODE_NONE) {
+                if (observation.SNR[slot] != 0 && !slot_is_declared(declared_signals, rtklib_system, slot)) {
                     ++summary->unmapped_snr_slots;
                 }
             }
@@ -496,8 +546,7 @@ bool stream_rinex_cn0_samples(const std::string& observation_path, const std::st
                 if (declared.rtklib_system != rtklib_system) {
                     continue;
                 }
-                const int slot = find_observation_slot(observation, declared.observation_code);
-                if (slot < 0 || observation.SNR[slot] == 0) {
+                if (declared.slot < 0 || declared.slot >= kObservationSlotCount || observation.SNR[declared.slot] == 0) {
                     ++summary->missing_signal_strength;
                     continue;
                 }
@@ -507,25 +556,29 @@ bool stream_rinex_cn0_samples(const std::string& observation_path, const std::st
                 sample.constellation = constellation;
                 sample.satellite_number = observation.sat;
                 sample.prn = satellite_prn(observation.sat);
-                sample.signal_id = declared.definition->id;
+                sample.signal_id = declared.definition->signal_id;
                 sample.rinex_signal_code = declared.definition->rinex_signal_code;
-                sample.signal_strength_value = static_cast<double>(observation.SNR[slot]) * 0.25;
+                sample.signal_strength_value = static_cast<double>(observation.SNR[declared.slot]) * 0.25;
                 sample.cn0_dbhz = std::numeric_limits<double>::quiet_NaN();
                 sample.azimuth_rad = std::numeric_limits<double>::quiet_NaN();
                 sample.elevation_rad = std::numeric_limits<double>::quiet_NaN();
+                sample.provenance = provenance;
 
+                if (provenance->signal_strength_unit_status == SignalStrengthUnitStatus::kDbHz) {
+                    sample.cn0_dbhz = sample.signal_strength_value;
+                }
                 if (geometry_valid) {
                     sample.azimuth_rad = geometry.azimuth_rad;
                     sample.elevation_rad = geometry.elevation_rad;
                 }
-                if (!geometry_valid) {
-                    sample.validity = Cn0SampleValidity::kGeometryUnavailable;
-                } else if (provenance->signal_strength_unit_status != SignalStrengthUnitStatus::kDbHz) {
+
+                if (provenance->signal_strength_unit_status != SignalStrengthUnitStatus::kDbHz) {
                     sample.validity = Cn0SampleValidity::kAmbiguousSignalStrengthUnit;
                     ++summary->ambiguous_unit_samples;
+                } else if (!geometry_valid) {
+                    sample.validity = Cn0SampleValidity::kGeometryUnavailable;
                 } else {
                     sample.validity = Cn0SampleValidity::kValidDbHz;
-                    sample.cn0_dbhz = sample.signal_strength_value;
                     ++summary->valid_dbhz_samples;
                 }
 

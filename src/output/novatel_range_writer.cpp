@@ -160,8 +160,8 @@ bool format_novatel_rangea(const SimTime& time, const MeasurementObservation* ob
         const double adr_cycles = observation->adr_valid ? observation->adr_cycles : 0.0;
         const double adr_sigma_cycles = observation->adr_valid ? kAdrSigmaCycles : 0.0;
         const double doppler_hz = observation->doppler_valid ? observation->doppler_hz : 0.0;
-        const double lock_time_sec = static_cast<double>(observation->lock_time_ns) /
-                                     static_cast<double>(NANOSECONDS_PER_SECOND);
+        const double lock_time_sec =
+            static_cast<double>(observation->lock_time_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
 
         body << ',' << range_prn << ',' << glofreq << ',' << std::fixed << std::setprecision(3) << pseudorange_m << ','
              << pseudorange_sigma_m << ',' << std::setprecision(6) << adr_cycles << ',' << std::setprecision(3)

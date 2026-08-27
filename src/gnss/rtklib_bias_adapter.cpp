@@ -41,48 +41,6 @@ double maximum_ephemeris_age_sec(int system) {
     }
 }
 
-const eph_t* select_ephemeris(const nav_t& nav, gtime_t time, int satellite_number) {
-    const int system = satsys(satellite_number, nullptr);
-    const double maximum_age_sec = maximum_ephemeris_age_sec(system);
-    const eph_t* selected = nullptr;
-    double selected_age_sec = maximum_age_sec + 1.0;
-    for (int index = 0; index < nav.n; ++index) {
-        const eph_t& eph = nav.eph[index];
-        if (eph.sat != satellite_number) {
-            continue;
-        }
-        const double age_sec = std::fabs(timediff(eph.toe, time));
-        if (age_sec > maximum_age_sec) {
-            continue;
-        }
-        if (selected == nullptr || age_sec <= selected_age_sec) {
-            selected = &eph;
-            selected_age_sec = age_sec;
-        }
-    }
-    return selected;
-}
-
-const geph_t* select_glonass_ephemeris(const nav_t& nav, gtime_t time, int satellite_number) {
-    const geph_t* selected = nullptr;
-    double selected_age_sec = MAXDTOE_GLO + 1.0;
-    for (int index = 0; index < nav.ng; ++index) {
-        const geph_t& geph = nav.geph[index];
-        if (geph.sat != satellite_number) {
-            continue;
-        }
-        const double age_sec = std::fabs(timediff(geph.toe, time));
-        if (age_sec > MAXDTOE_GLO) {
-            continue;
-        }
-        if (selected == nullptr || age_sec <= selected_age_sec) {
-            selected = &geph;
-            selected_age_sec = age_sec;
-        }
-    }
-    return selected;
-}
-
 RtklibBroadcastMessageFamily message_family(const eph_t& eph, int system) {
     const int message_type = eph.hdr.msg_type;
     if (system == SYS_GAL) {
@@ -134,10 +92,66 @@ RtklibBroadcastMessageFamily message_family(const eph_t& eph, int system) {
     return RtklibBroadcastMessageFamily::kUnknown;
 }
 
-} // namespace
+RtklibBroadcastMessageFamily message_family(const geph_t& geph) {
+    if (geph.hdr.msg_type == NAV_L3OC) {
+        return RtklibBroadcastMessageFamily::kGlonassL3Oc;
+    }
+    return RtklibBroadcastMessageFamily::kGlonassFdma;
+}
 
-bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
-                                RtklibBroadcastBiasData* data, std::string* error_message) {
+bool family_matches(RtklibBroadcastMessageFamily actual, RtklibBroadcastMessageFamily required) {
+    return required == RtklibBroadcastMessageFamily::kUnknown || actual == required;
+}
+
+const eph_t* select_ephemeris(const nav_t& nav, gtime_t time, int satellite_number,
+                              RtklibBroadcastMessageFamily required_family) {
+    const int system = satsys(satellite_number, nullptr);
+    const double maximum_age_sec = maximum_ephemeris_age_sec(system);
+    const eph_t* selected = nullptr;
+    double selected_age_sec = maximum_age_sec + 1.0;
+    for (int index = 0; index < nav.n; ++index) {
+        const eph_t& eph = nav.eph[index];
+        if (eph.sat != satellite_number || !family_matches(message_family(eph, system), required_family)) {
+            continue;
+        }
+        const double age_sec = std::fabs(timediff(eph.toe, time));
+        if (age_sec > maximum_age_sec) {
+            continue;
+        }
+        if (selected == nullptr || age_sec < selected_age_sec ||
+            (std::fabs(age_sec - selected_age_sec) <= 1e-9 && timediff(eph.toc, selected->toc) > 0.0)) {
+            selected = &eph;
+            selected_age_sec = age_sec;
+        }
+    }
+    return selected;
+}
+
+const geph_t* select_glonass_ephemeris(const nav_t& nav, gtime_t time, int satellite_number,
+                                       RtklibBroadcastMessageFamily required_family) {
+    const geph_t* selected = nullptr;
+    double selected_age_sec = MAXDTOE_GLO + 1.0;
+    for (int index = 0; index < nav.ng; ++index) {
+        const geph_t& geph = nav.geph[index];
+        if (geph.sat != satellite_number || !family_matches(message_family(geph), required_family)) {
+            continue;
+        }
+        const double age_sec = std::fabs(timediff(geph.toe, time));
+        if (age_sec > MAXDTOE_GLO) {
+            continue;
+        }
+        if (selected == nullptr || age_sec < selected_age_sec ||
+            (std::fabs(age_sec - selected_age_sec) <= 1e-9 && timediff(geph.tof, selected->tof) > 0.0)) {
+            selected = &geph;
+            selected_age_sec = age_sec;
+        }
+    }
+    return selected;
+}
+
+bool broadcast_bias_data_impl(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
+                              RtklibBroadcastMessageFamily required_family, RtklibBroadcastBiasData* data,
+                              std::string* error_message) {
     if (store == nullptr || data == nullptr || satellite_number <= 0 || !valid_gps_time(gps_week, sow_sec)) {
         set_error(error_message, "broadcast-bias request has invalid arguments");
         return false;
@@ -151,12 +165,12 @@ bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, doubl
     result.glonass_fcn = 0;
 
     if (system == SYS_GLO) {
-        const geph_t* geph = select_glonass_ephemeris(store->nav, time, satellite_number);
+        const geph_t* geph = select_glonass_ephemeris(store->nav, time, satellite_number, required_family);
         if (geph == nullptr) {
-            set_error(error_message, "no matching GLONASS ephemeris for broadcast bias");
+            set_error(error_message, "no matching GLONASS ephemeris/message family for broadcast bias");
             return false;
         }
-        result.message_family = RtklibBroadcastMessageFamily::kGlonassFdma;
+        result.message_family = message_family(*geph);
         result.iode = geph->iode;
         result.glonass_fcn = geph->frq;
         result.glonass_dtaun_sec = geph->dtaun;
@@ -164,9 +178,9 @@ bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, doubl
         return true;
     }
 
-    const eph_t* eph = select_ephemeris(store->nav, time, satellite_number);
+    const eph_t* eph = select_ephemeris(store->nav, time, satellite_number, required_family);
     if (eph == nullptr) {
-        set_error(error_message, "no matching broadcast ephemeris for code bias");
+        set_error(error_message, "no matching broadcast ephemeris/message family for code bias");
         return false;
     }
 
@@ -176,6 +190,20 @@ bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, doubl
     std::memcpy(result.isc_sec, eph->isc, sizeof(result.isc_sec));
     *data = result;
     return true;
+}
+
+} // namespace
+
+bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
+                                RtklibBroadcastBiasData* data, std::string* error_message) {
+    return broadcast_bias_data_impl(store, gps_week, sow_sec, satellite_number,
+                                    RtklibBroadcastMessageFamily::kUnknown, data, error_message);
+}
+
+bool rtklib_broadcast_bias_data_for_family(const RtklibNavStore* store, int gps_week, double sow_sec,
+                                           int satellite_number, RtklibBroadcastMessageFamily required_family,
+                                           RtklibBroadcastBiasData* data, std::string* error_message) {
+    return broadcast_bias_data_impl(store, gps_week, sow_sec, satellite_number, required_family, data, error_message);
 }
 
 } // namespace gnss_sim

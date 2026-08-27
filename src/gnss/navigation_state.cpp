@@ -60,6 +60,33 @@ bool record_transmitted_at_or_before(const RtklibNavStore* truth_nav, int record
     return compare_sim_time(record_time, time) <= 0;
 }
 
+bool same_record_identity(const RtklibNavRecordInfo& lhs, const RtklibNavRecordInfo& rhs) {
+    if (lhs.kind != rhs.kind || lhs.satellite_number != rhs.satellite_number || lhs.system != rhs.system ||
+        lhs.prn != rhs.prn || lhs.message_type != rhs.message_type || lhs.iode != rhs.iode || lhs.iodc != rhs.iodc ||
+        lhs.gps_week != rhs.gps_week) {
+        return false;
+    }
+    SimTime lhs_time{};
+    SimTime rhs_time{};
+    if (!sim_time_from_week_sow(lhs.gps_week, lhs.transmit_sow_sec, &lhs_time) ||
+        !sim_time_from_week_sow(rhs.gps_week, rhs.transmit_sow_sec, &rhs_time)) {
+        return false;
+    }
+    return compare_sim_time(lhs_time, rhs_time) == 0;
+}
+
+int find_receiver_record_index(const RtklibNavStore* receiver_nav, const RtklibNavRecordInfo& source_info) {
+    const int count = rtklib_nav_record_count(receiver_nav);
+    for (int index = count - 1; index >= 0; --index) {
+        RtklibNavRecordInfo receiver_info{};
+        if (rtklib_nav_record_info(receiver_nav, index, &receiver_info) &&
+            same_record_identity(source_info, receiver_info)) {
+            return index;
+        }
+    }
+    return -1;
+}
+
 } // namespace
 
 NavigationState* create_navigation_state() {
@@ -157,11 +184,17 @@ bool apply_truth_navigation_record(NavigationState* state, int truth_record_inde
         return false;
     }
 
+    const int receiver_record_index = find_receiver_record_index(state->receiver_nav, info);
+    if (receiver_record_index < 0) {
+        set_error(error_message, "cannot locate copied receiver navigation record");
+        return false;
+    }
+
     state->delivered_records[truth_record_index] = 1;
     if (event != nullptr) {
         event->availability_time = availability_time;
         event->truth_record_index = truth_record_index;
-        event->receiver_record_index = rtklib_nav_record_count(state->receiver_nav) - 1;
+        event->receiver_record_index = receiver_record_index;
         event->kind = info.kind;
         event->satellite_number = info.satellite_number;
         event->system = info.system;

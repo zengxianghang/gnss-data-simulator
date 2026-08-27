@@ -161,6 +161,7 @@ bool apply_truth_navigation_record(NavigationState* state, int truth_record_inde
     if (event != nullptr) {
         event->availability_time = availability_time;
         event->truth_record_index = truth_record_index;
+        event->receiver_record_index = rtklib_nav_record_count(state->receiver_nav) - 1;
         event->kind = info.kind;
         event->satellite_number = info.satellite_number;
         event->system = info.system;

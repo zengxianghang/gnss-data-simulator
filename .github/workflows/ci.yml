@@ -5,67 +5,12 @@ on:
   push:
     branches:
       - main
-      - issue-39-runtime-cn0-model
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  review-fix:
-    if: github.event_name == 'push' && github.ref_name == 'issue-39-runtime-cn0-model'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: issue-39-runtime-cn0-model
-      - name: Apply deterministic review fix
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          source = Path('src/model/cn0_model.cpp')
-          text = source.read_text()
-          old = '    if (delta_available[0] && (delta_count == 0 || delta[0] < 0.0 || delta[0] > delta[1] || delta[1] > delta[2])) {\n'
-          new = '''    if ((delta_count == 0 && delta_available[0]) || (delta_count > 0 && !delta_available[0])) {
-              set_error(error_message, "CN0 model delta_count/statistics availability are inconsistent at line " +
-                                           std::to_string(line_number));
-              return false;
-          }
-          if (delta_available[0] && (delta[0] < 0.0 || delta[0] > delta[1] || delta[1] > delta[2])) {
-          '''
-          if text.count(old) != 1:
-              raise SystemExit('source condition anchor mismatch')
-          source.write_text(text.replace(old, new))
-
-          test = Path('tests/unit/test_cn0_model.cpp')
-          text = test.read_text()
-          anchor = '    const std::string cases[] = {std::string("bad-header\\n") + valid_row + "\\n", duplicate, nonfinite};\n'
-          insert = '''    const std::string missing_delta_statistics =
-              std::string(kModelHeader) +
-              "\\ngnss-cn0-model-v1,GPS,1C,0,90,1,READY,100,39,39,39,40,41,41,41,40,1,1,1,,,,INSUFFICIENT_SUPPORT,\\n";
-              const std::string cases[] = {std::string("bad-header\\n") + valid_row + "\\n", duplicate, nonfinite,
-                                           missing_delta_statistics};
-          '''
-          if text.count(anchor) != 1:
-              raise SystemExit('test cases anchor mismatch')
-          test.write_text(text.replace(anchor, insert))
-          PY
-          mapfile -t files < <(find include src tests tools -type f \( -name '*.h' -o -name '*.c' -o -name '*.cpp' \) | sort)
-          clang-format -i "${files[@]}"
-          git diff --check
-      - name: Commit review fix
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/model/cn0_model.cpp tests/unit/test_cn0_model.cpp
-          git commit -m "fix: validate CN0 delta statistic availability"
-          git push origin HEAD:issue-39-runtime-cn0-model
-
   format:
-    if: github.event_name != 'push' || github.ref_name != 'issue-39-runtime-cn0-model'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -85,7 +30,6 @@ jobs:
           fi
 
   build-test:
-    if: github.event_name != 'push' || github.ref_name != 'issue-39-runtime-cn0-model'
     strategy:
       fail-fast: false
       matrix:

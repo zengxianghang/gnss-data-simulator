@@ -19,9 +19,20 @@ from typing import Dict, Iterable, List, Sequence, Set, Tuple
 WINDOW_DATE = (2025, 1, 3)
 WINDOW_HOURS = {0, 1, 2}
 SIM_SYSTEMS = {"G", "R", "E", "C", "J"}
-REQUIRED_MODERN = {
+KNOWN_MODERN = {
     ("G", "CNAV"),
     ("G", "CNV2"),
+    ("J", "CNAV"),
+    ("J", "CNV2"),
+    ("C", "CNV1"),
+    ("C", "CNV2"),
+    ("C", "CNV3"),
+}
+# Product capability is not a promise that every daily file contains every
+# modern family. Freeze representative families that are present in the chosen
+# real BRD400DLR day; record every known modern family that is actually found.
+REQUIRED_MODERN = {
+    ("G", "CNAV"),
     ("J", "CNAV"),
     ("J", "CNV2"),
     ("C", "CNV1"),
@@ -116,9 +127,9 @@ def select_records(records: Sequence[Sequence[str]]) -> Tuple[List[int], Dict[st
                 year, month, day, hour = epoch
                 if (year, month, day) == WINDOW_DATE and hour in WINDOW_HOURS:
                     selected.add(index)
-            if (system, message) in REQUIRED_MODERN and (system, message) not in modern_found:
-                selected.add(index)
+            if (system, message) in KNOWN_MODERN:
                 modern_found.add((system, message))
+                selected.add(index)
         elif kind in AUX_TYPES:
             key = aux_key(record)
             if key not in aux_seen:
@@ -128,7 +139,7 @@ def select_records(records: Sequence[Sequence[str]]) -> Tuple[List[int], Dict[st
     missing_modern = sorted(REQUIRED_MODERN - modern_found)
     if missing_modern:
         formatted = ", ".join(f"{system}:{message}" for system, message in missing_modern)
-        raise ValueError(f"BRD400DLR source is missing required modern message families: {formatted}")
+        raise ValueError(f"BRD400DLR source is missing required representative modern families: {formatted}")
 
     selected_indices = sorted(selected)
     if not selected_indices:
@@ -152,8 +163,11 @@ def select_records(records: Sequence[Sequence[str]]) -> Tuple[List[int], Dict[st
         "selection_date": "%04d-%02d-%02d" % WINDOW_DATE,
         "selection_hours_utc_like_rinex_epoch": sorted(WINDOW_HOURS),
         "simulator_systems": sorted(SIM_SYSTEMS),
-        "required_modern_message_families": [
+        "required_representative_modern_message_families": [
             f"{system}:{message}" for system, message in sorted(REQUIRED_MODERN)
+        ],
+        "observed_known_modern_message_families": [
+            f"{system}:{message}" for system, message in sorted(modern_found)
         ],
         "selected_record_count": len(selected_indices),
         "selected_record_types": counts,

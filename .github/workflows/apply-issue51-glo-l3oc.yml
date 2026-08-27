@@ -9,6 +9,7 @@ on:
       - tools/apply_issue51_rtklib_link_fix.py
       - tools/apply_issue51_doppler_family_policy.py
       - tools/apply_issue51_doppler_diagnostic.py
+      - tools/apply_issue51_nav_integrity_diagnostic.py
       - .github/workflows/apply-issue51-glo-l3oc.yml
 
 permissions:
@@ -37,6 +38,7 @@ jobs:
           tools/apply_issue51_rtklib_link_fix.py
           tools/apply_issue51_doppler_family_policy.py
           tools/apply_issue51_doppler_diagnostic.py
+          tools/apply_issue51_nav_integrity_diagnostic.py
 
       - name: Apply guarded implementation changes and diagnostic
         run: |
@@ -44,6 +46,7 @@ jobs:
           python tools/apply_issue51_rtklib_link_fix.py
           python tools/apply_issue51_doppler_family_policy.py
           python tools/apply_issue51_doppler_diagnostic.py
+          python tools/apply_issue51_nav_integrity_diagnostic.py
 
       - name: Format modified C and C++ sources
         run: >-
@@ -79,7 +82,7 @@ jobs:
           python tools/apply_issue51_glo_l3oc_patch.py
           python tools/apply_issue51_doppler_family_policy.py
           clang-format -i tests/integration/test_all_signal_residuals.cpp
-          rm -f tools/apply_issue51_glo_l3oc_patch.py tools/apply_issue51_rtklib_link_fix.py tools/apply_issue51_doppler_family_policy.py tools/apply_issue51_doppler_diagnostic.py .github/workflows/apply-issue51-glo-l3oc.yml
+          rm -f tools/apply_issue51_glo_l3oc_patch.py tools/apply_issue51_rtklib_link_fix.py tools/apply_issue51_doppler_family_policy.py tools/apply_issue51_doppler_diagnostic.py tools/apply_issue51_nav_integrity_diagnostic.py .github/workflows/apply-issue51-glo-l3oc.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A

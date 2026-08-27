@@ -12,7 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(CTest)
 include(cmake/CompilerWarnings.cmake)
 
-set(GNSS_SIM_RTKLIB_COMMIT "dc596ba725ccaa5ab5963d7e7ec85b52ae743969" CACHE STRING
+set(GNSS_SIM_RTKLIB_COMMIT "94cda3254ab5f1f4ee923456ebf96065820dc23d" CACHE STRING
     "Pinned RTKLIB commit used by this simulator build")
 set(GNSS_SIM_CJSON_COMMIT "acc76239bee01d8e9c858ae2cab296704e52d916" CACHE STRING
     "Pinned cJSON commit used by this simulator build")
@@ -54,6 +54,7 @@ add_library(rtklib_pinned STATIC
     third_party/RTKLIB/src/rtkcmn.c
     third_party/RTKLIB/src/rtklib_obs_ext.c
     third_party/RTKLIB/src/rtklib_pntvel_ext.c
+    third_party/RTKLIB/src/rtklib_residual_ext.c
     third_party/RTKLIB/src/sbas.c
 )
 add_library(gnss_sim::rtklib ALIAS rtklib_pinned)
@@ -200,6 +201,7 @@ if(BUILD_TESTING)
 
     add_executable(gnss_sim_integration_tests
         tests/integration/test_scenarios.cpp
+        tests/integration/test_all_signal_residuals.cpp
         tests/integration/test_truth_outputs.cpp
         tests/integration/test_v1_acceptance.cpp
     )

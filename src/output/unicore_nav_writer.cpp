@@ -61,7 +61,7 @@ std::string bd3_ephemeris_body(const KeplerianNavOutputData& eph) {
     body << eph.prn << ',' << eph.svh << ',' << static_cast<int>(std::llround(eph.sva)) << ',' << eph.iode << ','
          << eph.iodc << ',' << eph.iodc << ',' << eph.toe_week << ',' << eph.toc_week << ',' << std::fixed
          << std::setprecision(1) << eph.toe_sow_sec << ',' << eph.toc_sow_sec << ',' << std::scientific
-         << std::setprecision(15) << std::sqrt(eph.semi_major_axis_m) << ',' << eph.delta_mean_motion_radps << ','
+         << std::setprecision(15) << eph.sqrt_semi_major_axis_sqrt_m << ',' << eph.delta_mean_motion_radps << ','
          << eph.mean_anomaly_rad << ',' << eph.eccentricity << ',' << eph.argument_of_perigee_rad << ',' << eph.cuc_rad
          << ',' << eph.cus_rad << ',' << eph.crc_m << ',' << eph.crs_m << ',' << eph.cic_rad << ',' << eph.cis_rad << ','
          << eph.inclination_rad << ',' << eph.inclination_dot_radps << ',' << eph.omega0_rad << ',' << eph.omega_dot_radps
@@ -75,10 +75,12 @@ std::string bd3_ephemeris_body(const KeplerianNavOutputData& eph) {
 std::string galileo_body(const KeplerianNavOutputData& eph) {
     std::ostringstream body;
     body.imbue(std::locale::classic());
-    body << eph.prn << ',' << bool_text(eph.galileo_fnav_received) << ',' << bool_text(eph.galileo_inav_received)
-         << ",0,0,0,0,0,0," << static_cast<int>(std::llround(eph.sva)) << ',' << eph.svh << ',' << eph.iode << ','
-         << std::fixed << std::setprecision(0) << eph.toe_sow_sec << ',' << std::scientific << std::setprecision(15)
-         << std::sqrt(eph.semi_major_axis_m) << ',' << eph.delta_mean_motion_radps << ',' << eph.mean_anomaly_rad << ','
+    body << eph.prn << ',' << bool_text(eph.galileo_fnav_received) << ',' << bool_text(eph.galileo_inav_received) << ','
+         << eph.galileo_e1b_health << ',' << eph.galileo_e5a_health << ',' << eph.galileo_e5b_health << ','
+         << eph.galileo_e1b_dvs << ',' << eph.galileo_e5a_dvs << ',' << eph.galileo_e5b_dvs << ','
+         << static_cast<int>(std::llround(eph.sva)) << ',' << eph.svh << ',' << eph.iode << ',' << std::fixed
+         << std::setprecision(0) << eph.toe_sow_sec << ',' << std::scientific << std::setprecision(15)
+         << eph.sqrt_semi_major_axis_sqrt_m << ',' << eph.delta_mean_motion_radps << ',' << eph.mean_anomaly_rad << ','
          << eph.eccentricity << ',' << eph.argument_of_perigee_rad << ',' << eph.cuc_rad << ',' << eph.cus_rad << ','
          << eph.crc_m << ',' << eph.crs_m << ',' << eph.cic_rad << ',' << eph.cis_rad << ',' << eph.inclination_rad << ','
          << eph.inclination_dot_radps << ',' << eph.omega0_rad << ',' << eph.omega_dot_radps << ',' << std::fixed

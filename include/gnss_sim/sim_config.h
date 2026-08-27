@@ -54,6 +54,7 @@ struct SimConfig {
     TtffConfig ttff;
     ReaConfig rea;
     std::uint64_t seed;
+    std::string cn0_model_path;
 };
 
 SimConfig default_sim_config();

@@ -173,6 +173,7 @@ if(BUILD_TESTING)
 
     add_executable(gnss_sim_integration_tests
         tests/integration/test_scenarios.cpp
+        tests/integration/test_truth_outputs.cpp
     )
     target_include_directories(gnss_sim_integration_tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src")

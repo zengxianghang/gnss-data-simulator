@@ -10,6 +10,7 @@ namespace gnss_sim {
 namespace {
 
 constexpr int kMaxSolverSatellites = 64;
+constexpr double kPi = 3.141592653589793238462643383279502884;
 
 struct SelectedObservation {
     int satellite_number;
@@ -117,6 +118,76 @@ void sort_selected_observations(SelectedObservation selected[kMaxSolverSatellite
     }
 }
 
+double covariance_axis_variance(const double covariance[6], const double axis[3]) {
+    const double xx = covariance[0];
+    const double yy = covariance[1];
+    const double zz = covariance[2];
+    const double xy = covariance[3];
+    const double yz = covariance[4];
+    const double zx = covariance[5];
+    return axis[0] * axis[0] * xx + axis[1] * axis[1] * yy + axis[2] * axis[2] * zz +
+           2.0 * axis[0] * axis[1] * xy + 2.0 * axis[1] * axis[2] * yz + 2.0 * axis[2] * axis[0] * zx;
+}
+
+double nonnegative_std(double variance) {
+    if (!std::isfinite(variance)) {
+        return 0.0;
+    }
+    return std::sqrt(variance > 0.0 ? variance : 0.0);
+}
+
+void fill_local_position_std(PositionSolution* destination) {
+    const double latitude_rad = destination->latitude_deg * kPi / 180.0;
+    const double longitude_rad = destination->longitude_deg * kPi / 180.0;
+    const double sin_latitude = std::sin(latitude_rad);
+    const double cos_latitude = std::cos(latitude_rad);
+    const double sin_longitude = std::sin(longitude_rad);
+    const double cos_longitude = std::cos(longitude_rad);
+    const double east[3] = {-sin_longitude, cos_longitude, 0.0};
+    const double north[3] = {-sin_latitude * cos_longitude, -sin_latitude * sin_longitude, cos_latitude};
+    const double up[3] = {cos_latitude * cos_longitude, cos_latitude * sin_longitude, sin_latitude};
+
+    destination->latitude_std_m = nonnegative_std(covariance_axis_variance(destination->covariance_ecef_m2, north));
+    destination->longitude_std_m = nonnegative_std(covariance_axis_variance(destination->covariance_ecef_m2, east));
+    destination->height_std_m = nonnegative_std(covariance_axis_variance(destination->covariance_ecef_m2, up));
+}
+
+bool fill_local_velocity(const double position_ecef_m[3], VelocitySolution* destination) {
+    double latitude_deg = 0.0;
+    double longitude_deg = 0.0;
+    double height_m = 0.0;
+    if (!rtklib_ecef_to_llh(position_ecef_m, &latitude_deg, &longitude_deg, &height_m)) {
+        return false;
+    }
+    static_cast<void>(height_m);
+
+    const double latitude_rad = latitude_deg * kPi / 180.0;
+    const double longitude_rad = longitude_deg * kPi / 180.0;
+    const double sin_latitude = std::sin(latitude_rad);
+    const double cos_latitude = std::cos(latitude_rad);
+    const double sin_longitude = std::sin(longitude_rad);
+    const double cos_longitude = std::cos(longitude_rad);
+    const double vx = destination->velocity_ecef_mps[0];
+    const double vy = destination->velocity_ecef_mps[1];
+    const double vz = destination->velocity_ecef_mps[2];
+    const double east_mps = -sin_longitude * vx + cos_longitude * vy;
+    const double north_mps = -sin_latitude * cos_longitude * vx - sin_latitude * sin_longitude * vy + cos_latitude * vz;
+    const double up_mps = cos_latitude * cos_longitude * vx + cos_latitude * sin_longitude * vy + sin_latitude * vz;
+
+    destination->horizontal_speed_mps = std::hypot(north_mps, east_mps);
+    destination->vertical_speed_mps = up_mps;
+    if (destination->horizontal_speed_mps <= 1.0e-12) {
+        destination->track_over_ground_deg = 0.0;
+    } else {
+        double track_deg = std::atan2(east_mps, north_mps) * 180.0 / kPi;
+        if (track_deg < 0.0) {
+            track_deg += 360.0;
+        }
+        destination->track_over_ground_deg = track_deg;
+    }
+    return true;
+}
+
 void copy_position_solution(const RtklibPositionSolution& source, PositionSolution* destination) {
     copy_diagnostic(source.diagnostic, destination->diagnostic);
     if (!source.valid) {
@@ -135,13 +206,15 @@ void copy_position_solution(const RtklibPositionSolution& source, PositionSoluti
     for (int index = 0; index < 6; ++index) {
         destination->covariance_ecef_m2[index] = source.covariance_ecef_m2[index];
     }
+    fill_local_position_std(destination);
     destination->used_satellites = source.used_satellites;
 }
 
-void copy_velocity_solution(const RtklibVelocitySolution& source, VelocitySolution* destination) {
+bool copy_velocity_solution(const RtklibVelocitySolution& source, const double position_hint_ecef_m[3],
+                            VelocitySolution* destination) {
     copy_diagnostic(source.diagnostic, destination->diagnostic);
     if (!source.valid) {
-        return;
+        return true;
     }
     destination->valid = true;
     destination->status = ReceiverSolutionStatus::kSolComputed;
@@ -151,6 +224,7 @@ void copy_velocity_solution(const RtklibVelocitySolution& source, VelocitySoluti
     }
     destination->receiver_clock_drift_mps = source.receiver_clock_drift_mps;
     destination->used_satellites = source.used_satellites;
+    return fill_local_velocity(position_hint_ecef_m, destination);
 }
 
 } // namespace
@@ -229,7 +303,10 @@ bool solve_receiver_epoch(const RtklibNavStore* receiver_nav, const SimTime& epo
                                           error_message)) {
             return false;
         }
-        copy_velocity_solution(rtklib_velocity, &result.velocity);
+        if (!copy_velocity_solution(rtklib_velocity, position_hint, &result.velocity)) {
+            set_error(error_message, "cannot derive local velocity metadata from receiver position hint");
+            return false;
+        }
     }
 
     *solution = result;

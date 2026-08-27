@@ -135,6 +135,7 @@ bool rtklib_copy_nav_record(const RtklibNavStore* source, int record_index, Rtkl
 bool rtklib_nav_store_has_satellite_ephemeris(const RtklibNavStore* store, int satellite_number);
 
 bool rtklib_satellite_id_to_number(const char* satellite_id, int* satellite_number);
+bool rtklib_satellite_number_to_id(int satellite_number, char satellite_id[4]);
 bool rtklib_observation_code(const char* rinex_signal_code, int* observation_code, int* frequency_index);
 bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
                                 RtklibSatelliteState* state, std::string* error_message);

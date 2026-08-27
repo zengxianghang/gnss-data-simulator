@@ -78,6 +78,7 @@ add_library(gnss_sim_core STATIC
     src/gnss/rtklib_adapter.cpp
     src/gnss/rtklib_atmosphere_adapter.cpp
     src/gnss/rtklib_bias_adapter.cpp
+    src/gnss/rtklib_output_adapter.cpp
     src/gnss/rtklib_solution_adapter.cpp
     src/gnss/satellite_engine.cpp
     src/gnss/signal_definitions.cpp
@@ -86,6 +87,8 @@ add_library(gnss_sim_core STATIC
     src/model/measurement_model.cpp
     src/model/receiver_truth.cpp
     src/model/signal_tracking.cpp
+    src/output/novatel_range_writer.cpp
+    src/output/novatel_solution_writer.cpp
     src/solution/solution_engine.cpp
 )
 add_library(gnss_sim::core ALIAS gnss_sim_core)
@@ -124,6 +127,7 @@ if(BUILD_TESTING)
         tests/unit/test_nav_message_scheduler.cpp
         tests/unit/test_nav_message_scheduler_gal_bds.cpp
         tests/unit/test_navigation_state.cpp
+        tests/unit/test_output_writers.cpp
         tests/unit/test_receiver_truth.cpp
         tests/unit/test_rtklib_adapter.cpp
         tests/unit/test_satellite_engine.cpp

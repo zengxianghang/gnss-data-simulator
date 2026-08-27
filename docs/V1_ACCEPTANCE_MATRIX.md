@@ -18,7 +18,7 @@ Long-duration 8-hour and resource/50 Hz stress validation belongs to #41, not th
 | Five-system ideal static loopback from real RINEX 3 NAV | PASS | `V1Acceptance.RealMixedNavProducesAllFiveV1ConstellationsAndValidSolution` | GPS, GLONASS, Galileo, BeiDou and QZSS are verified from simulator-produced `observation_truth.csv`; position and velocity must both become valid through Receiver NAV. |
 | Real BRD400DLR RINEX 4 parsing | PASS | `Rinex4Brd400.ProjectLoaderPreservesFiveSystemsAndModernEphemerisFamilies`; `Rinex4Brd400.PinnedRtklibConsumesStoEopAndIonRecords` | Reduced real WHU BRD400DLR RINEX 4.02 data covers all five V1 constellations, GPS CNAV, QZSS CNAV/CNV2, BDS CNV1/CNV2/CNV3 and STO/EOP/ION records. |
 | Five-system simulator loopback from real BRD400DLR RINEX 4 NAV | PASS | `V1Acceptance.RealBrd400DlrRinex4RunsFiveSystemReceiverNavLoopback` | The BRD400DLR fixture goes through the normal pinned-RTKLIB Truth-NAV/Receiver-NAV, satellite, measurement, RANGE and solution path; all five systems must appear and position/velocity must become valid. |
-| Every frozen V1 signal mapping | PASS | `SignalDefinitions.CoversEveryFrozenV1SignalExactlyOnce`; `SignalDefinitions.FrozenMappingsMatchExpectedValuesAndRoundTrip` | Explicit table contains all 21 frozen V1 signals. |
+| Every frozen V1 signal through common measurement/RANGE output path | PASS | `V1Acceptance.RealBrd400DlrRinex4RunsFiveSystemReceiverNavLoopback`; signal-definition tests | The real BRD400DLR full simulator run parses every emitted RANGEA tracking-status word and requires all 21 frozen constellation+OEM7-signal-type keys. Missing-signal failures name the signal and GPST. |
 | 1/5/10/20/50 Hz full streaming pipeline | PASS | `V1Acceptance.FrozenRatesRunThroughFullStreamingPipeline` | #40 runs the actual simulator for 10 s at each frozen rate and checks exact message/epoch counts plus truth artifacts. |
 | GPST week crossover | PASS | `ScenarioEngine.KsRemainsPoweredAndSignalOn`; satellite-engine cross-week tests | Integer-time scenario state already crosses week 2300 -> 2301 without false transitions. |
 | HOT TTFF | PASS | `StreamingSimulator.HotTtffSuppressesAllReceiverLogsWhilePowerIsOff` | Full simulator scenario behavior. |
@@ -48,7 +48,7 @@ Large upstream products are never fetched during normal CI. `tools/download_igs/
 
 Issue #40 requires deterministic short end-to-end runs proving that GPS, GLONASS, Galileo, BeiDou and QZSS observations are all produced from a common truth state in the same run and that the receiver solution is valid without bypassing the normal simulator/Receiver-NAV path. This is now exercised independently with real RINEX 3 mixed NAV and real BRD400DLR RINEX 4 NAV.
 
-The acceptance tests record participating systems from `observation_truth.csv` rather than inferring participation merely because a NAV fixture contains records for five constellations. They do not relax solver validity or use Truth NAV directly to manufacture a PASS.
+The acceptance tests record participating systems from `observation_truth.csv` rather than inferring participation merely because a NAV fixture contains records for five constellations. The BRD400DLR run additionally decodes RANGEA tracking-status words and checks every frozen signal definition against actual simulator output. The tests do not relax solver validity or use Truth NAV directly to manufacture a PASS.
 
 ## Numerical policy
 

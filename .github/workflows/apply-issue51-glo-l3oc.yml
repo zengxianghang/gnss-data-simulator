@@ -1,0 +1,73 @@
+name: Apply GLONASS L3OC simulator patch
+
+on:
+  push:
+    branches:
+      - issue-51-all-signal-residuals
+    paths:
+      - tools/apply_issue51_glo_l3oc_patch.py
+      - .github/workflows/apply-issue51-glo-l3oc.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Draft branch with dependencies
+        uses: actions/checkout@v4
+        with:
+          ref: issue-51-all-signal-residuals
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Syntax-check guarded patch driver
+        run: python -m py_compile tools/apply_issue51_glo_l3oc_patch.py
+
+      - name: Apply guarded implementation changes
+        run: python tools/apply_issue51_glo_l3oc_patch.py
+
+      - name: Format modified C and C++ sources
+        run: >-
+          clang-format -i
+          src/gnss/rtklib_adapter.h
+          src/gnss/rtklib_bias_adapter.cpp
+          src/model/measurement_model.cpp
+          src/output/truth_writer.cpp
+          src/gnss/nav_output_record.h
+          src/gnss/rtklib_nav_output_adapter.cpp
+          src/core/simulator.cpp
+          src/output/novatel_nav_writer.cpp
+          src/output/unicore_nav_writer.cpp
+          src/gnss/rtklib_adapter.cpp
+          tests/unit/test_measurement_model.cpp
+          tests/integration/test_all_signal_residuals.cpp
+
+      - name: Check patch whitespace
+        run: git diff --check
+
+      - name: Configure
+        run: cmake -S . -B build -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Commit validated implementation and remove scaffolding
+        run: |
+          rm -f tools/apply_issue51_glo_l3oc_patch.py .github/workflows/apply-issue51-glo-l3oc.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git diff --cached --exit-code && { echo 'No validated implementation changes to commit'; exit 1; } || true
+          git commit -m 'Add GLONASS L3OC simulator residual support'
+          git push origin HEAD:issue-51-all-signal-residuals

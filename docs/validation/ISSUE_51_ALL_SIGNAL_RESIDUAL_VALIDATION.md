@@ -14,6 +14,8 @@ All 21 signals must eventually execute both code and Doppler residual checks usi
 
 A row appearing in `observation_truth.csv` is not sufficient coverage. A signal passes only after at least one valid `rescode` and at least one valid `resdop` residual are evaluated.
 
+A signal-specific NAV family missing at an epoch is a per-signal availability condition, not a simulator-fatal error. The simulator may keep geometry/Doppler available from the usable broadcast state while marking that signal's pseudorange unavailable until its required bias/message-family data are available. Missing one signal family must never abort unrelated signals or the whole epoch.
+
 ## Truth-state code residual
 
 The receiver position is fixed to truth. V1 receiver clock bias and GLO/GAL/BDS receiver-system offsets are zero. The RTKLIB residual path uses broadcast `satposs()`, the signal-specific broadcast code-bias correction, broadcast ionosphere when enabled, and Saastamoinen troposphere when enabled.

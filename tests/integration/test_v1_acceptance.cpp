@@ -26,7 +26,7 @@ gnss_sim::SimTime acceptance_start_time() {
 
 gnss_sim::SimTime multi_gnss_start_time() {
     gnss_sim::SimTime time{};
-    EXPECT_TRUE(gnss_sim::sim_time_from_week_sow(2253, 172800.0, &time));
+    EXPECT_TRUE(gnss_sim::sim_time_from_week_sow(2253, 173700.0, &time));
     return time;
 }
 
@@ -122,7 +122,7 @@ TEST(V1Acceptance, RealMixedNavProducesAllFiveV1ConstellationsAndValidSolution) 
     gnss_sim::SimConfig config = acceptance_config();
     config.sampling_rate_hz = 1;
     config.duration_ns = 60LL * gnss_sim::NANOSECONDS_PER_SECOND;
-    config.receiver = {20.0, 120.0, 100.0};
+    config.receiver = {10.0, 80.0, 100.0};
 
     const std::filesystem::path directory = "gnss_sim_acceptance_five_system";
     gnss_sim::SimulatorRunSummary summary{};

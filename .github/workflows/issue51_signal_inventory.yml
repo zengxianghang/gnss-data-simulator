@@ -1,0 +1,46 @@
+name: issue51-signal-inventory
+on:
+  push:
+    branches: [issue-51-all-signal-rtklib-residuals]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build simulator
+        run: |
+          cmake -S . -B build -DBUILD_TESTING=OFF
+          cmake --build build --config Release --parallel
+      - name: Run 60 second BRD4 KS
+        run: |
+          python3 - <<'PY'
+          import json
+          p='config/default_v1.json'
+          c=json.load(open(p))
+          c['duration_sec']=60
+          c['sampling_rate_hz']=1
+          c['atmosphere_mode']='none'
+          json.dump(c,open('issue51.json','w'),indent=2)
+          PY
+          ./build/gnss-data-simulator --config issue51.json --nav tests/data/minimal/brd400dlr_rinex4_acceptance_nav.rnx --output simulated.log --week 2347 --sow 436500
+      - name: Inventory signal validity
+        run: |
+          python3 - <<'PY'
+          import csv, collections
+          d=collections.defaultdict(lambda:[0,0,0,0])
+          with open('observation_truth.csv',newline='') as f:
+            for r in csv.DictReader(f):
+              x=d[r['signal_name']]
+              x[0]+=1
+              x[1]+=int(r['pseudorange_valid'])
+              x[2]+=int(r['doppler_valid'])
+              x[3]+=int(r['adr_valid'])
+          print('signal,total,psr_valid,doppler_valid,adr_valid')
+          for k in sorted(d): print(k,*d[k],sep=',')
+          print('signal_count=',len(d))
+          PY

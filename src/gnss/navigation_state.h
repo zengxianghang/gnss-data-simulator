@@ -14,6 +14,7 @@ struct NavigationState;
 struct NavigationUpdateEvent {
     SimTime availability_time;
     int truth_record_index;
+    int receiver_record_index;
     RtklibNavRecordKind kind;
     int satellite_number;
     int system;

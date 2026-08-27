@@ -2,18 +2,70 @@
 #include "model/cn0_model.h"
 
 #include <cmath>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <gtest/gtest.h>
+#include <sstream>
+#include <string>
 
 namespace {
 
-double estimate(gnss_sim::SignalId signal_id, double elevation_deg, double sow_sec, std::uint64_t seed = 1234U) {
-    const gnss_sim::Cn0Model model = gnss_sim::make_builtin_cn0_model(seed);
+constexpr const char* kModelHeader =
+    "schema_version,constellation,signal,elevation_min_deg,elevation_max_deg,upper_edge_inclusive,status,count,"
+    "p05_dbhz,p10_dbhz,p25_dbhz,p50_dbhz,p75_dbhz,p90_dbhz,p95_dbhz,mean_dbhz,stddev_dbhz,mad_dbhz,"
+    "delta_count,delta_p50_dbhz,delta_p90_dbhz,delta_p99_dbhz,ar1_status,ar1";
+
+std::string runtime_model_path() {
+    return std::string(GNSS_SIM_TEST_DATA_DIR) + "/runtime_cn0_model.csv";
+}
+
+double estimate_model(const gnss_sim::Cn0Model& model, gnss_sim::SignalId signal_id, double elevation_deg,
+                      double sow_sec) {
     gnss_sim::SimTime time{};
     EXPECT_TRUE(gnss_sim::sim_time_from_week_sow(2300, sow_sec, &time));
     double cn0_dbhz = 0.0;
     EXPECT_TRUE(gnss_sim::cn0_model_estimate_dbhz(model, signal_id, elevation_deg, time, &cn0_dbhz));
     return cn0_dbhz;
 }
+
+double estimate(gnss_sim::SignalId signal_id, double elevation_deg, double sow_sec, std::uint64_t seed = 1234U) {
+    const gnss_sim::Cn0Model model = gnss_sim::make_builtin_cn0_model(seed);
+    return estimate_model(model, signal_id, elevation_deg, sow_sec);
+}
+
+std::string model_row(double elevation_min_deg, double elevation_max_deg, bool inclusive, const char* status,
+                      std::uint64_t count, double p50_dbhz) {
+    std::ostringstream output;
+    output << "gnss-cn0-model-v1,GPS,1C," << elevation_min_deg << ',' << elevation_max_deg << ','
+           << (inclusive ? 1 : 0) << ',' << status << ',' << count << ',' << (p50_dbhz - 1.0) << ','
+           << (p50_dbhz - 1.0) << ',' << (p50_dbhz - 1.0) << ',' << p50_dbhz << ',' << (p50_dbhz + 1.0) << ','
+           << (p50_dbhz + 1.0) << ',' << (p50_dbhz + 1.0) << ',' << p50_dbhz
+           << ",1,1,0,,,,INSUFFICIENT_SUPPORT,";
+    return output.str();
+}
+
+class TemporaryModel {
+  public:
+    explicit TemporaryModel(const std::string& content) {
+        static int sequence = 0;
+        path_ = std::filesystem::temp_directory_path() /
+                ("gnss_sim_runtime_cn0_" + std::to_string(++sequence) + ".csv");
+        std::ofstream output(path_, std::ios::binary | std::ios::trunc);
+        output << content;
+    }
+
+    ~TemporaryModel() {
+        std::remove(path_.string().c_str());
+    }
+
+    std::string path() const {
+        return path_.string();
+    }
+
+  private:
+    std::filesystem::path path_;
+};
 
 TEST(Cn0Model, ElevationFallbackIsContinuousAndMonotonicAtPiecewiseBoundaries) {
     const double sow = 180000.0;
@@ -63,6 +115,62 @@ TEST(Cn0Model, InvalidArgumentsAreRejected) {
     gnss_sim::SimTime time{};
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2300, 1.0, &time));
     EXPECT_FALSE(gnss_sim::cn0_model_estimate_dbhz(model, gnss_sim::SignalId::kGpsL1Ca, NAN, time, nullptr));
+}
+
+TEST(Cn0Model, CalibratedCentersEdgesAndBetweenCenterInterpolationAreGolden) {
+    gnss_sim::Cn0Model model{};
+    std::string error;
+    ASSERT_TRUE(gnss_sim::load_cn0_model_csv(runtime_model_path().c_str(), 1234U, &model, &error)) << error;
+    EXPECT_EQ(model.source, gnss_sim::Cn0ModelSource::kCalibratedCsv);
+    EXPECT_EQ(model.identity.schema_version, "gnss-cn0-model-v1");
+    EXPECT_EQ(model.identity.file_name, "runtime_cn0_model.csv");
+    EXPECT_FALSE(model.identity.hash.empty());
+    EXPECT_GT(model.identity.size_bytes, 0U);
+
+    const double sow = 180000.0;
+    const double at_15 = estimate_model(model, gnss_sim::SignalId::kGpsL1Ca, 15.0, sow);
+    const double at_30 = estimate_model(model, gnss_sim::SignalId::kGpsL1Ca, 30.0, sow);
+    const double at_45 = estimate_model(model, gnss_sim::SignalId::kGpsL1Ca, 45.0, sow);
+    const double at_75 = estimate_model(model, gnss_sim::SignalId::kGpsL1Ca, 75.0, sow);
+    EXPECT_NEAR(at_30, 0.5 * (at_15 + at_45), 1e-12);
+    EXPECT_NEAR(at_45 - at_15, 10.0, 1e-12);
+    EXPECT_NEAR(at_75 - at_45, 10.0, 1e-12);
+    EXPECT_NEAR(estimate_model(model, gnss_sim::SignalId::kGpsL1Ca, 0.0, sow) - at_15, 0.0, 1e-12);
+    EXPECT_NEAR(estimate_model(model, gnss_sim::SignalId::kGpsL1Ca, 90.0, sow) - at_75, 0.0, 1e-12);
+}
+
+TEST(Cn0Model, MissingSignalAndSparseGapUseExactBuiltinBaselinePolicy) {
+    const std::string content = std::string(kModelHeader) + "\n" + model_row(0.0, 30.0, false, "READY", 100, 30.0) +
+                                "\n" + model_row(30.0, 60.0, false, "SPARSE", 1, 40.0) + "\n" +
+                                model_row(60.0, 90.0, true, "READY", 100, 50.0) + "\n";
+    const TemporaryModel file(content);
+    gnss_sim::Cn0Model model{};
+    std::string error;
+    ASSERT_TRUE(gnss_sim::load_cn0_model_csv(file.path().c_str(), 77U, &model, &error)) << error;
+    const gnss_sim::Cn0Model builtin = gnss_sim::make_builtin_cn0_model(77U);
+    const double sow = 200000.0;
+
+    EXPECT_DOUBLE_EQ(estimate_model(model, gnss_sim::SignalId::kGpsL1Ca, 45.0, sow),
+                     estimate_model(builtin, gnss_sim::SignalId::kGpsL1Ca, 45.0, sow));
+    EXPECT_DOUBLE_EQ(estimate_model(model, gnss_sim::SignalId::kGpsL2C, 45.0, sow),
+                     estimate_model(builtin, gnss_sim::SignalId::kGpsL2C, 45.0, sow));
+}
+
+TEST(Cn0Model, ExplicitMalformedModelsFailWithoutFallback) {
+    const std::string valid_row = model_row(0.0, 90.0, true, "READY", 100, 40.0);
+    const std::string duplicate = std::string(kModelHeader) + "\n" + model_row(0.0, 45.0, false, "READY", 100, 30.0) +
+                                  "\n" + model_row(0.0, 45.0, true, "READY", 100, 40.0) + "\n";
+    const std::string nonfinite = std::string(kModelHeader) +
+                                  "\ngnss-cn0-model-v1,GPS,1C,0,90,1,READY,100,29,29,29,nan,31,31,31,30,1,1,0,,,,INSUFFICIENT_SUPPORT,\n";
+    const std::string cases[] = {std::string("bad-header\n") + valid_row + "\n", duplicate, nonfinite};
+
+    for (const std::string& content : cases) {
+        const TemporaryModel file(content);
+        gnss_sim::Cn0Model model{};
+        std::string error;
+        EXPECT_FALSE(gnss_sim::load_cn0_model_csv(file.path().c_str(), 1U, &model, &error));
+        EXPECT_FALSE(error.empty());
+    }
 }
 
 } // namespace

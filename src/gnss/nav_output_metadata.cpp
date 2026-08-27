@@ -33,6 +33,21 @@ double glonass_day_seconds(gtime_t gpst) {
     return seconds;
 }
 
+void decode_galileo_health(KeplerianNavOutputData* eph) {
+    if (eph->system != NavOutputSystem::kGalileo) {
+        return;
+    }
+    // Pinned RTKLIB stores the RINEX Galileo SV health word as:
+    // bit 0 E1B DVS, bits 1-2 E1B HS, bit 3 E5a DVS, bits 4-5 E5a HS,
+    // bit 6 E5b DVS, bits 7-8 E5b HS.
+    eph->galileo_e1b_dvs = eph->svh & 0x1;
+    eph->galileo_e1b_health = (eph->svh >> 1) & 0x3;
+    eph->galileo_e5a_dvs = (eph->svh >> 3) & 0x1;
+    eph->galileo_e5a_health = (eph->svh >> 4) & 0x3;
+    eph->galileo_e5b_dvs = (eph->svh >> 6) & 0x1;
+    eph->galileo_e5b_health = (eph->svh >> 7) & 0x3;
+}
+
 } // namespace
 
 bool finalize_nav_output_record_metadata(NavOutputRecord* record) {
@@ -44,11 +59,13 @@ bool finalize_nav_output_record_metadata(NavOutputRecord* record) {
         if (!std::isfinite(eph.semi_major_axis_m) || eph.semi_major_axis_m <= 0.0) {
             return false;
         }
+        eph.sqrt_semi_major_axis_sqrt_m = std::sqrt(eph.semi_major_axis_m);
         const double mu = eph.system == NavOutputSystem::kGps || eph.system == NavOutputSystem::kQzss ? kGpsMu : kOtherMu;
         eph.corrected_mean_motion_radps =
             std::sqrt(mu / (eph.semi_major_axis_m * eph.semi_major_axis_m * eph.semi_major_axis_m)) +
             eph.delta_mean_motion_radps;
-        return std::isfinite(eph.corrected_mean_motion_radps);
+        decode_galileo_health(&eph);
+        return std::isfinite(eph.sqrt_semi_major_axis_sqrt_m) && std::isfinite(eph.corrected_mean_motion_radps);
     }
     if (record->kind == RtklibNavRecordKind::kGlonassEphemeris) {
         GlonassNavOutputData& glo = record->glonass;

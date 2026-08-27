@@ -49,15 +49,16 @@ std::string generic_kepler_body(const KeplerianNavOutputData& eph, bool qzss, bo
 std::string galileo_body(const KeplerianNavOutputData& eph) {
     std::ostringstream body;
     body.imbue(std::locale::classic());
-    const double sqrt_a = std::sqrt(eph.semi_major_axis_m);
-    body << eph.prn << ',' << bool_text(eph.galileo_fnav_received) << ',' << bool_text(eph.galileo_inav_received)
-         << ",0,0,0,0,0,0," << static_cast<int>(std::llround(eph.sva)) << ',' << eph.svh << ',' << eph.iode << ','
-         << std::fixed << std::setprecision(0) << eph.toe_sow_sec << ',' << std::scientific << std::setprecision(15)
-         << sqrt_a << ',' << eph.delta_mean_motion_radps << ',' << eph.mean_anomaly_rad << ',' << eph.eccentricity << ','
-         << eph.argument_of_perigee_rad << ',' << eph.cuc_rad << ',' << eph.cus_rad << ',' << eph.crc_m << ',' << eph.crs_m
-         << ',' << eph.cic_rad << ',' << eph.cis_rad << ',' << eph.inclination_rad << ',' << eph.inclination_dot_radps << ','
-         << eph.omega0_rad << ',' << eph.omega_dot_radps << ',' << std::fixed << std::setprecision(0)
-         << eph.galileo_fnav_toc_sow_sec << ',' << std::scientific << std::setprecision(15)
+    body << eph.prn << ',' << bool_text(eph.galileo_fnav_received) << ',' << bool_text(eph.galileo_inav_received) << ','
+         << eph.galileo_e1b_health << ',' << eph.galileo_e5a_health << ',' << eph.galileo_e5b_health << ','
+         << eph.galileo_e1b_dvs << ',' << eph.galileo_e5a_dvs << ',' << eph.galileo_e5b_dvs << ','
+         << static_cast<int>(std::llround(eph.sva)) << ',' << eph.svh << ',' << eph.iode << ',' << std::fixed
+         << std::setprecision(0) << eph.toe_sow_sec << ',' << std::scientific << std::setprecision(15)
+         << eph.sqrt_semi_major_axis_sqrt_m << ',' << eph.delta_mean_motion_radps << ',' << eph.mean_anomaly_rad << ','
+         << eph.eccentricity << ',' << eph.argument_of_perigee_rad << ',' << eph.cuc_rad << ',' << eph.cus_rad << ','
+         << eph.crc_m << ',' << eph.crs_m << ',' << eph.cic_rad << ',' << eph.cis_rad << ',' << eph.inclination_rad << ','
+         << eph.inclination_dot_radps << ',' << eph.omega0_rad << ',' << eph.omega_dot_radps << ',' << std::fixed
+         << std::setprecision(0) << eph.galileo_fnav_toc_sow_sec << ',' << std::scientific << std::setprecision(15)
          << eph.galileo_fnav_clock[0] << ',' << eph.galileo_fnav_clock[1] << ',' << eph.galileo_fnav_clock[2] << ','
          << std::fixed << std::setprecision(0) << eph.galileo_inav_toc_sow_sec << ',' << std::scientific
          << std::setprecision(15) << eph.galileo_inav_clock[0] << ',' << eph.galileo_inav_clock[1] << ','

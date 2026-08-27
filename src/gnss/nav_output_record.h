@@ -115,6 +115,7 @@ struct NavOutputRecord {
 int rtklib_nav_output_record_count(const RtklibNavStore* store);
 bool rtklib_nav_output_record(const RtklibNavStore* store, int output_record_index, NavOutputRecord* record,
                               std::string* error_message);
+bool finalize_nav_output_record_metadata(NavOutputRecord* record);
 
 const char* nav_output_system_name(NavOutputSystem system);
 

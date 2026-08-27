@@ -89,10 +89,14 @@ double reference_troposphere(double latitude_rad, double height_m, double elevat
 bool direct_rtklib_broadcast_ionosphere(const std::string& path, int gps_week, double sow_sec,
                                         const double receiver_ecef_m[3], double azimuth_rad, double elevation_rad,
                                         double* delay_m, double* ion_gps_norm, int* ion_record_count) {
+    std::string native_path = path;
+#ifdef _WIN32
+    std::replace(native_path.begin(), native_path.end(), '/', '\\');
+#endif
     obs_t obs{};
     nav_t nav{};
     sta_t station{};
-    if (readrnx(path.c_str(), 1, "", &obs, &nav, &station) == 0) {
+    if (readrnx(native_path.c_str(), 1, "", &obs, &nav, &station) == 0) {
         freeobs(&obs);
         freenav(&nav, 0xFF);
         return false;

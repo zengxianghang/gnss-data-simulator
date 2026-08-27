@@ -7,7 +7,6 @@
 #include <iomanip>
 #include <limits>
 #include <locale>
-#include <set>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -88,6 +87,10 @@ bool scan_observation_interval(const std::string& path, double* interval_sec, bo
             value_stream >> value;
             if (!value_stream || !std::isfinite(value) || value <= 0.0) {
                 set_error(error_message, "RINEX observation INTERVAL record is invalid: " + path);
+                return false;
+            }
+            if (*available && std::fabs(*interval_sec - value) > 1e-12) {
+                set_error(error_message, "RINEX observation header has conflicting INTERVAL records: " + path);
                 return false;
             }
             *available = true;
@@ -188,9 +191,8 @@ bool build_cn0_model(const std::vector<Cn0InputSource>& sources, const Cn0Aggreg
                                        &metadata.observation_interval_available, error_message)) {
             return false;
         }
-        const double interval = metadata.observation_interval_available
-                                    ? metadata.observation_interval_sec
-                                    : std::numeric_limits<double>::quiet_NaN();
+        const double interval = metadata.observation_interval_available ? metadata.observation_interval_sec
+                                                                        : std::numeric_limits<double>::quiet_NaN();
         if (!accumulator.begin_source(interval, error_message)) {
             return false;
         }
@@ -235,32 +237,35 @@ bool write_cn0_metadata_json(const std::string& output_path, const Cn0Aggregatio
     output << "  \"statistics\":{\"quantile\":\"R7_linear_h=(n-1)*p\",\"stddev\":\"population\","
               "\"mad\":\"median_absolute_deviation_from_p50\",\"delta_cn0\":\"absolute_consecutive_difference\","
               "\"cn0_grid_dbhz\":0.250000},\n";
-    output << "  \"elevation_bins\":{\"min_deg\":" << config.elevation_min_deg << ",\"max_deg\":"
-           << config.elevation_max_deg << ",\"width_deg\":" << config.elevation_bin_width_deg
+    output << "  \"elevation_bins\":{\"min_deg\":" << config.elevation_min_deg
+           << ",\"max_deg\":" << config.elevation_max_deg << ",\"width_deg\":" << config.elevation_bin_width_deg
            << ",\"rule\":\"[lower,upper), final bin includes max\"},\n";
     output << "  \"filtering\":{\"min_samples_per_bin\":" << config.min_samples_per_bin
-           << ",\"min_temporal_pairs\":" << config.min_temporal_pairs << ",\"temporal_gap_tolerance_sec\":"
-           << config.temporal_gap_tolerance_sec
+           << ",\"min_temporal_pairs\":" << config.min_temporal_pairs
+           << ",\"temporal_gap_tolerance_sec\":" << config.temporal_gap_tolerance_sec
            << ",\"temporal_rule\":\"same source,satellite,signal,elevation bin and declared INTERVAL\"},\n";
     const Cn0AggregationSummary& summary = result.aggregation_summary;
-    output << "  \"summary\":{\"input_samples\":" << summary.input_samples << ",\"accepted_samples\":"
-           << summary.accepted_samples << ",\"rejected_validity\":" << summary.rejected_validity
-           << ",\"rejected_nonfinite\":" << summary.rejected_nonfinite << ",\"rejected_cn0_grid\":"
-           << summary.rejected_cn0_grid << ",\"rejected_elevation_range\":" << summary.rejected_elevation_range
-           << ",\"temporal_pairs\":" << summary.temporal_pairs << ",\"temporal_rejected_no_interval\":"
-           << summary.temporal_rejected_no_interval << ",\"temporal_rejected_gap\":"
-           << summary.temporal_rejected_gap << ",\"temporal_rejected_bin_change\":"
-           << summary.temporal_rejected_bin_change << ",\"sources\":" << summary.sources << "},\n";
+    output << "  \"summary\":{\"input_samples\":" << summary.input_samples
+           << ",\"accepted_samples\":" << summary.accepted_samples
+           << ",\"rejected_validity\":" << summary.rejected_validity
+           << ",\"rejected_nonfinite\":" << summary.rejected_nonfinite
+           << ",\"rejected_cn0_grid\":" << summary.rejected_cn0_grid
+           << ",\"rejected_elevation_range\":" << summary.rejected_elevation_range
+           << ",\"temporal_pairs\":" << summary.temporal_pairs
+           << ",\"temporal_rejected_no_interval\":" << summary.temporal_rejected_no_interval
+           << ",\"temporal_rejected_gap\":" << summary.temporal_rejected_gap
+           << ",\"temporal_rejected_bin_change\":" << summary.temporal_rejected_bin_change
+           << ",\"sources\":" << summary.sources << "},\n";
     output << "  \"sources\":[\n";
     for (std::size_t index = 0; index < result.sources.size(); ++index) {
         const Cn0SourceMetadata& source = result.sources[index];
         output << "    {\"observation\":{\"file_name\":\"" << json_escape(source.observation_file.file_name)
                << "\",\"size_bytes\":" << source.observation_file.size_bytes << ",\"fnv1a64\":\""
                << hex64(source.observation_file.fnv1a64) << "\"},\"navigation\":{\"file_name\":\""
-               << json_escape(source.navigation_file.file_name) << "\",\"size_bytes\":"
-               << source.navigation_file.size_bytes << ",\"fnv1a64\":\"" << hex64(source.navigation_file.fnv1a64)
-               << "\"},\"rinex_version\":" << source.provenance.rinex_version << ",\"station_name\":\""
-               << json_escape(source.provenance.station_name) << "\",\"marker_number\":\""
+               << json_escape(source.navigation_file.file_name)
+               << "\",\"size_bytes\":" << source.navigation_file.size_bytes << ",\"fnv1a64\":\""
+               << hex64(source.navigation_file.fnv1a64) << "\"},\"rinex_version\":" << source.provenance.rinex_version
+               << ",\"station_name\":\"" << json_escape(source.provenance.station_name) << "\",\"marker_number\":\""
                << json_escape(source.provenance.marker_number) << "\",\"receiver_type\":\""
                << json_escape(source.provenance.receiver_type) << "\",\"antenna_type\":\""
                << json_escape(source.provenance.antenna_type) << "\",\"time_system\":\""

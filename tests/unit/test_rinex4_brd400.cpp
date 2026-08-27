@@ -13,6 +13,17 @@ std::string brd4_nav_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/brd400dlr_rinex4_acceptance_nav.rnx";
 }
 
+std::string direct_rtklib_path(std::string path) {
+#ifdef _WIN32
+    for (char& character : path) {
+        if (character == '/') {
+            character = '\\';
+        }
+    }
+#endif
+    return path;
+}
+
 TEST(Rinex4Brd400, ProjectLoaderPreservesFiveSystemsAndModernEphemerisFamilies) {
     gnss_sim::RtklibNavStore* store = gnss_sim::create_rtklib_nav_store();
     ASSERT_NE(store, nullptr);
@@ -69,7 +80,8 @@ TEST(Rinex4Brd400, PinnedRtklibConsumesStoEopAndIonRecords) {
     nav_t nav{};
     obs_t obs{};
     sta_t station{};
-    const int status = readrnx(brd4_nav_path().c_str(), 1, "", &obs, &nav, &station);
+    const std::string path = direct_rtklib_path(brd4_nav_path());
+    const int status = readrnx(path.c_str(), 1, "", &obs, &nav, &station);
     freeobs(&obs);
     ASSERT_NE(status, 0);
 

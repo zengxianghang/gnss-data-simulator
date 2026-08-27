@@ -94,12 +94,11 @@ TEST(V1Acceptance, FrozenRatesRunThroughFullStreamingPipeline) {
         EXPECT_GT(summary.valid_velocity_epochs, 0U) << "rate=" << rate;
 
         for (const char* file_name : {"simulated.log", "scenario.json", "event_truth.csv", "observation_truth.csv",
-                                     "solution_truth.csv", "run_manifest.json"}) {
+                                      "solution_truth.csv", "run_manifest.json"}) {
             expect_nonempty_file(directory / file_name);
         }
         const std::string manifest = read_file(directory / "run_manifest.json");
-        EXPECT_NE(manifest.find("\"sampling_rate_hz\": " + std::to_string(rate)), std::string::npos)
-            << "rate=" << rate;
+        EXPECT_NE(manifest.find("\"sampling_rate_hz\": " + std::to_string(rate)), std::string::npos) << "rate=" << rate;
         cleanup(directory);
     }
 }
@@ -117,7 +116,7 @@ TEST(V1Acceptance, SameInputConfigAndSeedProduceByteIdenticalReceiverAndTruthOut
     ASSERT_TRUE(run_in_directory(first_directory, config, &first_summary, &error_message)) << error_message;
     ASSERT_TRUE(run_in_directory(second_directory, config, &second_summary, &error_message)) << error_message;
 
-    constexpr std::array<const char*, 6> kArtifacts = {"simulated.log",       "scenario.json",
+    constexpr std::array<const char*, 6> kArtifacts = {"simulated.log",      "scenario.json",
                                                        "event_truth.csv",    "observation_truth.csv",
                                                        "solution_truth.csv", "run_manifest.json"};
     for (const char* file_name : kArtifacts) {

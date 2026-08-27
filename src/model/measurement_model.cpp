@@ -246,6 +246,14 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
     result.range_rate_mps = geometry.range_rate_mps;
     result.satellite_clock_bias_m = kSpeedOfLightMps * geometry.satellite_state.clock_bias_sec;
     result.satellite_clock_drift_mps = kSpeedOfLightMps * geometry.satellite_state.clock_drift_sec_per_sec;
+    result.broadcast_message_family = bias_data.message_family;
+    for (int index = 0; index < 4; ++index) {
+        result.tgd_sec[index] = bias_data.tgd_sec[index];
+    }
+    for (int index = 0; index < 6; ++index) {
+        result.isc_sec[index] = bias_data.isc_sec[index];
+    }
+    result.glonass_dtaun_sec = bias_data.glonass_dtaun_sec;
     result.ionosphere_code_delay_m = atmosphere.ionosphere_code_delay_m;
     result.troposphere_delay_m = atmosphere.troposphere_delay_m;
     result.cn0_dbhz = tracker.cn0_dbhz;

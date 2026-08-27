@@ -37,11 +37,10 @@ double estimate(gnss_sim::SignalId signal_id, double elevation_deg, double sow_s
 std::string model_row(double elevation_min_deg, double elevation_max_deg, bool inclusive, const char* status,
                       std::uint64_t count, double p50_dbhz) {
     std::ostringstream output;
-    output << "gnss-cn0-model-v1,GPS,1C," << elevation_min_deg << ',' << elevation_max_deg << ','
-           << (inclusive ? 1 : 0) << ',' << status << ',' << count << ',' << (p50_dbhz - 1.0) << ','
-           << (p50_dbhz - 1.0) << ',' << (p50_dbhz - 1.0) << ',' << p50_dbhz << ',' << (p50_dbhz + 1.0) << ','
-           << (p50_dbhz + 1.0) << ',' << (p50_dbhz + 1.0) << ',' << p50_dbhz
-           << ",1,1,0,,,,INSUFFICIENT_SUPPORT,";
+    output << "gnss-cn0-model-v1,GPS,1C," << elevation_min_deg << ',' << elevation_max_deg << ',' << (inclusive ? 1 : 0)
+           << ',' << status << ',' << count << ',' << (p50_dbhz - 1.0) << ',' << (p50_dbhz - 1.0) << ','
+           << (p50_dbhz - 1.0) << ',' << p50_dbhz << ',' << (p50_dbhz + 1.0) << ',' << (p50_dbhz + 1.0) << ','
+           << (p50_dbhz + 1.0) << ',' << p50_dbhz << ",1,1,0,,,,INSUFFICIENT_SUPPORT,";
     return output.str();
 }
 
@@ -49,8 +48,8 @@ class TemporaryModel {
   public:
     explicit TemporaryModel(const std::string& content) {
         static int sequence = 0;
-        path_ = std::filesystem::temp_directory_path() /
-                ("gnss_sim_runtime_cn0_" + std::to_string(++sequence) + ".csv");
+        path_ =
+            std::filesystem::temp_directory_path() / ("gnss_sim_runtime_cn0_" + std::to_string(++sequence) + ".csv");
         std::ofstream output(path_, std::ios::binary | std::ios::trunc);
         output << content;
     }
@@ -160,8 +159,9 @@ TEST(Cn0Model, ExplicitMalformedModelsFailWithoutFallback) {
     const std::string valid_row = model_row(0.0, 90.0, true, "READY", 100, 40.0);
     const std::string duplicate = std::string(kModelHeader) + "\n" + model_row(0.0, 45.0, false, "READY", 100, 30.0) +
                                   "\n" + model_row(0.0, 45.0, true, "READY", 100, 40.0) + "\n";
-    const std::string nonfinite = std::string(kModelHeader) +
-                                  "\ngnss-cn0-model-v1,GPS,1C,0,90,1,READY,100,29,29,29,nan,31,31,31,30,1,1,0,,,,INSUFFICIENT_SUPPORT,\n";
+    const std::string nonfinite =
+        std::string(kModelHeader) +
+        "\ngnss-cn0-model-v1,GPS,1C,0,90,1,READY,100,29,29,29,nan,31,31,31,30,1,1,0,,,,INSUFFICIENT_SUPPORT,\n";
     const std::string cases[] = {std::string("bad-header\n") + valid_row + "\n", duplicate, nonfinite};
 
     for (const std::string& content : cases) {

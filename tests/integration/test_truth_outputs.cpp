@@ -146,7 +146,8 @@ TEST(TruthOutputs, ExternalCn0ModelIsManifestedAndByteRepeatable) {
     gnss_sim::SimulatorRunSummary builtin_summary{};
     std::string error_message;
     ASSERT_TRUE(run_in_directory(first_directory, &first_summary, &error_message, model_path.c_str())) << error_message;
-    ASSERT_TRUE(run_in_directory(second_directory, &second_summary, &error_message, model_path.c_str())) << error_message;
+    ASSERT_TRUE(run_in_directory(second_directory, &second_summary, &error_message, model_path.c_str()))
+        << error_message;
     ASSERT_TRUE(run_in_directory(builtin_directory, &builtin_summary, &error_message)) << error_message;
 
     for (const char* file_name : {"simulated.log", "scenario.json", "event_truth.csv", "observation_truth.csv",

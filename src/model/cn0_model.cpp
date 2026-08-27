@@ -350,15 +350,15 @@ bool validate_statistics_fields(const std::vector<std::string>& fields, std::uin
         const std::string& field = fields[static_cast<std::size_t>(8 + index)];
         if (count == 0) {
             if (!field.empty()) {
-                set_error(error_message, "CN0 model EMPTY row contains statistics at line " +
-                                             std::to_string(line_number));
+                set_error(error_message,
+                          "CN0 model EMPTY row contains statistics at line " + std::to_string(line_number));
                 return false;
             }
             continue;
         }
         if (!parse_finite_double(field, &values[index])) {
-            set_error(error_message, "CN0 model contains missing/non-finite statistics at line " +
-                                         std::to_string(line_number));
+            set_error(error_message,
+                      "CN0 model contains missing/non-finite statistics at line " + std::to_string(line_number));
             return false;
         }
     }
@@ -375,11 +375,11 @@ bool validate_statistics_fields(const std::vector<std::string>& fields, std::uin
         return false;
     }
     if (count > 0) {
-        if (!(values[0] <= values[1] && values[1] <= values[2] && values[2] <= values[3] &&
-              values[3] <= values[4] && values[4] <= values[5] && values[5] <= values[6]) || values[8] < 0.0 ||
-            values[9] < 0.0) {
-            set_error(error_message, "CN0 model statistics are internally inconsistent at line " +
-                                         std::to_string(line_number));
+        if (!(values[0] <= values[1] && values[1] <= values[2] && values[2] <= values[3] && values[3] <= values[4] &&
+              values[4] <= values[5] && values[5] <= values[6]) ||
+            values[8] < 0.0 || values[9] < 0.0) {
+            set_error(error_message,
+                      "CN0 model statistics are internally inconsistent at line " + std::to_string(line_number));
             return false;
         }
         *p50_dbhz = values[3];
@@ -401,19 +401,19 @@ bool validate_temporal_fields(const std::vector<std::string>& fields, std::size_
     for (int index = 0; index < 3; ++index) {
         if (!parse_optional_finite(fields[static_cast<std::size_t>(19 + index)], &delta_available[index],
                                    &delta[index])) {
-            set_error(error_message, "CN0 model has non-finite Delta-CN0 statistic at line " +
-                                         std::to_string(line_number));
+            set_error(error_message,
+                      "CN0 model has non-finite Delta-CN0 statistic at line " + std::to_string(line_number));
             return false;
         }
     }
     if (delta_available[0] != delta_available[1] || delta_available[1] != delta_available[2]) {
-        set_error(error_message, "CN0 model has partially populated Delta-CN0 statistics at line " +
-                                     std::to_string(line_number));
+        set_error(error_message,
+                  "CN0 model has partially populated Delta-CN0 statistics at line " + std::to_string(line_number));
         return false;
     }
     if (delta_available[0] && (delta_count == 0 || delta[0] < 0.0 || delta[0] > delta[1] || delta[1] > delta[2])) {
-        set_error(error_message, "CN0 model Delta-CN0 statistics are inconsistent at line " +
-                                     std::to_string(line_number));
+        set_error(error_message,
+                  "CN0 model Delta-CN0 statistics are inconsistent at line " + std::to_string(line_number));
         return false;
     }
 
@@ -426,8 +426,8 @@ bool validate_temporal_fields(const std::vector<std::string>& fields, std::size_
     }
     if (ar1_status == "AVAILABLE") {
         if (!ar1_available || ar1 < -1.0 - 1.0e-12 || ar1 > 1.0 + 1.0e-12) {
-            set_error(error_message, "CN0 model AVAILABLE AR(1) row has invalid value at line " +
-                                         std::to_string(line_number));
+            set_error(error_message,
+                      "CN0 model AVAILABLE AR(1) row has invalid value at line " + std::to_string(line_number));
             return false;
         }
     } else if (ar1_status == "INSUFFICIENT_SUPPORT" || ar1_status == "ZERO_VARIANCE") {
@@ -492,19 +492,19 @@ bool load_cn0_model_csv(const char* file_path, std::uint64_t seed, Cn0Model* mod
             line.pop_back();
         }
         if (line.empty()) {
-            set_error(error_message, "configured CN0 model contains an empty row at line " +
-                                         std::to_string(line_number));
+            set_error(error_message,
+                      "configured CN0 model contains an empty row at line " + std::to_string(line_number));
             return false;
         }
         if (line.find('"') != std::string::npos) {
-            set_error(error_message, "configured CN0 model uses unsupported quoted CSV at line " +
-                                         std::to_string(line_number));
+            set_error(error_message,
+                      "configured CN0 model uses unsupported quoted CSV at line " + std::to_string(line_number));
             return false;
         }
         const std::vector<std::string> fields = split_csv_line(line);
         if (fields.size() != 24U) {
-            set_error(error_message, "configured CN0 model row must contain 24 columns at line " +
-                                         std::to_string(line_number));
+            set_error(error_message,
+                      "configured CN0 model row must contain 24 columns at line " + std::to_string(line_number));
             return false;
         }
         if (fields[0] != kModelSchemaVersion) {
@@ -515,8 +515,8 @@ bool load_cn0_model_csv(const char* file_path, std::uint64_t seed, Cn0Model* mod
 
         GnssConstellation constellation{};
         if (!constellation_from_name(fields[1], &constellation)) {
-            set_error(error_message, "configured CN0 model has unsupported constellation at line " +
-                                         std::to_string(line_number));
+            set_error(error_message,
+                      "configured CN0 model has unsupported constellation at line " + std::to_string(line_number));
             return false;
         }
         const SignalDefinition* definition = find_signal_definition_by_rinex(constellation, fields[2].c_str());
@@ -532,8 +532,8 @@ bool load_cn0_model_csv(const char* file_path, std::uint64_t seed, Cn0Model* mod
             !parse_finite_double(fields[4], &bin.elevation_max_deg) ||
             !parse_binary_flag(fields[5], &bin.upper_edge_inclusive) || bin.elevation_min_deg < 0.0 ||
             bin.elevation_max_deg > 90.0 || bin.elevation_max_deg <= bin.elevation_min_deg) {
-            set_error(error_message, "configured CN0 model has invalid elevation bin at line " +
-                                         std::to_string(line_number));
+            set_error(error_message,
+                      "configured CN0 model has invalid elevation bin at line " + std::to_string(line_number));
             return false;
         }
         bin.elevation_center_deg = 0.5 * (bin.elevation_min_deg + bin.elevation_max_deg);

@@ -103,7 +103,8 @@ TEST(TruthOutputs, HeadersAreVersionedAndExplicit) {
     EXPECT_NE(scenario.find("\"truth_schema_version\": 1"), std::string::npos);
     EXPECT_NE(scenario.find("\"atmosphere_mode\": \"none\""), std::string::npos);
     EXPECT_NE(manifest.find("\"output_format_version\": 1"), std::string::npos);
-    EXPECT_NE(manifest.find("\"rtklib_commit_sha\": \"dc596ba725ccaa5ab5963d7e7ec85b52ae743969\""), std::string::npos);
+    EXPECT_NE(manifest.find(std::string("\"rtklib_commit_sha\": \"") + GNSS_SIM_RTKLIB_COMMIT + "\""),
+              std::string::npos);
     EXPECT_NE(manifest.find("\"hash_algorithm\": \"fnv1a64\""), std::string::npos);
     EXPECT_NE(manifest.find("\"random_seed\": 7"), std::string::npos);
     EXPECT_NE(manifest.find("\"source\": \"BUILTIN_FALLBACK\""), std::string::npos);

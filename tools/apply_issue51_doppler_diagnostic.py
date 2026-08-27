@@ -2,6 +2,11 @@ from pathlib import Path
 
 path = Path("tests/integration/test_all_signal_residuals.cpp")
 text = path.read_text()
+include_old = "#include <cmath>\n#include <cstdint>\n"
+include_new = "#include <cmath>\n#include <cstdio>\n#include <cstdint>\n"
+if text.count(include_old) != 1:
+    raise RuntimeError("test_all_signal_residuals.cpp: expected include insertion point once")
+text = text.replace(include_old, include_new, 1)
 old = '''            ASSERT_EQ(doppler_status, 1) << "signal=" << signal_name << " sat=" << static_cast<int>(observation.sat);'''
 new = '''            if (doppler_status != 1) {
                 double debug_rs[6]{};

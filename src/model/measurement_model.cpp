@@ -36,6 +36,37 @@ bool family_is_beidou_modern(RtklibBroadcastMessageFamily family) {
            family == RtklibBroadcastMessageFamily::kBeidouBcnav3;
 }
 
+RtklibBroadcastMessageFamily requested_bias_family(NavMessageFamily family) {
+    switch (family) {
+        case NavMessageFamily::kGpsLnav:
+        case NavMessageFamily::kQzssLnav:
+        case NavMessageFamily::kBeidouD1D2:
+            return RtklibBroadcastMessageFamily::kLegacy;
+        case NavMessageFamily::kGpsCnav:
+        case NavMessageFamily::kQzssCnav:
+            return RtklibBroadcastMessageFamily::kCnav;
+        case NavMessageFamily::kGpsCnav2:
+        case NavMessageFamily::kQzssCnav2:
+            return RtklibBroadcastMessageFamily::kCnav2;
+        case NavMessageFamily::kGlonassFdma:
+            return RtklibBroadcastMessageFamily::kGlonassFdma;
+        case NavMessageFamily::kGalileoInav:
+            return RtklibBroadcastMessageFamily::kGalileoInav;
+        case NavMessageFamily::kGalileoFnav:
+            return RtklibBroadcastMessageFamily::kGalileoFnav;
+        case NavMessageFamily::kBeidouBcnav1:
+            return RtklibBroadcastMessageFamily::kBeidouBcnav1;
+        case NavMessageFamily::kBeidouBcnav2:
+            return RtklibBroadcastMessageFamily::kBeidouBcnav2;
+        case NavMessageFamily::kBeidouBcnav3:
+            return RtklibBroadcastMessageFamily::kBeidouBcnav3;
+        case NavMessageFamily::kGlonassL3Oc:
+        case NavMessageFamily::kGalileoCnav:
+            return RtklibBroadcastMessageFamily::kUnknown;
+    }
+    return RtklibBroadcastMessageFamily::kUnknown;
+}
+
 double frequency_ratio_squared(double reference_frequency_hz, double signal_frequency_hz) {
     const double ratio = reference_frequency_hz / signal_frequency_hz;
     return ratio * ratio;
@@ -225,8 +256,9 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
     }
 
     RtklibBroadcastBiasData bias_data{};
-    if (!rtklib_broadcast_bias_data(nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec,
-                                    geometry.satellite_number, &bias_data, error_message)) {
+    if (!rtklib_broadcast_bias_data_for_family(
+            nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec, geometry.satellite_number,
+            requested_bias_family(signal->nav_message_family), &bias_data, error_message)) {
         return false;
     }
 

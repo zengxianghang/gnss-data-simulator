@@ -3,6 +3,7 @@
 extern "C" {
 #include <rtklib.h>
 #include <rtklib_pntvel_ext.h>
+#include <rtklib_signal_bias_ext.h>
 }
 
 #include <cmath>
@@ -107,23 +108,31 @@ bool legacy_prange_adjustment_m(const nav_t& nav, int satellite_number, int obse
     return std::isfinite(adjustment);
 }
 
-bool solver_pseudorange_m(const nav_t& nav, const RtklibSolutionObservation& observation, double* pseudorange_m) {
+bool solver_pseudorange_m(const nav_t& nav, gtime_t time, const RtklibSolutionObservation& observation,
+                          double* pseudorange_m) {
     if (pseudorange_m == nullptr || !std::isfinite(observation.pseudorange_m) || observation.pseudorange_m <= 0.0 ||
-        !std::isfinite(observation.code_bias_m)) {
+        !std::isfinite(observation.code_bias_m) || observation.satellite_number <= 0 ||
+        observation.satellite_number > MAXSAT)
         return false;
-    }
 
-    double legacy_adjustment_m = 0.0;
-    if (!legacy_prange_adjustment_m(nav, observation.satellite_number, observation.observation_code,
-                                    &legacy_adjustment_m)) {
-        return false;
+    const int satellite_index = observation.satellite_number - 1;
+    const bool external_dcb = nav.cbias[satellite_index][0] != 0.0 ||
+                              (observation.observation_code == CODE_L1C && nav.cbias[satellite_index][1] != 0.0);
+    if (external_dcb) {
+        double legacy_adjustment_m = 0.0;
+        if (!legacy_prange_adjustment_m(nav, observation.satellite_number, observation.observation_code,
+                                        &legacy_adjustment_m))
+            return false;
+        *pseudorange_m = observation.pseudorange_m - observation.code_bias_m - legacy_adjustment_m;
+    } else {
+        double rtklib_code_bias_m = 0.0;
+        const int status = rtklib_signal_code_bias_ext(time, observation.satellite_number,
+                                                       static_cast<unsigned char>(observation.observation_code), 0,
+                                                       &nav, &rtklib_code_bias_m, nullptr);
+        if (status <= 0)
+            return false;
+        *pseudorange_m = observation.pseudorange_m - observation.code_bias_m + rtklib_code_bias_m;
     }
-
-    // #11 emits raw signal-specific pseudorange. Remove its explicit
-    // TGD/BGD/ISC term, then pre-compensate the adjustment that the pinned
-    // RTKLIB prange() applies. The PC seen by rescode() is therefore the
-    // broadcast-clock-referenced pseudorange without modifying pntpos().
-    *pseudorange_m = observation.pseudorange_m - observation.code_bias_m - legacy_adjustment_m;
     return std::isfinite(*pseudorange_m) && *pseudorange_m > 0.0;
 }
 
@@ -163,7 +172,7 @@ bool rtklib_solve_single_position(const RtklibNavStore* receiver_nav, int gps_we
             continue;
         }
         double pseudorange_m = 0.0;
-        if (!solver_pseudorange_m(receiver_nav->nav, source, &pseudorange_m)) {
+        if (!solver_pseudorange_m(receiver_nav->nav, epoch_time, source, &pseudorange_m)) {
             continue;
         }
         fill_common_observation(source, epoch_time, &rtklib_observations[usable_count]);

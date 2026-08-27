@@ -134,10 +134,36 @@ RtklibBroadcastMessageFamily message_family(const eph_t& eph, int system) {
     return RtklibBroadcastMessageFamily::kUnknown;
 }
 
+const eph_t* select_ephemeris_for_family(const nav_t& nav, gtime_t time, int satellite_number,
+                                         RtklibBroadcastMessageFamily requested_family) {
+    if (requested_family == RtklibBroadcastMessageFamily::kUnknown) {
+        return select_ephemeris(nav, time, satellite_number);
+    }
+    const int system = satsys(satellite_number, nullptr);
+    const double maximum_age_sec = maximum_ephemeris_age_sec(system);
+    const eph_t* selected = nullptr;
+    double selected_age_sec = maximum_age_sec + 1.0;
+    for (int index = 0; index < nav.n; ++index) {
+        const eph_t& eph = nav.eph[index];
+        if (eph.sat != satellite_number || message_family(eph, system) != requested_family)
+            continue;
+        const double age_sec = std::fabs(timediff(eph.toe, time));
+        if (age_sec > maximum_age_sec)
+            continue;
+        if (selected == nullptr || age_sec < selected_age_sec ||
+            (std::fabs(age_sec - selected_age_sec) < 1.0e-9 && timediff(eph.toc, selected->toc) > 0.0)) {
+            selected = &eph;
+            selected_age_sec = age_sec;
+        }
+    }
+    return selected;
+}
+
 } // namespace
 
-bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
-                                RtklibBroadcastBiasData* data, std::string* error_message) {
+bool rtklib_broadcast_bias_data_for_family(const RtklibNavStore* store, int gps_week, double sow_sec,
+                                           int satellite_number, RtklibBroadcastMessageFamily requested_message_family,
+                                           RtklibBroadcastBiasData* data, std::string* error_message) {
     if (store == nullptr || data == nullptr || satellite_number <= 0 || !valid_gps_time(gps_week, sow_sec)) {
         set_error(error_message, "broadcast-bias request has invalid arguments");
         return false;
@@ -164,7 +190,7 @@ bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, doubl
         return true;
     }
 
-    const eph_t* eph = select_ephemeris(store->nav, time, satellite_number);
+    const eph_t* eph = select_ephemeris_for_family(store->nav, time, satellite_number, requested_message_family);
     if (eph == nullptr) {
         set_error(error_message, "no matching broadcast ephemeris for code bias");
         return false;
@@ -176,6 +202,12 @@ bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, doubl
     std::memcpy(result.isc_sec, eph->isc, sizeof(result.isc_sec));
     *data = result;
     return true;
+}
+
+bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
+                                RtklibBroadcastBiasData* data, std::string* error_message) {
+    return rtklib_broadcast_bias_data_for_family(store, gps_week, sow_sec, satellite_number,
+                                                 RtklibBroadcastMessageFamily::kUnknown, data, error_message);
 }
 
 } // namespace gnss_sim

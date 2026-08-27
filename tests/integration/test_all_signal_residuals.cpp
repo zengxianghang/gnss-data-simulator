@@ -1,10 +1,10 @@
-#include <gtest/gtest.h>
-
 #include "gnss/rtklib_adapter.h"
 #include "gnss/signal_definitions.h"
 #include "gnss_sim/sim_config.h"
 #include "gnss_sim/sim_time.h"
 #include "gnss_sim/simulator.h"
+
+#include <gtest/gtest.h>
 
 extern "C" {
 #include <rtklib.h>
@@ -86,6 +86,33 @@ void free_nav(nav_t* nav) {
     }
 }
 
+int required_rtklib_message_type(const gnss_sim::SignalDefinition& definition, const std::string& family) {
+    if (family == "LEGACY") {
+        if (definition.constellation == gnss_sim::GnssConstellation::kGps ||
+            definition.constellation == gnss_sim::GnssConstellation::kQzss)
+            return NAV_LNAV;
+        if (definition.constellation == gnss_sim::GnssConstellation::kBeidou)
+            return NAV_D1 | NAV_D2 | NAV_D1D2;
+    }
+    if (family == "CNAV")
+        return NAV_CNAV;
+    if (family == "CNAV2")
+        return NAV_CNV2;
+    if (family == "GALILEO_INAV")
+        return NAV_INAV;
+    if (family == "GALILEO_FNAV")
+        return NAV_FNAV;
+    if (family == "BEIDOU_BCNAV1")
+        return NAV_CNV1;
+    if (family == "BEIDOU_BCNAV2")
+        return NAV_CNV2;
+    if (family == "BEIDOU_BCNAV3")
+        return NAV_CNV3;
+    if (family == "GLONASS_FDMA")
+        return NAV_FDMA;
+    return 0;
+}
+
 TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) {
     gnss_sim::SimConfig config = gnss_sim::default_sim_config();
     config.scenario = gnss_sim::ScenarioType::KS;
@@ -126,10 +153,10 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
     std::string line;
     ASSERT_TRUE(static_cast<bool>(std::getline(input, line)));
     const std::map<std::string, std::size_t> column = header_columns(line);
-    for (const char* required : {"gps_week", "sow_sec", "signal_id", "signal_name", "satellite_number",
-                                 "wavelength_m", "receiver_x_m", "receiver_y_m", "receiver_z_m",
-                                 "receiver_vx_mps", "receiver_vy_mps", "receiver_vz_mps", "cn0_dbhz",
-                                 "pseudorange_valid", "doppler_valid", "pseudorange_m", "doppler_hz"}) {
+    for (const char* required :
+         {"gps_week", "sow_sec", "signal_id", "signal_name", "satellite_number", "wavelength_m", "receiver_x_m",
+          "receiver_y_m", "receiver_z_m", "receiver_vx_mps", "receiver_vy_mps", "receiver_vz_mps", "cn0_dbhz",
+          "broadcast_message_family", "pseudorange_valid", "doppler_valid", "pseudorange_m", "doppler_hz"}) {
         ASSERT_EQ(column.count(required), 1U) << required;
     }
 
@@ -188,15 +215,18 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
                                                  std::stod(fields[column.at("receiver_vy_mps")]),
                                                  std::stod(fields[column.at("receiver_vz_mps")])};
 
+        const std::string message_family = fields[column.at("broadcast_message_family")];
+        const int required_message_type = required_rtklib_message_type(*definition, message_family);
+
         rtklib_signal_bias_info_ext_t bias_info{};
         double code_residual_m = 0.0;
-        const int code_status = rtklib_rescode_signal_ext(
-            &observation, &nav, &residual_options, receiver_position_m, 0.0, 0.0, wavelength_m, &code_residual_m,
-            nullptr, &bias_info);
+        const int code_status =
+            rtklib_rescode_signal_ext(&observation, &nav, &residual_options, receiver_position_m, 0.0, 0.0,
+                                      required_message_type, wavelength_m, &code_residual_m, nullptr, &bias_info);
         if (fields[column.at("pseudorange_valid")] == "1") {
             ASSERT_EQ(code_status, 1) << "signal=" << signal_name << " sat=" << static_cast<int>(observation.sat);
             ++signal_stats.code_residuals;
-            signal_stats.max_abs_code_m = std::max(signal_stats.max_abs_code_m, std::fabs(code_residual_m));
+            signal_stats.max_abs_code_m = (std::max)(signal_stats.max_abs_code_m, std::fabs(code_residual_m));
         } else {
             EXPECT_EQ(code_status, 0) << "invalid code must have an explicitly unavailable RTKLIB bias path; signal="
                                       << signal_name;
@@ -206,13 +236,13 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
 
         if (fields[column.at("doppler_valid")] == "1") {
             double doppler_residual_mps = 0.0;
-            const int doppler_status = rtklib_resdop_signal_ext(
-                &observation, &nav, &residual_options, receiver_position_m, receiver_velocity_mps, 0.0, wavelength_m,
-                &doppler_residual_mps, nullptr);
+            const int doppler_status =
+                rtklib_resdop_signal_ext(&observation, &nav, &residual_options, receiver_position_m,
+                                         receiver_velocity_mps, 0.0, wavelength_m, &doppler_residual_mps, nullptr);
             ASSERT_EQ(doppler_status, 1) << "signal=" << signal_name << " sat=" << static_cast<int>(observation.sat);
             ++signal_stats.doppler_residuals;
             signal_stats.max_abs_doppler_mps =
-                std::max(signal_stats.max_abs_doppler_mps, std::fabs(doppler_residual_mps));
+                (std::max)(signal_stats.max_abs_doppler_mps, std::fabs(doppler_residual_mps));
         }
     }
 

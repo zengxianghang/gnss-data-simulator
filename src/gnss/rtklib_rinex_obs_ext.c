@@ -7,7 +7,6 @@
 #include "rtklib_obs_ext.h"
 
 #define obs2code obs2code_ext
-#define code2obs code2obs_ext
 #define getcodepri getcodepri_ext
 
 #include "../../third_party/RTKLIB/src/rinex.c"

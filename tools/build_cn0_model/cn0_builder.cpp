@@ -217,6 +217,13 @@ bool build_cn0_model(const std::vector<Cn0InputSource>& sources, const Cn0Aggreg
 
     build.aggregation_summary = accumulator.summary();
     build.bins = accumulator.finalize();
+    for (Cn0BinStatistics& bin : build.bins) {
+        if (bin.delta_count < config.min_temporal_pairs) {
+            bin.delta_p50_dbhz = std::numeric_limits<double>::quiet_NaN();
+            bin.delta_p90_dbhz = std::numeric_limits<double>::quiet_NaN();
+            bin.delta_p99_dbhz = std::numeric_limits<double>::quiet_NaN();
+        }
+    }
     *result = std::move(build);
     return true;
 }

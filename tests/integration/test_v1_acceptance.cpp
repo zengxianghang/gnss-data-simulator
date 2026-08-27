@@ -1,12 +1,15 @@
+#include "gnss/rtklib_adapter.h"
 #include "gnss/signal_definitions.h"
 #include "gnss_sim/sim_config.h"
 #include "gnss_sim/sim_time.h"
 #include "gnss_sim/simulator.h"
 
 #include <array>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <limits>
 #include <set>
 #include <sstream>
 #include <string>
@@ -181,6 +184,40 @@ void expect_every_frozen_signal_in_range_output(const std::filesystem::path& log
     }
 }
 
+double max_valid_position_error_m(const std::filesystem::path& solution_path, double truth_latitude_deg,
+                                  double truth_longitude_deg, double truth_height_m,
+                                  std::uint64_t* valid_position_count) {
+    double truth_ecef[3]{};
+    EXPECT_TRUE(gnss_sim::rtklib_llh_to_ecef(truth_latitude_deg, truth_longitude_deg, truth_height_m, truth_ecef));
+    std::ifstream input(solution_path);
+    std::string line;
+    if (!std::getline(input, line)) {
+        return std::numeric_limits<double>::infinity();
+    }
+    double maximum_error_m = 0.0;
+    std::uint64_t count = 0;
+    while (std::getline(input, line)) {
+        std::vector<std::string> fields;
+        std::istringstream stream(line);
+        std::string field;
+        while (std::getline(stream, field, ',')) {
+            fields.push_back(field);
+        }
+        if (fields.size() < 13U || fields[4] != "1") {
+            continue;
+        }
+        const double dx = std::stod(fields[10]) - truth_ecef[0];
+        const double dy = std::stod(fields[11]) - truth_ecef[1];
+        const double dz = std::stod(fields[12]) - truth_ecef[2];
+        maximum_error_m = std::max(maximum_error_m, std::sqrt(dx * dx + dy * dy + dz * dz));
+        ++count;
+    }
+    if (valid_position_count != nullptr) {
+        *valid_position_count = count;
+    }
+    return count > 0 ? maximum_error_m : std::numeric_limits<double>::infinity();
+}
+
 void cleanup(const std::filesystem::path& path) {
     std::error_code error;
     std::filesystem::remove_all(path, error);
@@ -260,6 +297,32 @@ TEST(V1Acceptance, RealBrd400DlrRinex4RunsFiveSystemReceiverNavLoopback) {
     EXPECT_GT(summary.max_observations_per_epoch, 0);
     EXPECT_GT(summary.valid_position_epochs, 0U);
     EXPECT_GT(summary.valid_velocity_epochs, 0U);
+
+    cleanup(directory);
+}
+
+TEST(V1Acceptance, RealBrd400DlrBroadcastAtmosphereMatchesReceiverSolutionConvention) {
+    gnss_sim::SimConfig config = acceptance_config();
+    config.atmosphere_mode = gnss_sim::AtmosphereMode::BROADCAST;
+    config.sampling_rate_hz = 1;
+    config.duration_ns = 60LL * gnss_sim::NANOSECONDS_PER_SECOND;
+    config.receiver = {20.0, 120.0, 100.0};
+
+    const std::filesystem::path directory = "gnss_sim_acceptance_brd4_broadcast_atmosphere";
+    gnss_sim::SimulatorRunSummary summary{};
+    std::string error_message;
+    ASSERT_TRUE(
+        run_in_directory_with_nav(directory, config, brd4_nav_path(), brd4_start_time(), &summary, &error_message))
+        << error_message;
+
+    expect_five_system_observations(directory / "observation_truth.csv");
+    EXPECT_GT(summary.valid_position_epochs, 0U);
+    std::uint64_t valid_position_count = 0;
+    const double maximum_error_m =
+        max_valid_position_error_m(directory / "solution_truth.csv", 20.0, 120.0, 100.0, &valid_position_count);
+    EXPECT_EQ(valid_position_count, summary.valid_position_epochs);
+    EXPECT_LT(maximum_error_m, 0.5)
+        << "broadcast-atmosphere zero-noise loopback must not hide ion/trop convention mismatches";
 
     cleanup(directory);
 }

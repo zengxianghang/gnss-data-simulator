@@ -150,6 +150,7 @@ if(BUILD_TESTING)
         tests/unit/test_navigation_state.cpp
         tests/unit/test_output_writers.cpp
         tests/unit/test_receiver_truth.cpp
+        tests/unit/test_rinex4_brd400.cpp
         tests/unit/test_rtklib_adapter.cpp
         tests/unit/test_satellite_engine.cpp
         tests/unit/test_scenario_engine.cpp
@@ -174,6 +175,7 @@ if(BUILD_TESTING)
     add_executable(gnss_sim_integration_tests
         tests/integration/test_scenarios.cpp
         tests/integration/test_truth_outputs.cpp
+        tests/integration/test_v1_acceptance.cpp
     )
     target_include_directories(gnss_sim_integration_tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src")

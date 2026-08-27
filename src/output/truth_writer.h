@@ -1,7 +1,6 @@
 #ifndef GNSS_SIM_SRC_OUTPUT_TRUTH_WRITER_H_
 #define GNSS_SIM_SRC_OUTPUT_TRUTH_WRITER_H_
 
-#include "gnss/navigation_state.h"
 #include "gnss/satellite_engine.h"
 #include "gnss_sim/sim_config.h"
 #include "gnss_sim/sim_types.h"
@@ -26,8 +25,6 @@ void destroy_truth_writer(TruthWriter* writer);
 
 bool truth_writer_write_scenario_events(TruthWriter* writer, const ScenarioEpochState& scenario,
                                         StartupMode startup_mode, std::string* error_message);
-bool truth_writer_write_nav_event(TruthWriter* writer, const NavigationUpdateEvent& event,
-                                  std::string* error_message);
 bool truth_writer_write_observation(TruthWriter* writer, const ReceiverTruth& receiver,
                                     const SatelliteGeometry& geometry, const SignalTracker& tracker,
                                     const MeasurementObservation& observation, std::string* error_message);

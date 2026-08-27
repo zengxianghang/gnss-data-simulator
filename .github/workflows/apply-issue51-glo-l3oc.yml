@@ -1,5 +1,6 @@
 name: Apply GLONASS L3OC simulator patch
 
+# Rerun guarded validation against RTKLIB dce8ed3d generic Doppler-state semantics.
 on:
   push:
     branches:

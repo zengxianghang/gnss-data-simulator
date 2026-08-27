@@ -70,8 +70,7 @@ int main(int argc, char** argv) {
     const bool ok = gnss_sim::cn0_builder::stream_rinex_cn0_samples(
         observation_path, navigation_path,
         [&](const gnss_sim::cn0_builder::RinexCn0Sample& sample) {
-            output << sample.time.gps_week << ','
-                   << static_cast<double>(sample.time.tow_ns) / 1000000000.0 << ','
+            output << sample.time.gps_week << ',' << static_cast<double>(sample.time.tow_ns) / 1000000000.0 << ','
                    << csv_escape(provenance.station_name) << ','
                    << gnss_sim::cn0_builder::constellation_name(sample.constellation) << ',' << sample.prn << ','
                    << sample.rinex_signal_code << ',' << sample.signal_strength_value << ',';

@@ -1,8 +1,7 @@
-#include "tools/build_cn0_model/rinex_obs_stream.h"
-
 #include "gnss/rtklib_adapter.h"
 #include "gnss/satellite_engine.h"
 #include "model/receiver_truth.h"
+#include "tools/build_cn0_model/rinex_obs_stream.h"
 
 #include <gtest/gtest.h>
 
@@ -36,8 +35,8 @@ std::string acceptance_nav_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/multi_gnss_acceptance_nav.rnx";
 }
 
-bool collect_samples(const std::string& observation_path, RinexObsProvenance* provenance, RinexObsStreamSummary* summary,
-                     std::vector<RinexCn0Sample>* samples, std::string* error) {
+bool collect_samples(const std::string& observation_path, RinexObsProvenance* provenance,
+                     RinexObsStreamSummary* summary, std::vector<RinexCn0Sample>* samples, std::string* error) {
     return gnss_sim::cn0_builder::stream_rinex_cn0_samples(
         observation_path, acceptance_nav_path(),
         [&](const RinexCn0Sample& sample) {
@@ -92,15 +91,18 @@ class TemporaryRinexFile {
   public:
     explicit TemporaryRinexFile(const std::string& content) {
         static int sequence = 0;
-        path_ = std::filesystem::temp_directory_path() /
-                ("gnss_sim_cn0_stream_" + std::to_string(++sequence) + ".rnx");
+        path_ = std::filesystem::temp_directory_path() / ("gnss_sim_cn0_stream_" + std::to_string(++sequence) + ".rnx");
         std::ofstream output(path_, std::ios::binary);
         output << content;
     }
 
-    ~TemporaryRinexFile() { std::remove(path_.string().c_str()); }
+    ~TemporaryRinexFile() {
+        std::remove(path_.string().c_str());
+    }
 
-    std::string path() const { return path_.string(); }
+    std::string path() const {
+        return path_.string();
+    }
 
   private:
     std::filesystem::path path_;
@@ -172,8 +174,8 @@ TEST(RinexObsStream, ElevationMatchesSimulatorGeometryToOnePicoradian) {
                                              &receiver.height_m));
 
     gnss_sim::SatelliteGeometry geometry{};
-    ASSERT_TRUE(gnss_sim::compute_satellite_geometry(nav, receiver, samples.front().time, samples.front().satellite_number,
-                                                     -90.0, &geometry, &error))
+    ASSERT_TRUE(gnss_sim::compute_satellite_geometry(nav, receiver, samples.front().time,
+                                                     samples.front().satellite_number, -90.0, &geometry, &error))
         << error;
     EXPECT_NEAR(samples.front().azimuth_rad, geometry.azimuth_rad, 1e-12);
     EXPECT_NEAR(samples.front().elevation_rad, geometry.elevation_rad, 1e-12);
@@ -224,8 +226,8 @@ TEST(RinexObsStream, DecodesModernBeidouSignalStrengthWithoutCodeObservable) {
 }
 
 TEST(RinexObsStream, MissingOrInvalidSignalStrengthIsSkippedDeterministically) {
-    const TemporaryRinexFile file(single_signal_fixture(
-        'G', "S1C", "G01", {"DBHZ"}, {"> 2023 03 14 00 15  0.0000000  0  1"}, {"      invalid   "}));
+    const TemporaryRinexFile file(single_signal_fixture('G', "S1C", "G01", {"DBHZ"},
+                                                        {"> 2023 03 14 00 15  0.0000000  0  1"}, {"      invalid   "}));
 
     RinexObsProvenance provenance{};
     RinexObsStreamSummary summary{};
@@ -276,8 +278,7 @@ TEST(RinexObsStream, UnsupportedSignalMappingIsReportedWithoutFallback) {
 
 TEST(RinexObsStream, RejectsOutOfOrderEpochs) {
     const TemporaryRinexFile file(single_signal_fixture(
-        'G', "S1C", "G01", {"DBHZ"},
-        {"> 2023 03 14 00 15  1.0000000  0  1", "> 2023 03 14 00 15  0.0000000  0  1"},
+        'G', "S1C", "G01", {"DBHZ"}, {"> 2023 03 14 00 15  1.0000000  0  1", "> 2023 03 14 00 15  0.0000000  0  1"},
         {observation_field(38.0), observation_field(39.0)}));
 
     RinexObsProvenance provenance{};
@@ -291,8 +292,7 @@ TEST(RinexObsStream, RejectsOutOfOrderEpochs) {
 
 TEST(RinexObsStream, ConvertsBeidouTimeAcrossGpsWeekBoundary) {
     const TemporaryRinexFile file(single_signal_fixture(
-        'C', "S2I", "C01", {"DBHZ"}, {"> 2023 03 11 23 59 50.0000000  0  1"}, {observation_field(37.0)},
-        "BDT"));
+        'C', "S2I", "C01", {"DBHZ"}, {"> 2023 03 11 23 59 50.0000000  0  1"}, {observation_field(37.0)}, "BDT"));
 
     RinexObsProvenance provenance{};
     RinexObsStreamSummary summary{};

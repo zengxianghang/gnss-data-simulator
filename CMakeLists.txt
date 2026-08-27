@@ -96,6 +96,7 @@ add_library(gnss_sim_core STATIC
     src/gnss/rtklib_bias_adapter.cpp
     src/gnss/rtklib_nav_output_adapter.cpp
     src/gnss/rtklib_output_adapter.cpp
+    src/gnss/rtklib_residual_adapter.cpp
     src/gnss/rtklib_solution_adapter.cpp
     src/gnss/satellite_engine.cpp
     src/gnss/signal_definitions.cpp

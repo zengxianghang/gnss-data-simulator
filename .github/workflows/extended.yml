@@ -32,7 +32,7 @@ permissions:
 
 concurrency:
   group: extended-validation-${{ github.ref }}-${{ github.event_name }}-${{ inputs.case || 'scheduled' }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   plan:
@@ -62,15 +62,10 @@ jobs:
           event = os.environ["EVENT_NAME"]
           requested = os.environ.get("REQUESTED_CASE", "")
           if event == "push":
-              # Temporary implementation evidence batch. memory_trend_50hz
-              # already passed before this batch was enabled.
-              selected = [
-                  "ks_8h",
-                  "rea_8h",
-                  "ttff_8h",
-                  "stress_50hz_1h",
-                  "determinism_50hz_10m",
-              ]
+              # Temporary implementation evidence: KS/REA, determinism and
+              # memory-trend already have passing artifacts. Keep branch pushes
+              # focused on the remaining TTFF and 1 h/50 Hz cases.
+              selected = ["ttff_8h", "stress_50hz_1h"]
           elif event == "schedule":
               selected = ["ks_8h", "memory_trend_50hz"]
           elif requested == "all":

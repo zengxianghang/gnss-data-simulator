@@ -105,9 +105,8 @@ bool direct_rtklib_broadcast_ionosphere(const std::string& path, int gps_week, d
     const double azel[2] = {azimuth_rad, elevation_rad};
     double variance_m2 = 0.0;
     const int satellite = satno(SYS_GPS, 1);
-    const bool ok = satellite > 0 &&
-                    ionocorr(gpst2time(gps_week, sow_sec), &nav, satellite, position_rad_m, azel, IONOOPT_BRDC,
-                             delay_m, &variance_m2) != 0;
+    const bool ok = satellite > 0 && ionocorr(gpst2time(gps_week, sow_sec), &nav, satellite, position_rad_m, azel,
+                                              IONOOPT_BRDC, delay_m, &variance_m2) != 0;
     if (ion_gps_norm != nullptr) {
         *ion_gps_norm = norm(nav.ion_gps, 8);
     }
@@ -242,19 +241,16 @@ TEST(AtmosphereBroadcast, AllV1ConstellationsSharePinnedRtklibBaseAndUseSignalFr
 
     double base_delay_m = 0.0;
     ASSERT_TRUE(direct_rtklib_broadcast_ionosphere(brd4_nav_path(), time.gps_week, gnss_sim::sim_time_sow_sec(time),
-                                                   receiver_ecef, azimuth, elevation, &base_delay_m, nullptr,
-                                                   nullptr));
+                                                   receiver_ecef, azimuth, elevation, &base_delay_m, nullptr, nullptr));
 
     struct TestCase {
         gnss_sim::SignalId signal_id;
         int glonass_fcn;
     };
     const TestCase cases[] = {
-        {gnss_sim::SignalId::kGpsL1Ca, 0},       {gnss_sim::SignalId::kQzssL1Ca, 0},
-        {gnss_sim::SignalId::kGlonassG1, -7},   {gnss_sim::SignalId::kGlonassG1, 6},
-        {gnss_sim::SignalId::kGalileoE1, 0},     {gnss_sim::SignalId::kBeidouB1I, 0},
-        {gnss_sim::SignalId::kBeidouB1C, 0},     {gnss_sim::SignalId::kBeidouB2A, 0},
-        {gnss_sim::SignalId::kBeidouB2B, 0},
+        {gnss_sim::SignalId::kGpsL1Ca, 0},   {gnss_sim::SignalId::kQzssL1Ca, 0},  {gnss_sim::SignalId::kGlonassG1, -7},
+        {gnss_sim::SignalId::kGlonassG1, 6}, {gnss_sim::SignalId::kGalileoE1, 0}, {gnss_sim::SignalId::kBeidouB1I, 0},
+        {gnss_sim::SignalId::kBeidouB1C, 0}, {gnss_sim::SignalId::kBeidouB2A, 0}, {gnss_sim::SignalId::kBeidouB2B, 0},
     };
 
     for (const TestCase& test : cases) {

@@ -474,6 +474,19 @@ bool rtklib_observation_code(const char* rinex_signal_code, int* observation_cod
     return true;
 }
 
+bool rtklib_satellite_state_available(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number) {
+    if (store == nullptr || satellite_number <= 0 || !valid_gps_time(gps_week, sow_sec)) {
+        return false;
+    }
+    const gtime_t time = gpst2time(gps_week, sow_sec);
+    double state_and_velocity[6]{};
+    double clock[2]{};
+    double variance_m2 = 0.0;
+    int health = 0;
+    return satpos(time, time, satellite_number, EPHOPT_BRDC, &store->nav, state_and_velocity, clock, &variance_m2,
+                  &health) != 0;
+}
+
 bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
                                 RtklibSatelliteState* state, std::string* error_message) {
     if (store == nullptr || state == nullptr || satellite_number <= 0 || !valid_gps_time(gps_week, sow_sec)) {

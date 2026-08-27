@@ -23,6 +23,16 @@ ctest --test-dir build -C Release --output-on-failure
 
 The simulator writes the receiver log plus versioned truth/manifest files beside it. Normal pull-request CI runs deterministic short acceptance tests; long 8-hour / 50 Hz resource validation is defined separately in `.github/workflows/extended.yml` and documented in `docs/EXTENDED_VALIDATION.md`.
 
+## Design and V1 behavior
+
+- [`docs/DESIGN_SPEC.md`](docs/DESIGN_SPEC.md) — architecture and V1 scope.
+- [`docs/ENGINEERING_RULES.md`](docs/ENGINEERING_RULES.md) — repository layout, coding rules, CI policy, and test principles.
+- [`docs/NAV_RECORDS.md`](docs/NAV_RECORDS.md) — supported NovAtel OEM7 and Unicore N4 navigation records.
+- [`docs/V1_DEFAULTS.md`](docs/V1_DEFAULTS.md) — frozen V1 default parameters.
+- [`docs/STARTUP_RECOVERY_MODEL.md`](docs/STARTUP_RECOVERY_MODEL.md) — HOT/WARM/COLD TTFF and REA recovery model.
+- [`docs/V1_ACCEPTANCE_MATRIX.md`](docs/V1_ACCEPTANCE_MATRIX.md) — short deterministic V1 acceptance coverage.
+- [`docs/EXTENDED_VALIDATION.md`](docs/EXTENDED_VALIDATION.md) — 8-hour / 50 Hz streaming, determinism, and memory validation.
+
 ## Validation data
 
 The committed test suite includes compact deterministic fixtures, including a reduced real WHU `BRD400DLR` RINEX 4.02 broadcast-navigation fixture with provenance metadata. Normal and extended CI do not download live IGS data at test runtime.

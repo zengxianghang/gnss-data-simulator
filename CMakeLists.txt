@@ -17,6 +17,18 @@ set(GNSS_SIM_RTKLIB_COMMIT "dc596ba725ccaa5ab5963d7e7ec85b52ae743969" CACHE STRI
 set(GNSS_SIM_CJSON_COMMIT "acc76239bee01d8e9c858ae2cab296704e52d916" CACHE STRING
     "Pinned cJSON commit used by this simulator build")
 
+execute_process(
+    COMMAND git rev-parse HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    RESULT_VARIABLE GNSS_SIM_GIT_RESULT
+    OUTPUT_VARIABLE GNSS_SIM_SOURCE_COMMIT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT GNSS_SIM_GIT_RESULT EQUAL 0 OR GNSS_SIM_SOURCE_COMMIT STREQUAL "")
+    set(GNSS_SIM_SOURCE_COMMIT "unknown")
+endif()
+
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/RTKLIB/src/rtklib.h")
     message(FATAL_ERROR
         "RTKLIB submodule is missing. Run: git submodule update --init --recursive")
@@ -92,6 +104,7 @@ add_library(gnss_sim_core STATIC
     src/output/novatel_nav_writer.cpp
     src/output/novatel_range_writer.cpp
     src/output/novatel_solution_writer.cpp
+    src/output/truth_writer.cpp
     src/output/unicore_nav_writer.cpp
     src/scenario/scenario_engine.cpp
     src/solution/solution_engine.cpp
@@ -101,6 +114,8 @@ target_include_directories(gnss_sim_core
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
+target_compile_definitions(gnss_sim_core PRIVATE
+    GNSS_SIM_SOURCE_COMMIT="${GNSS_SIM_SOURCE_COMMIT}")
 target_link_libraries(gnss_sim_core
     PRIVATE gnss_sim::rtklib gnss_sim::cjson
 )

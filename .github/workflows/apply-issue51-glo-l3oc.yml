@@ -1,6 +1,6 @@
 name: Apply GLONASS L3OC simulator patch
 
-# Guarded compact residual validation against RTKLIB f4f0d97 selector parity.
+# Guarded compact residual validation against RTKLIB 8d252915 BDS CNAV time fix.
 on:
   push:
     branches:

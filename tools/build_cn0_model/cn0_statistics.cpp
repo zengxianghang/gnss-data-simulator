@@ -69,8 +69,7 @@ bool validate_config(const Cn0AggregationConfig& config, int* bin_count, std::st
         set_error(error_message, "CN0 elevation model bounds must remain within [-90, 90] degrees");
         return false;
     }
-    const double exact_bins =
-        (config.elevation_max_deg - config.elevation_min_deg) / config.elevation_bin_width_deg;
+    const double exact_bins = (config.elevation_max_deg - config.elevation_min_deg) / config.elevation_bin_width_deg;
     const double rounded_bins = std::round(exact_bins);
     if (std::fabs(exact_bins - rounded_bins) > kConfigTolerance || rounded_bins < 1.0 || rounded_bins > 180.0) {
         set_error(error_message, "CN0 elevation span must be an integer number of bins");
@@ -193,12 +192,10 @@ double histogram_mad(const std::array<std::uint64_t, kCn0QuarterBuckets>& histog
         if (bucket_count == 0) {
             continue;
         }
-        deviations.push_back(
-            {std::fabs(static_cast<double>(bucket) * kQuarterDbHz - median), bucket_count});
+        deviations.push_back({std::fabs(static_cast<double>(bucket) * kQuarterDbHz - median), bucket_count});
     }
-    std::sort(deviations.begin(), deviations.end(), [](const WeightedValue& left, const WeightedValue& right) {
-        return left.value < right.value;
-    });
+    std::sort(deviations.begin(), deviations.end(),
+              [](const WeightedValue& left, const WeightedValue& right) { return left.value < right.value; });
     return weighted_quantile(deviations, count, 0.5);
 }
 
@@ -227,14 +224,12 @@ std::uint64_t previous_key(int satellite_number, SignalId signal_id) {
 }
 
 double sim_time_difference_sec(const SimTime& current, const SimTime& previous) {
-    const double week_seconds =
-        static_cast<double>(current.gps_week - previous.gps_week) * 604800.0;
+    const double week_seconds = static_cast<double>(current.gps_week - previous.gps_week) * 604800.0;
     const double tow_seconds = static_cast<double>(current.tow_ns - previous.tow_ns) / 1000000000.0;
     return week_seconds + tow_seconds;
 }
 
-bool temporal_ar1(const TemporalMoments& moments, std::uint64_t minimum_pairs, double* ar1,
-                  Cn0Ar1Status* status) {
+bool temporal_ar1(const TemporalMoments& moments, std::uint64_t minimum_pairs, double* ar1, Cn0Ar1Status* status) {
     if (ar1 == nullptr || status == nullptr) {
         return false;
     }
@@ -313,10 +308,9 @@ bool Cn0StatisticsAccumulator::begin_source(double observation_interval_sec, std
     }
     impl_->previous.clear();
     impl_->source_active = true;
-    impl_->source_interval_sec =
-        std::isfinite(observation_interval_sec) && observation_interval_sec > 0.0
-            ? observation_interval_sec
-            : std::numeric_limits<double>::quiet_NaN();
+    impl_->source_interval_sec = std::isfinite(observation_interval_sec) && observation_interval_sec > 0.0
+                                     ? observation_interval_sec
+                                     : std::numeric_limits<double>::quiet_NaN();
     ++impl_->summary.sources;
     return true;
 }
@@ -415,14 +409,14 @@ std::vector<Cn0BinStatistics> Cn0StatisticsAccumulator::finalize() const {
     for (std::size_t signal_index = 0; signal_index < impl_->signals.size(); ++signal_index) {
         const SignalDefinition& signal = *impl_->signals[signal_index];
         for (int bin_index = 0; bin_index < impl_->bin_count; ++bin_index) {
-            const BinCell& cell =
-                impl_->cells[signal_index * static_cast<std::size_t>(impl_->bin_count) + static_cast<std::size_t>(bin_index)];
+            const BinCell& cell = impl_->cells[signal_index * static_cast<std::size_t>(impl_->bin_count) +
+                                               static_cast<std::size_t>(bin_index)];
             Cn0BinStatistics statistics{};
             statistics.constellation = signal.constellation;
             statistics.signal_id = signal.signal_id;
             statistics.rinex_signal_code = signal.rinex_signal_code;
-            statistics.elevation_min_deg =
-                impl_->config.elevation_min_deg + static_cast<double>(bin_index) * impl_->config.elevation_bin_width_deg;
+            statistics.elevation_min_deg = impl_->config.elevation_min_deg +
+                                           static_cast<double>(bin_index) * impl_->config.elevation_bin_width_deg;
             statistics.elevation_max_deg = statistics.elevation_min_deg + impl_->config.elevation_bin_width_deg;
             statistics.includes_upper_edge = bin_index == impl_->bin_count - 1;
             statistics.count = histogram_count(cell.cn0_hist);
@@ -517,9 +511,10 @@ bool write_cn0_model_csv(const std::string& output_path, const Cn0AggregationCon
     }
     output.imbue(std::locale::classic());
     output << std::fixed << std::setprecision(6);
-    output << "schema_version,constellation,signal,elevation_min_deg,elevation_max_deg,upper_edge_inclusive,status,count,"
-              "p05_dbhz,p10_dbhz,p25_dbhz,p50_dbhz,p75_dbhz,p90_dbhz,p95_dbhz,mean_dbhz,stddev_dbhz,mad_dbhz,"
-              "delta_count,delta_p50_dbhz,delta_p90_dbhz,delta_p99_dbhz,ar1_status,ar1\n";
+    output
+        << "schema_version,constellation,signal,elevation_min_deg,elevation_max_deg,upper_edge_inclusive,status,count,"
+           "p05_dbhz,p10_dbhz,p25_dbhz,p50_dbhz,p75_dbhz,p90_dbhz,p95_dbhz,mean_dbhz,stddev_dbhz,mad_dbhz,"
+           "delta_count,delta_p50_dbhz,delta_p90_dbhz,delta_p99_dbhz,ar1_status,ar1\n";
     for (const Cn0BinStatistics& bin : bins) {
         output << "gnss-cn0-model-v1," << constellation_name(bin.constellation) << ',' << bin.rinex_signal_code << ','
                << bin.elevation_min_deg << ',' << bin.elevation_max_deg << ',' << (bin.includes_upper_edge ? 1 : 0)

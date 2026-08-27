@@ -45,7 +45,21 @@ Model rows are emitted in the central frozen signal-definition order and ascendi
 
 `cn0_model.meta.json` records the model/statistics schema versions, bin/filter rules, all aggregation rejection counters, RINEX/station/receiver/antenna information and per-source stream diagnostics. Source identity is basename + byte size + streaming FNV-1a64. Absolute source paths, wall-clock timestamps and output paths are intentionally excluded so relocating the same files does not change the generated metadata bytes.
 
-## CLI
+## Runtime model policy
+
+The simulator accepts the compact builder output as an optional run input:
+
+```text
+gnss-data-simulator ... [--cn0-model <cn0_model.csv>]
+```
+
+No runtime RINEX OBS dependency is introduced. The CSV is parsed once during simulator initialization, before receiver/truth output files are created. If no external model is selected, the existing deterministic built-in CN0 model is used unchanged. If an explicitly selected file has an incompatible schema, malformed row, unknown central signal mapping, duplicate/non-monotonic/overlapping bins, non-finite statistics, or inconsistent temporal fields, the run fails instead of silently falling back.
+
+For a valid external model, `READY`-bin P50 is the nominal open-sky CN0 baseline for that signal. Exact bin centers use P50. Between centers, linear interpolation is allowed only when the two adjacent bins are both `READY` and their elevation intervals touch. At the outer half of an isolated `READY` bin, its P50 is held to that bin edge. `SPARSE`, `EMPTY`, missing-bin and missing-signal regions use the deterministic built-in nominal baseline; interpolation never crosses those gaps. The existing deterministic runtime temporal variation remains layered on top of either nominal baseline.
+
+`run_manifest.json` records the runtime model source, schema version, basename, byte size and FNV-1a64 identity. Absolute model paths are not recorded, so running the same bytes from a different directory does not change the manifest.
+
+## Builder CLI
 
 ```text
 build-cn0-model \

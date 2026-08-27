@@ -13,6 +13,7 @@ struct SimulatorRunOptions {
     const char* rinex_nav_path;
     const char* output_log_path;
     SimTime start_time;
+    const char* cn0_model_path;
 };
 
 struct SimulatorRunSummary {
@@ -31,6 +32,11 @@ struct SimulatorRunSummary {
     std::uint64_t valid_position_epochs;
     std::uint64_t valid_velocity_epochs;
     int max_observations_per_epoch;
+    std::string cn0_model_source;
+    std::string cn0_model_schema_version;
+    std::string cn0_model_name;
+    std::string cn0_model_hash;
+    std::uint64_t cn0_model_size_bytes;
 };
 
 bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, SimulatorRunSummary* summary,

@@ -93,6 +93,7 @@ add_library(gnss_sim_core STATIC
     src/output/novatel_range_writer.cpp
     src/output/novatel_solution_writer.cpp
     src/output/unicore_nav_writer.cpp
+    src/scenario/scenario_engine.cpp
     src/solution/solution_engine.cpp
 )
 add_library(gnss_sim::core ALIAS gnss_sim_core)
@@ -136,6 +137,7 @@ if(BUILD_TESTING)
         tests/unit/test_receiver_truth.cpp
         tests/unit/test_rtklib_adapter.cpp
         tests/unit/test_satellite_engine.cpp
+        tests/unit/test_scenario_engine.cpp
         tests/unit/test_signal_definitions.cpp
         tests/unit/test_signal_tracking.cpp
         tests/unit/test_sim_config.cpp

@@ -485,6 +485,7 @@ bool finalize_truth_writer(TruthWriter* writer, const SimulatorRunSummary& summa
     writer->observation_stream.close();
     writer->solution_stream.close();
 
+    const char* cn0_hash_algorithm = summary.cn0_model_hash.empty() ? "none" : "fnv1a64";
     std::ostringstream manifest;
     manifest.imbue(std::locale::classic());
     manifest << "{\n"
@@ -497,6 +498,14 @@ bool finalize_truth_writer(TruthWriter* writer, const SimulatorRunSummary& summa
              << "    \"hash_algorithm\": \"fnv1a64\",\n"
              << "    \"hash\": \"" << writer->rinex_nav_hash << "\",\n"
              << "    \"size_bytes\": " << writer->rinex_nav_size << "\n"
+             << "  },\n"
+             << "  \"cn0_model\": {\n"
+             << "    \"source\": \"" << json_escape(summary.cn0_model_source.c_str()) << "\",\n"
+             << "    \"schema_version\": \"" << json_escape(summary.cn0_model_schema_version.c_str()) << "\",\n"
+             << "    \"name\": \"" << json_escape(summary.cn0_model_name.c_str()) << "\",\n"
+             << "    \"hash_algorithm\": \"" << cn0_hash_algorithm << "\",\n"
+             << "    \"hash\": \"" << summary.cn0_model_hash << "\",\n"
+             << "    \"size_bytes\": " << summary.cn0_model_size_bytes << "\n"
              << "  },\n"
              << "  \"start_time\": {\"gps_week\": " << writer->start_time.gps_week
              << ", \"tow_ns\": " << writer->start_time.tow_ns << "},\n"

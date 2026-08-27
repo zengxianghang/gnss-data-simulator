@@ -12,9 +12,9 @@
 namespace {
 
 void print_usage(const char* program) {
-    std::cerr
-        << "Usage:\n  " << program
-        << " --config <config.json> --nav <input.rnx> --output <simulated.log> --week <gps-week> --sow <seconds>\n";
+    std::cerr << "Usage:\n  " << program
+              << " --config <config.json> --nav <input.rnx> --output <simulated.log> --week <gps-week> --sow <seconds>"
+                 " [--cn0-model <cn0_model.csv>]\n";
 }
 
 bool parse_int(const char* text, int* value) {
@@ -51,6 +51,7 @@ int main(int argc, char** argv) {
     const char* config_path = nullptr;
     const char* nav_path = nullptr;
     const char* output_path = nullptr;
+    const char* cn0_model_path = nullptr;
     int gps_week = -1;
     double sow_sec = -1.0;
 
@@ -76,6 +77,8 @@ int main(int argc, char** argv) {
             nav_path = value;
         } else if (std::strcmp(argv[index - 1], "--output") == 0) {
             output_path = value;
+        } else if (std::strcmp(argv[index - 1], "--cn0-model") == 0) {
+            cn0_model_path = value;
         } else if (std::strcmp(argv[index - 1], "--week") == 0) {
             if (!parse_int(value, &gps_week)) {
                 std::cerr << "ERROR: --week must be a non-negative integer\n";
@@ -110,7 +113,7 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    const gnss_sim::SimulatorRunOptions options{nav_path, output_path, start_time};
+    const gnss_sim::SimulatorRunOptions options{nav_path, output_path, start_time, cn0_model_path};
     gnss_sim::SimulatorRunSummary summary{};
     if (!gnss_sim::run_simulator(config, options, &summary, &error_message)) {
         std::cerr << "ERROR: " << error_message << '\n';
@@ -121,6 +124,6 @@ int main(int argc, char** argv) {
               << " powered=" << summary.powered_epochs << " range=" << summary.range_messages
               << " psrpos=" << summary.psrpos_messages << " psrvel=" << summary.psrvel_messages
               << " nav=" << summary.nav_messages << " valid_pos=" << summary.valid_position_epochs
-              << " valid_vel=" << summary.valid_velocity_epochs << '\n';
+              << " valid_vel=" << summary.valid_velocity_epochs << " cn0_model=" << summary.cn0_model_source << '\n';
     return 0;
 }

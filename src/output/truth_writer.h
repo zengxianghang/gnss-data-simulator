@@ -32,8 +32,7 @@ bool truth_writer_write_solution(TruthWriter* writer, const SolutionEpoch& solut
                                  std::string* error_message);
 
 bool finalize_truth_writer(TruthWriter* writer, const SimulatorRunSummary& summary, const char* simulator_version,
-                           const char* simulator_commit_sha, const char* rtklib_commit_sha,
-                           std::string* error_message);
+                           const char* simulator_commit_sha, const char* rtklib_commit_sha, std::string* error_message);
 
 } // namespace gnss_sim
 

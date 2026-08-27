@@ -32,6 +32,8 @@ bool initialize_receiver_navigation(NavigationState* state, StartupMode startup_
                                     std::string* error_message);
 bool apply_truth_navigation_record(NavigationState* state, int truth_record_index, const SimTime& availability_time,
                                    NavigationUpdateEvent* event, bool* emitted, std::string* error_message);
+bool consume_truth_navigation_record_without_copy(NavigationState* state, int truth_record_index,
+                                                  std::string* error_message);
 
 const RtklibNavStore* truth_navigation_store(const NavigationState* state);
 const RtklibNavStore* receiver_navigation_store(const NavigationState* state);

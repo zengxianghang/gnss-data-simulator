@@ -1,0 +1,48 @@
+name: issue49-windows-test-fix
+
+on:
+  push:
+    branches:
+      - issue-49-rtklib-atmosphere-parity
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Normalize direct RTKLIB test path on Windows
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tests/unit/test_atmosphere_model.cpp')
+          text = path.read_text()
+          old = '''    obs_t obs{};
+              nav_t nav{};
+              sta_t station{};
+              if (readrnx(path.c_str(), 1, "", &obs, &nav, &station) == 0) {'''
+          new = '''    std::string native_path = path;
+              #ifdef _WIN32
+              std::replace(native_path.begin(), native_path.end(), '/', '\\\\');
+              #endif
+              obs_t obs{};
+              nav_t nav{};
+              sta_t station{};
+              if (readrnx(native_path.c_str(), 1, "", &obs, &nav, &station) == 0) {'''
+          if old not in text:
+              raise SystemExit('direct readrnx helper anchor not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          clang-format -i tests/unit/test_atmosphere_model.cpp
+          git rm .github/workflows/issue49_windows_test_fix.yml
+          git add tests/unit/test_atmosphere_model.cpp
+          git config user.name "xianghang zeng"
+          git config user.email "62739219+zengxianghang@users.noreply.github.com"
+          git commit -m "test: normalize direct RTKLIB nav path on Windows"
+          git push origin HEAD:issue-49-rtklib-atmosphere-parity

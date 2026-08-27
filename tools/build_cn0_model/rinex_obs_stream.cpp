@@ -293,8 +293,8 @@ std::vector<DeclaredSignal> declared_cn0_signals(const rnxctr_t& control, RinexO
 
             const std::string rinex_code = normalize_rinex_signal_code(constellation, observation_type + 1);
             const SignalDefinition* definition = find_signal_definition_by_rinex(constellation, rinex_code.c_str());
-            if (entries[type_index].code == CODE_NONE || entries[type_index].priority <= 0 || entries[type_index].slot < 0 ||
-                definition == nullptr) {
+            if (entries[type_index].code == CODE_NONE || entries[type_index].priority <= 0 ||
+                entries[type_index].slot < 0 || definition == nullptr) {
                 unsupported.insert(unsupported_key(system, observation_type));
                 continue;
             }

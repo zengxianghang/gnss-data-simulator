@@ -207,6 +207,17 @@ bool apply_truth_navigation_record(NavigationState* state, int truth_record_inde
     return true;
 }
 
+bool consume_truth_navigation_record_without_copy(NavigationState* state, int truth_record_index,
+                                                  std::string* error_message) {
+    if (state == nullptr || state->delivered_records == nullptr || truth_record_index < 0 ||
+        truth_record_index >= state->delivered_record_count) {
+        set_error(error_message, "navigation consume request has invalid arguments");
+        return false;
+    }
+    state->delivered_records[truth_record_index] = 1;
+    return true;
+}
+
 const RtklibNavStore* truth_navigation_store(const NavigationState* state) {
     return state == nullptr ? nullptr : state->truth_nav;
 }

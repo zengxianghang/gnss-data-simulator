@@ -25,10 +25,11 @@ jobs:
 
           simulator = Path('src/core/simulator.cpp')
           text = simulator.read_text()
-          old = '''        const double elevation_deg = geometry.elevation_rad * kRadiansToDegrees;
-          bool satellite_tracking = false;
-          for (SignalRuntime& signal : satellite.signals) {'''
-          new = '''        int glonass_fcn = 0;
+          if 'int glonass_fcn = 0;' not in text:
+              anchor = '        const double elevation_deg = geometry.elevation_rad * kRadiansToDegrees;\n'
+              if anchor not in text:
+                  raise SystemExit('simulator elevation anchor not found')
+              insertion = '''        int glonass_fcn = 0;
           if (satellite.constellation == GnssConstellation::kGlonass) {
               RtklibBroadcastBiasData bias_data{};
               if (!rtklib_broadcast_bias_data(truth_nav, geometry.transmit_gps_week, geometry.transmit_sow_sec,
@@ -37,22 +38,13 @@ jobs:
               }
               glonass_fcn = bias_data.glonass_fcn;
           }
-          const double elevation_deg = geometry.elevation_rad * kRadiansToDegrees;
-          bool satellite_tracking = false;
-          for (SignalRuntime& signal : satellite.signals) {'''
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif 'int glonass_fcn = 0;' not in text:
-              raise SystemExit('simulator insertion anchor not found')
-          old_call = '''                                               signal.tracker.signal_id, 0, runtime->receiver.position_ecef_m,
-                                                 geometry.azimuth_rad, geometry.elevation_rad, &atmosphere,'''
-          new_call = '''                                               signal.tracker.signal_id, glonass_fcn,
-                                                 runtime->receiver.position_ecef_m, geometry.azimuth_rad,
-                                                 geometry.elevation_rad, &atmosphere,'''
-          if old_call in text:
-              text = text.replace(old_call, new_call, 1)
-          elif 'signal.tracker.signal_id, glonass_fcn,' not in text:
-              raise SystemExit('atmosphere call anchor not found')
+          '''
+              text = text.replace(anchor, insertion + anchor, 1)
+          if 'signal.tracker.signal_id, glonass_fcn,' not in text:
+              old = 'signal.tracker.signal_id, 0, runtime->receiver.position_ecef_m,'
+              if old not in text:
+                  raise SystemExit('atmosphere call anchor not found')
+              text = text.replace(old, 'signal.tracker.signal_id, glonass_fcn, runtime->receiver.position_ecef_m,', 1)
           simulator.write_text(text)
 
           acceptance = Path('tests/integration/test_v1_acceptance.cpp')

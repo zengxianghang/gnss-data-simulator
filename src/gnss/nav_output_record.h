@@ -42,6 +42,7 @@ struct KeplerianNavOutputData {
     double argument_of_perigee_rad;
     double mean_anomaly_rad;
     double delta_mean_motion_radps;
+    double corrected_mean_motion_radps;
     double omega_dot_radps;
     double inclination_dot_radps;
     double crc_m;
@@ -67,16 +68,21 @@ struct KeplerianNavOutputData {
 struct GlonassNavOutputData {
     int satellite_number;
     int prn;
-    int iode;
+    int slot_offset;
     int frequency_channel;
+    int frequency_offset;
+    int iode;
     int svh;
     int sva;
     int age_days;
     int flags;
     int toe_week;
     int frame_week;
+    int gps_glonass_time_offset_sec;
+    int calendar_day_number;
     double toe_sow_sec;
     double frame_sow_sec;
+    double frame_time_glonass_day_sec;
     double position_ecef_m[3];
     double velocity_ecef_mps[3];
     double acceleration_ecef_mps2[3];

@@ -2,6 +2,7 @@
 #include "gnss_sim/sim_time.h"
 #include "gnss_sim/simulator.h"
 
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -11,6 +12,10 @@ namespace {
 
 std::string nav_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/gps_loopback_nav.rnx";
+}
+
+std::string runtime_cn0_model_path() {
+    return std::string(GNSS_SIM_TEST_DATA_DIR) + "/runtime_cn0_model.csv";
 }
 
 gnss_sim::SimTime start_time() {
@@ -43,7 +48,7 @@ std::string first_line(const std::filesystem::path& path) {
 }
 
 bool run_in_directory(const std::filesystem::path& directory, gnss_sim::SimulatorRunSummary* summary,
-                      std::string* error_message) {
+                      std::string* error_message, const char* cn0_model_path = nullptr) {
     std::error_code error;
     std::filesystem::remove_all(directory, error);
     error.clear();
@@ -56,7 +61,7 @@ bool run_in_directory(const std::filesystem::path& directory, gnss_sim::Simulato
     const std::filesystem::path output_path = directory / "simulated.log";
     const std::string input_path = nav_path();
     const std::string output_text = output_path.string();
-    const gnss_sim::SimulatorRunOptions options{input_path.c_str(), output_text.c_str(), start_time()};
+    const gnss_sim::SimulatorRunOptions options{input_path.c_str(), output_text.c_str(), start_time(), cn0_model_path};
     return gnss_sim::run_simulator(truth_config(), options, summary, error_message);
 }
 
@@ -101,6 +106,10 @@ TEST(TruthOutputs, HeadersAreVersionedAndExplicit) {
     EXPECT_NE(manifest.find("\"rtklib_commit_sha\": \"dc596ba725ccaa5ab5963d7e7ec85b52ae743969\""), std::string::npos);
     EXPECT_NE(manifest.find("\"hash_algorithm\": \"fnv1a64\""), std::string::npos);
     EXPECT_NE(manifest.find("\"random_seed\": 7"), std::string::npos);
+    EXPECT_NE(manifest.find("\"source\": \"BUILTIN_FALLBACK\""), std::string::npos);
+    EXPECT_NE(manifest.find("\"schema_version\": \"builtin-cn0-v1\""), std::string::npos);
+    EXPECT_NE(manifest.find("\"hash_algorithm\": \"none\""), std::string::npos);
+    EXPECT_EQ(summary.cn0_model_source, "BUILTIN_FALLBACK");
     EXPECT_NE(read_file(directory / "event_truth.csv").find("POWER_ON"), std::string::npos);
     EXPECT_NE(observations.find(",LEGACY,"), std::string::npos);
     EXPECT_GT(observations.size(), first_line(directory / "observation_truth.csv").size());
@@ -125,6 +134,57 @@ TEST(TruthOutputs, SameInputConfigAndSeedAreByteIdenticalAcrossOutputDirectories
     EXPECT_EQ(first_summary.max_observations_per_epoch, second_summary.max_observations_per_epoch);
     cleanup(first_directory);
     cleanup(second_directory);
+}
+
+TEST(TruthOutputs, ExternalCn0ModelIsManifestedAndByteRepeatable) {
+    const std::filesystem::path first_directory = "gnss_sim_truth_cn0_a";
+    const std::filesystem::path second_directory = "gnss_sim_truth_cn0_b";
+    const std::filesystem::path builtin_directory = "gnss_sim_truth_cn0_builtin";
+    const std::string model_path = runtime_cn0_model_path();
+    gnss_sim::SimulatorRunSummary first_summary{};
+    gnss_sim::SimulatorRunSummary second_summary{};
+    gnss_sim::SimulatorRunSummary builtin_summary{};
+    std::string error_message;
+    ASSERT_TRUE(run_in_directory(first_directory, &first_summary, &error_message, model_path.c_str())) << error_message;
+    ASSERT_TRUE(run_in_directory(second_directory, &second_summary, &error_message, model_path.c_str())) << error_message;
+    ASSERT_TRUE(run_in_directory(builtin_directory, &builtin_summary, &error_message)) << error_message;
+
+    for (const char* file_name : {"simulated.log", "scenario.json", "event_truth.csv", "observation_truth.csv",
+                                  "solution_truth.csv", "run_manifest.json"}) {
+        EXPECT_EQ(read_file(first_directory / file_name), read_file(second_directory / file_name)) << file_name;
+    }
+    const std::string manifest = read_file(first_directory / "run_manifest.json");
+    EXPECT_EQ(first_summary.cn0_model_source, "CALIBRATED_CSV");
+    EXPECT_EQ(first_summary.cn0_model_schema_version, "gnss-cn0-model-v1");
+    EXPECT_EQ(first_summary.cn0_model_name, "runtime_cn0_model.csv");
+    EXPECT_FALSE(first_summary.cn0_model_hash.empty());
+    EXPECT_GT(first_summary.cn0_model_size_bytes, 0U);
+    EXPECT_NE(manifest.find("\"source\": \"CALIBRATED_CSV\""), std::string::npos);
+    EXPECT_NE(manifest.find("\"schema_version\": \"gnss-cn0-model-v1\""), std::string::npos);
+    EXPECT_NE(manifest.find("\"name\": \"runtime_cn0_model.csv\""), std::string::npos);
+    EXPECT_NE(read_file(first_directory / "observation_truth.csv"),
+              read_file(builtin_directory / "observation_truth.csv"));
+
+    cleanup(first_directory);
+    cleanup(second_directory);
+    cleanup(builtin_directory);
+}
+
+TEST(TruthOutputs, ExplicitMalformedCn0ModelFailsBeforeReceiverOutputCreation) {
+    const std::filesystem::path directory = "gnss_sim_truth_bad_cn0";
+    const std::filesystem::path bad_model = "gnss_sim_bad_runtime_cn0.csv";
+    {
+        std::ofstream output(bad_model, std::ios::binary | std::ios::trunc);
+        output << "not-a-cn0-model\n";
+    }
+    gnss_sim::SimulatorRunSummary summary{};
+    std::string error_message;
+    EXPECT_FALSE(run_in_directory(directory, &summary, &error_message, bad_model.string().c_str()));
+    EXPECT_FALSE(error_message.empty());
+    EXPECT_FALSE(std::filesystem::exists(directory / "simulated.log"));
+    EXPECT_FALSE(std::filesystem::exists(directory / "run_manifest.json"));
+    cleanup(directory);
+    std::remove(bad_model.string().c_str());
 }
 
 } // namespace

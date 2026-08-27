@@ -18,7 +18,7 @@ jobs:
       - name: Check clang-format
         shell: bash
         run: |
-          mapfile -t files < <(find include src tests -type f \( -name '*.h' -o -name '*.cpp' \) | sort)
+          mapfile -t files < <(find include src tests tools -type f \( -name '*.h' -o -name '*.c' -o -name '*.cpp' \) | sort)
           if [ "${#files[@]}" -eq 0 ]; then
             echo "No C/C++ files found"
             exit 1

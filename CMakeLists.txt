@@ -46,7 +46,7 @@ add_library(rtklib_pinned STATIC
     third_party/RTKLIB/src/pntpos.c
     third_party/RTKLIB/src/preceph.c
     third_party/RTKLIB/src/qzslex.c
-    third_party/RTKLIB/src/rinex.c
+    src/gnss/rtklib_rinex_obs_ext.c
     third_party/RTKLIB/src/rtcm.c
     third_party/RTKLIB/src/rtcm2.c
     third_party/RTKLIB/src/rtcm3.c
@@ -60,7 +60,9 @@ add_library(gnss_sim::rtklib ALIAS rtklib_pinned)
 target_include_directories(rtklib_pinned SYSTEM PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/RTKLIB/src")
 target_compile_definitions(rtklib_pinned PUBLIC
-    GNSS_SIM_RTKLIB_COMMIT="${GNSS_SIM_RTKLIB_COMMIT}")
+    GNSS_SIM_RTKLIB_COMMIT="${GNSS_SIM_RTKLIB_COMMIT}"
+    NEXOBS=16
+)
 if(WIN32)
     target_link_libraries(rtklib_pinned PUBLIC winmm)
 else()
@@ -127,6 +129,25 @@ add_executable(gnss-data-simulator
 target_link_libraries(gnss-data-simulator PRIVATE gnss_sim::core)
 gnss_sim_set_project_warnings(gnss-data-simulator)
 
+add_library(cn0_model_builder_core STATIC
+    tools/build_cn0_model/rinex_obs_stream.cpp
+)
+target_include_directories(cn0_model_builder_core
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_link_libraries(cn0_model_builder_core
+    PUBLIC gnss_sim::core
+    PRIVATE gnss_sim::rtklib
+)
+gnss_sim_set_project_warnings(cn0_model_builder_core)
+
+add_executable(build-cn0-model
+    tools/build_cn0_model/main.cpp
+)
+target_link_libraries(build-cn0-model PRIVATE cn0_model_builder_core)
+gnss_sim_set_project_warnings(build-cn0-model)
+
 if(BUILD_TESTING)
     include(FetchContent)
 
@@ -151,6 +172,7 @@ if(BUILD_TESTING)
         tests/unit/test_output_writers.cpp
         tests/unit/test_receiver_truth.cpp
         tests/unit/test_rinex4_brd400.cpp
+        tests/unit/test_rinex_obs_stream.cpp
         tests/unit/test_rtklib_adapter.cpp
         tests/unit/test_satellite_engine.cpp
         tests/unit/test_scenario_engine.cpp
@@ -168,6 +190,7 @@ if(BUILD_TESTING)
     target_link_libraries(gnss_sim_unit_tests PRIVATE
         gnss_sim::core
         gnss_sim::rtklib
+        cn0_model_builder_core
         GTest::gtest_main
     )
     gnss_sim_set_project_warnings(gnss_sim_unit_tests)

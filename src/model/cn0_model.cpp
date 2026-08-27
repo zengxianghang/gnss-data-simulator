@@ -411,7 +411,12 @@ bool validate_temporal_fields(const std::vector<std::string>& fields, std::size_
                   "CN0 model has partially populated Delta-CN0 statistics at line " + std::to_string(line_number));
         return false;
     }
-    if (delta_available[0] && (delta_count == 0 || delta[0] < 0.0 || delta[0] > delta[1] || delta[1] > delta[2])) {
+    if ((delta_count == 0 && delta_available[0]) || (delta_count > 0 && !delta_available[0])) {
+        set_error(error_message, "CN0 model delta_count/statistics availability are inconsistent at line " +
+                                     std::to_string(line_number));
+        return false;
+    }
+    if (delta_available[0] && (delta[0] < 0.0 || delta[0] > delta[1] || delta[1] > delta[2])) {
         set_error(error_message,
                   "CN0 model Delta-CN0 statistics are inconsistent at line " + std::to_string(line_number));
         return false;

@@ -162,7 +162,11 @@ TEST(Cn0Model, ExplicitMalformedModelsFailWithoutFallback) {
     const std::string nonfinite =
         std::string(kModelHeader) +
         "\ngnss-cn0-model-v1,GPS,1C,0,90,1,READY,100,29,29,29,nan,31,31,31,30,1,1,0,,,,INSUFFICIENT_SUPPORT,\n";
-    const std::string cases[] = {std::string("bad-header\n") + valid_row + "\n", duplicate, nonfinite};
+    const std::string missing_delta_statistics =
+        std::string(kModelHeader) +
+        "\ngnss-cn0-model-v1,GPS,1C,0,90,1,READY,100,39,39,39,40,41,41,41,40,1,1,1,,,,INSUFFICIENT_SUPPORT,\n";
+    const std::string cases[] = {std::string("bad-header\n") + valid_row + "\n", duplicate, nonfinite,
+                                 missing_delta_statistics};
 
     for (const std::string& content : cases) {
         const TemporaryModel file(content);

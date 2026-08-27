@@ -36,6 +36,38 @@ bool family_is_beidou_modern(RtklibBroadcastMessageFamily family) {
            family == RtklibBroadcastMessageFamily::kBeidouBcnav3;
 }
 
+RtklibBroadcastMessageFamily rtklib_family_for_nav_message(NavMessageFamily family) {
+    switch (family) {
+        case NavMessageFamily::kGpsLnav:
+        case NavMessageFamily::kQzssLnav:
+        case NavMessageFamily::kBeidouD1D2:
+            return RtklibBroadcastMessageFamily::kLegacy;
+        case NavMessageFamily::kGpsCnav:
+        case NavMessageFamily::kQzssCnav:
+            return RtklibBroadcastMessageFamily::kCnav;
+        case NavMessageFamily::kGpsCnav2:
+        case NavMessageFamily::kQzssCnav2:
+            return RtklibBroadcastMessageFamily::kCnav2;
+        case NavMessageFamily::kGlonassFdma:
+            return RtklibBroadcastMessageFamily::kGlonassFdma;
+        case NavMessageFamily::kGlonassL3Oc:
+            return RtklibBroadcastMessageFamily::kGlonassL3Oc;
+        case NavMessageFamily::kGalileoInav:
+            return RtklibBroadcastMessageFamily::kGalileoInav;
+        case NavMessageFamily::kGalileoFnav:
+            return RtklibBroadcastMessageFamily::kGalileoFnav;
+        case NavMessageFamily::kGalileoCnav:
+            return RtklibBroadcastMessageFamily::kGalileoCnav;
+        case NavMessageFamily::kBeidouBcnav1:
+            return RtklibBroadcastMessageFamily::kBeidouBcnav1;
+        case NavMessageFamily::kBeidouBcnav2:
+            return RtklibBroadcastMessageFamily::kBeidouBcnav2;
+        case NavMessageFamily::kBeidouBcnav3:
+            return RtklibBroadcastMessageFamily::kBeidouBcnav3;
+    }
+    return RtklibBroadcastMessageFamily::kUnknown;
+}
+
 double frequency_ratio_squared(double reference_frequency_hz, double signal_frequency_hz) {
     const double ratio = reference_frequency_hz / signal_frequency_hz;
     return ratio * ratio;
@@ -144,7 +176,11 @@ bool compute_broadcast_code_bias_m(const SignalDefinition& signal, const RtklibB
             set_bias(bias_data.glonass_dtaun_sec, code_bias_m, status);
             return true;
         case CodeBiasModel::kGlonassG3:
-            set_unavailable(code_bias_m, status);
+            if (bias_data.message_family == RtklibBroadcastMessageFamily::kGlonassL3Oc) {
+                set_no_bias(code_bias_m, status);
+            } else {
+                set_unavailable(code_bias_m, status);
+            }
             return true;
         case CodeBiasModel::kGalileoE1:
             if (bias_data.message_family == RtklibBroadcastMessageFamily::kGalileoFnav) {
@@ -225,8 +261,10 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
     }
 
     RtklibBroadcastBiasData bias_data{};
-    if (!rtklib_broadcast_bias_data(nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec,
-                                    geometry.satellite_number, &bias_data, error_message)) {
+    const RtklibBroadcastMessageFamily required_family = rtklib_family_for_nav_message(signal->nav_message_family);
+    if (!rtklib_broadcast_bias_data_for_family(nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec,
+                                               geometry.satellite_number, required_family, &bias_data,
+                                               error_message)) {
         return false;
     }
 

@@ -14,9 +14,19 @@ std::string nav_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/gps_loopback_nav.rnx";
 }
 
+std::string multi_gnss_nav_path() {
+    return std::string(GNSS_SIM_TEST_DATA_DIR) + "/multi_gnss_acceptance_nav.rnx";
+}
+
 gnss_sim::SimTime acceptance_start_time() {
     gnss_sim::SimTime time{};
     EXPECT_TRUE(gnss_sim::sim_time_from_week_sow(2253, 172900.0, &time));
+    return time;
+}
+
+gnss_sim::SimTime multi_gnss_start_time() {
+    gnss_sim::SimTime time{};
+    EXPECT_TRUE(gnss_sim::sim_time_from_week_sow(2253, 172800.0, &time));
     return time;
 }
 
@@ -36,8 +46,9 @@ std::string read_file(const std::filesystem::path& path) {
     return std::string((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
 }
 
-bool run_in_directory(const std::filesystem::path& directory, const gnss_sim::SimConfig& config,
-                      gnss_sim::SimulatorRunSummary* summary, std::string* error_message) {
+bool run_in_directory_with_nav(const std::filesystem::path& directory, const gnss_sim::SimConfig& config,
+                               const std::string& input_path, const gnss_sim::SimTime& start_time,
+                               gnss_sim::SimulatorRunSummary* summary, std::string* error_message) {
     std::error_code error;
     std::filesystem::remove_all(directory, error);
     error.clear();
@@ -49,10 +60,14 @@ bool run_in_directory(const std::filesystem::path& directory, const gnss_sim::Si
     }
 
     const std::filesystem::path output_path = directory / "simulated.log";
-    const std::string input_path = nav_path();
     const std::string output_text = output_path.string();
-    const gnss_sim::SimulatorRunOptions options{input_path.c_str(), output_text.c_str(), acceptance_start_time()};
+    const gnss_sim::SimulatorRunOptions options{input_path.c_str(), output_text.c_str(), start_time};
     return gnss_sim::run_simulator(config, options, summary, error_message);
+}
+
+bool run_in_directory(const std::filesystem::path& directory, const gnss_sim::SimConfig& config,
+                      gnss_sim::SimulatorRunSummary* summary, std::string* error_message) {
+    return run_in_directory_with_nav(directory, config, nav_path(), acceptance_start_time(), summary, error_message);
 }
 
 void expect_nonempty_file(const std::filesystem::path& path) {
@@ -101,6 +116,32 @@ TEST(V1Acceptance, FrozenRatesRunThroughFullStreamingPipeline) {
         EXPECT_NE(manifest.find("\"sampling_rate_hz\": " + std::to_string(rate)), std::string::npos) << "rate=" << rate;
         cleanup(directory);
     }
+}
+
+TEST(V1Acceptance, RealMixedNavProducesAllFiveV1ConstellationsAndValidSolution) {
+    gnss_sim::SimConfig config = acceptance_config();
+    config.sampling_rate_hz = 1;
+    config.duration_ns = 60LL * gnss_sim::NANOSECONDS_PER_SECOND;
+    config.receiver = {20.0, 120.0, 100.0};
+
+    const std::filesystem::path directory = "gnss_sim_acceptance_five_system";
+    gnss_sim::SimulatorRunSummary summary{};
+    std::string error_message;
+    ASSERT_TRUE(run_in_directory_with_nav(directory, config, multi_gnss_nav_path(), multi_gnss_start_time(), &summary,
+                                          &error_message))
+        << error_message;
+
+    const std::string observations = read_file(directory / "observation_truth.csv");
+    EXPECT_NE(observations.find(",GPS,"), std::string::npos);
+    EXPECT_NE(observations.find(",GLONASS,"), std::string::npos);
+    EXPECT_NE(observations.find(",GALILEO,"), std::string::npos);
+    EXPECT_NE(observations.find(",BEIDOU,"), std::string::npos);
+    EXPECT_NE(observations.find(",QZSS,"), std::string::npos);
+    EXPECT_GT(summary.max_observations_per_epoch, 0);
+    EXPECT_GT(summary.valid_position_epochs, 0U);
+    EXPECT_GT(summary.valid_velocity_epochs, 0U);
+
+    cleanup(directory);
 }
 
 TEST(V1Acceptance, SameInputConfigAndSeedProduceByteIdenticalReceiverAndTruthOutputs) {

@@ -18,6 +18,10 @@ std::string multi_gnss_nav_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/multi_gnss_acceptance_nav.rnx";
 }
 
+std::string brd4_nav_path() {
+    return std::string(GNSS_SIM_TEST_DATA_DIR) + "/brd400dlr_rinex4_acceptance_nav.rnx";
+}
+
 gnss_sim::SimTime acceptance_start_time() {
     gnss_sim::SimTime time{};
     EXPECT_TRUE(gnss_sim::sim_time_from_week_sow(2253, 172900.0, &time));
@@ -27,6 +31,12 @@ gnss_sim::SimTime acceptance_start_time() {
 gnss_sim::SimTime multi_gnss_start_time() {
     gnss_sim::SimTime time{};
     EXPECT_TRUE(gnss_sim::sim_time_from_week_sow(2253, 173700.0, &time));
+    return time;
+}
+
+gnss_sim::SimTime brd4_start_time() {
+    gnss_sim::SimTime time{};
+    EXPECT_TRUE(gnss_sim::sim_time_from_week_sow(2347, 436500.0, &time));
     return time;
 }
 
@@ -76,6 +86,15 @@ void expect_nonempty_file(const std::filesystem::path& path) {
     ASSERT_FALSE(error) << error.message();
     EXPECT_GT(std::filesystem::file_size(path, error), 0U) << path.string();
     EXPECT_FALSE(error) << error.message();
+}
+
+void expect_five_system_observations(const std::filesystem::path& truth_path) {
+    const std::string observations = read_file(truth_path);
+    EXPECT_NE(observations.find(",GPS,"), std::string::npos);
+    EXPECT_NE(observations.find(",GLONASS,"), std::string::npos);
+    EXPECT_NE(observations.find(",GALILEO,"), std::string::npos);
+    EXPECT_NE(observations.find(",BEIDOU,"), std::string::npos);
+    EXPECT_NE(observations.find(",QZSS,"), std::string::npos);
 }
 
 void cleanup(const std::filesystem::path& path) {
@@ -131,12 +150,28 @@ TEST(V1Acceptance, RealMixedNavProducesAllFiveV1ConstellationsAndValidSolution) 
                                           &error_message))
         << error_message;
 
-    const std::string observations = read_file(directory / "observation_truth.csv");
-    EXPECT_NE(observations.find(",GPS,"), std::string::npos);
-    EXPECT_NE(observations.find(",GLONASS,"), std::string::npos);
-    EXPECT_NE(observations.find(",GALILEO,"), std::string::npos);
-    EXPECT_NE(observations.find(",BEIDOU,"), std::string::npos);
-    EXPECT_NE(observations.find(",QZSS,"), std::string::npos);
+    expect_five_system_observations(directory / "observation_truth.csv");
+    EXPECT_GT(summary.max_observations_per_epoch, 0);
+    EXPECT_GT(summary.valid_position_epochs, 0U);
+    EXPECT_GT(summary.valid_velocity_epochs, 0U);
+
+    cleanup(directory);
+}
+
+TEST(V1Acceptance, RealBrd400DlrRinex4RunsFiveSystemReceiverNavLoopback) {
+    gnss_sim::SimConfig config = acceptance_config();
+    config.sampling_rate_hz = 1;
+    config.duration_ns = 60LL * gnss_sim::NANOSECONDS_PER_SECOND;
+    config.receiver = {20.0, 120.0, 100.0};
+
+    const std::filesystem::path directory = "gnss_sim_acceptance_brd4_five_system";
+    gnss_sim::SimulatorRunSummary summary{};
+    std::string error_message;
+    ASSERT_TRUE(run_in_directory_with_nav(directory, config, brd4_nav_path(), brd4_start_time(), &summary,
+                                          &error_message))
+        << error_message;
+
+    expect_five_system_observations(directory / "observation_truth.csv");
     EXPECT_GT(summary.max_observations_per_epoch, 0);
     EXPECT_GT(summary.valid_position_epochs, 0U);
     EXPECT_GT(summary.valid_velocity_epochs, 0U);

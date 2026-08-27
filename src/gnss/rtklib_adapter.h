@@ -48,6 +48,9 @@ struct RtklibNavCounts {
     int bds_eph_count;
     int qzss_eph_count;
     int other_eph_count;
+    int ion_record_count;
+    int eop_record_count;
+    int sto_record_count;
 };
 
 struct RtklibNavRecordInfo {

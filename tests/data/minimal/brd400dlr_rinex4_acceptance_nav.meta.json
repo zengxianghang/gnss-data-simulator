@@ -1,0 +1,47 @@
+{
+  "fixture_filename": "brd400dlr_rinex4_acceptance_nav.rnx",
+  "fixture_sha256": "eeb1ae79d6e35c4f3fa4f2b2fb1a3f10eee36547cbf33559881018dd90629599",
+  "observed_known_modern_message_families": [
+    "C:CNV1",
+    "C:CNV2",
+    "C:CNV3",
+    "G:CNAV",
+    "J:CNAV",
+    "J:CNV2"
+  ],
+  "required_representative_modern_message_families": [
+    "C:CNV1",
+    "C:CNV2",
+    "C:CNV3",
+    "G:CNAV",
+    "J:CNAV",
+    "J:CNV2"
+  ],
+  "rinex_version": 4.02,
+  "schema_version": 1,
+  "selected_record_count": 3995,
+  "selected_record_types": {
+    "EOP": 4,
+    "EPH": 3974,
+    "ION": 8,
+    "STO": 9
+  },
+  "selection_date": "2025-01-03",
+  "selection_hours_utc_like_rinex_epoch": [
+    0,
+    1,
+    2
+  ],
+  "simulator_systems": [
+    "C",
+    "E",
+    "G",
+    "J",
+    "R"
+  ],
+  "source_compressed_sha256": "fb84d4046b06e905e8e4ec0efb82f0e9ad044bc44d664cc0209cb9b4c92b9512",
+  "source_filename": "BRD400DLR_S_20250030000_01D_MN.rnx",
+  "source_product": "BRD400DLR",
+  "source_uncompressed_sha256": "b11c638eea42978b8bd6aa8b65a5099fe6556dfe527bc037ed481d2b239afc42",
+  "source_url": "ftp://igs.gnsswhu.cn/pub/gps/data/daily/2025/brdc/BRD400DLR_S_20250030000_01D_MN.rnx.gz"
+}

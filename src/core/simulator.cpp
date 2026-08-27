@@ -765,7 +765,19 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
     }
 
     seed_rng(&runtime.rng, config.seed);
-    runtime.cn0_model = make_builtin_cn0_model(config.seed);
+    if (options.cn0_model_path != nullptr && options.cn0_model_path[0] != '\0') {
+        if (!load_cn0_model_csv(options.cn0_model_path, config.seed, &runtime.cn0_model, error_message)) {
+            destroy_navigation_state(runtime.navigation);
+            return false;
+        }
+    } else {
+        runtime.cn0_model = make_builtin_cn0_model(config.seed);
+    }
+    result.cn0_model_source = cn0_model_source_name(runtime.cn0_model.source);
+    result.cn0_model_schema_version = runtime.cn0_model.identity.schema_version;
+    result.cn0_model_name = runtime.cn0_model.identity.file_name;
+    result.cn0_model_hash = runtime.cn0_model.identity.hash;
+    result.cn0_model_size_bytes = runtime.cn0_model.identity.size_bytes;
     runtime.tracking_config = default_signal_tracking_model_config();
 
     ScenarioEngine scenario_engine{};

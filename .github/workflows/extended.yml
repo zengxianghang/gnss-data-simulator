@@ -1,26 +1,118 @@
-name: extended
+name: extended-validation
 
 on:
   workflow_dispatch:
+    inputs:
+      case:
+        description: Extended validation case
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - ks_8h
+          - rea_8h
+          - ttff_8h
+          - stress_50hz_1h
+          - determinism_50hz_10m
+          - memory_trend_50hz
   schedule:
-    - cron: '17 3 * * 0'
+    - cron: "17 18 * * 6"
 
 permissions:
   contents: read
 
+concurrency:
+  group: extended-validation-${{ github.ref }}-${{ github.event_name }}-${{ inputs.case || 'scheduled' }}
+  cancel-in-progress: true
+
 jobs:
-  bootstrap-extended:
+  plan:
     runs-on: ubuntu-latest
+    outputs:
+      cases: ${{ steps.matrix.outputs.cases }}
     steps:
-      - name: Checkout with RTKLIB
+      - id: matrix
+        name: Select extended cases
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_CASE: ${{ inputs.case }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+
+          all_cases = [
+              "ks_8h",
+              "rea_8h",
+              "ttff_8h",
+              "stress_50hz_1h",
+              "determinism_50hz_10m",
+              "memory_trend_50hz",
+          ]
+          event = os.environ["EVENT_NAME"]
+          requested = os.environ.get("REQUESTED_CASE", "")
+          if event == "schedule":
+              selected = ["ks_8h", "memory_trend_50hz"]
+          elif requested == "all":
+              selected = all_cases
+          elif requested in all_cases:
+              selected = [requested]
+          else:
+              raise SystemExit(f"unsupported extended case: {requested!r}")
+          print("cases=" + json.dumps(selected, separators=(",", ":")))
+          PY
+
+  validate:
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        case: ${{ fromJSON(needs.plan.outputs.cases) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout with pinned dependencies
         uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Configure
-        run: cmake -S . -B build -DBUILD_TESTING=ON
-      - name: Build
+
+      - name: Configure release build
+        run: cmake -S . -B build -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build simulator
         run: cmake --build build --config Release --parallel
-      - name: Unit tests
-        run: ctest --test-dir build -C Release --output-on-failure
-      - name: Extended-suite placeholder
-        run: echo "Long scenario and 8-hour/50 Hz validation is added by issue #17."
+
+      - name: Harness self-test
+        run: python3 tools/extended_validation/run_extended.py --self-test
+
+      - name: Run ${{ matrix.case }}
+        run: |
+          python3 tools/extended_validation/run_extended.py \
+            --simulator build/gnss-data-simulator \
+            --repo-root . \
+            --case "${{ matrix.case }}" \
+            --output-dir "extended-results/${{ matrix.case }}"
+
+      - name: Publish step summary
+        if: always()
+        shell: bash
+        run: |
+          summary="extended-results/${{ matrix.case }}/summary.md"
+          if [[ -f "$summary" ]]; then
+            cat "$summary" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "# Extended validation: ${{ matrix.case }}" >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+            echo "No summary was produced; inspect the job log." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: extended-${{ matrix.case }}-${{ github.run_id }}
+          path: extended-results/${{ matrix.case }}
+          if-no-files-found: warn
+          retention-days: 14

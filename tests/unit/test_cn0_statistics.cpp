@@ -1,12 +1,11 @@
 #include "tools/build_cn0_model/cn0_builder.h"
 #include "tools/build_cn0_model/cn0_statistics.h"
 
-#include <gtest/gtest.h>
-
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <gtest/gtest.h>
 #include <limits>
 #include <string>
 #include <vector>
@@ -15,7 +14,6 @@ namespace {
 
 using gnss_sim::GnssConstellation;
 using gnss_sim::SignalId;
-using gnss_sim::SimTime;
 using gnss_sim::cn0_builder::Cn0AggregationConfig;
 using gnss_sim::cn0_builder::Cn0Ar1Status;
 using gnss_sim::cn0_builder::Cn0BinStatistics;
@@ -28,8 +26,8 @@ using gnss_sim::cn0_builder::RinexCn0Sample;
 
 constexpr double kPi = 3.14159265358979323846;
 
-RinexCn0Sample sample(double cn0_dbhz, double elevation_deg, std::int64_t tow_ns,
-                      int satellite_number = 1, SignalId signal_id = SignalId::kGpsL1Ca) {
+RinexCn0Sample sample(double cn0_dbhz, double elevation_deg, std::int64_t tow_ns, int satellite_number = 1,
+                      SignalId signal_id = SignalId::kGpsL1Ca) {
     RinexCn0Sample result{};
     result.time = {2253, tow_ns};
     result.constellation = GnssConstellation::kGps;
@@ -66,7 +64,6 @@ std::string read_file(const std::filesystem::path& path) {
 
 TEST(Cn0Statistics, Type7QuantilesMeanPopulationStddevAndMadAreGolden) {
     Cn0AggregationConfig config{};
-    config.elevation_min_deg = 0.0;
     config.elevation_max_deg = 10.0;
     config.elevation_bin_width_deg = 10.0;
     config.min_samples_per_bin = 4;
@@ -74,7 +71,6 @@ TEST(Cn0Statistics, Type7QuantilesMeanPopulationStddevAndMadAreGolden) {
     std::string error;
     ASSERT_TRUE(accumulator.valid(&error)) << error;
     ASSERT_TRUE(accumulator.begin_source(1.0, &error)) << error;
-
     ASSERT_TRUE(accumulator.add_sample(sample(10.0, 5.0, 0), &error)) << error;
     ASSERT_TRUE(accumulator.add_sample(sample(20.0, 5.0, 1000000000LL), &error)) << error;
     ASSERT_TRUE(accumulator.add_sample(sample(30.0, 5.0, 2000000000LL), &error)) << error;
@@ -100,7 +96,6 @@ TEST(Cn0Statistics, Type7QuantilesMeanPopulationStddevAndMadAreGolden) {
 
 TEST(Cn0Statistics, ElevationEdgesAreHalfOpenExceptFinalMaximum) {
     Cn0AggregationConfig config{};
-    config.elevation_min_deg = 0.0;
     config.elevation_max_deg = 10.0;
     config.elevation_bin_width_deg = 5.0;
     config.min_samples_per_bin = 1;
@@ -129,7 +124,6 @@ TEST(Cn0Statistics, ElevationEdgesAreHalfOpenExceptFinalMaximum) {
 
 TEST(Cn0Statistics, InvalidAndOffGridSamplesCannotContaminateBins) {
     Cn0AggregationConfig config{};
-    config.elevation_min_deg = 0.0;
     config.elevation_max_deg = 10.0;
     config.elevation_bin_width_deg = 10.0;
     config.min_samples_per_bin = 2;
@@ -147,7 +141,8 @@ TEST(Cn0Statistics, InvalidAndOffGridSamplesCannotContaminateBins) {
     ASSERT_TRUE(accumulator.add_sample(sample(32.0, 5.0, 3000000000LL), &error)) << error;
     accumulator.end_source();
 
-    const Cn0BinStatistics* bin = find_bin(accumulator.finalize(), SignalId::kGpsL1Ca, 0.0);
+    const std::vector<Cn0BinStatistics> bins = accumulator.finalize();
+    const Cn0BinStatistics* bin = find_bin(bins, SignalId::kGpsL1Ca, 0.0);
     ASSERT_NE(bin, nullptr);
     EXPECT_EQ(bin->count, 1U);
     EXPECT_EQ(bin->status, Cn0BinStatus::kSparse);
@@ -158,7 +153,6 @@ TEST(Cn0Statistics, InvalidAndOffGridSamplesCannotContaminateBins) {
 
 TEST(Cn0Statistics, TemporalStatisticsRespectGapBinAndSourceBoundaries) {
     Cn0AggregationConfig config{};
-    config.elevation_min_deg = 0.0;
     config.elevation_max_deg = 20.0;
     config.elevation_bin_width_deg = 10.0;
     config.min_samples_per_bin = 1;
@@ -173,12 +167,12 @@ TEST(Cn0Statistics, TemporalStatisticsRespectGapBinAndSourceBoundaries) {
     ASSERT_TRUE(accumulator.add_sample(sample(34.0, 5.0, 5000000000LL), &error)) << error;
     ASSERT_TRUE(accumulator.add_sample(sample(35.0, 15.0, 6000000000LL), &error)) << error;
     accumulator.end_source();
-
     ASSERT_TRUE(accumulator.begin_source(1.0, &error)) << error;
     ASSERT_TRUE(accumulator.add_sample(sample(36.0, 5.0, 7000000000LL), &error)) << error;
     accumulator.end_source();
 
-    const Cn0BinStatistics* bin = find_bin(accumulator.finalize(), SignalId::kGpsL1Ca, 0.0);
+    const std::vector<Cn0BinStatistics> bins = accumulator.finalize();
+    const Cn0BinStatistics* bin = find_bin(bins, SignalId::kGpsL1Ca, 0.0);
     ASSERT_NE(bin, nullptr);
     EXPECT_EQ(bin->delta_count, 3U);
     EXPECT_DOUBLE_EQ(bin->delta_p50_dbhz, 1.0);
@@ -194,13 +188,13 @@ TEST(Cn0Statistics, TemporalStatisticsRespectGapBinAndSourceBoundaries) {
 
 TEST(Cn0Statistics, MissingIntervalAndZeroVarianceAreExplicit) {
     Cn0AggregationConfig config{};
-    config.elevation_min_deg = 0.0;
     config.elevation_max_deg = 10.0;
     config.elevation_bin_width_deg = 10.0;
     config.min_samples_per_bin = 1;
     config.min_temporal_pairs = 2;
-    Cn0StatisticsAccumulator accumulator(config);
     std::string error;
+
+    Cn0StatisticsAccumulator accumulator(config);
     ASSERT_TRUE(accumulator.begin_source(std::numeric_limits<double>::quiet_NaN(), &error)) << error;
     ASSERT_TRUE(accumulator.add_sample(sample(30.0, 5.0, 0), &error)) << error;
     ASSERT_TRUE(accumulator.add_sample(sample(30.0, 5.0, 1000000000LL), &error)) << error;
@@ -213,7 +207,8 @@ TEST(Cn0Statistics, MissingIntervalAndZeroVarianceAreExplicit) {
     ASSERT_TRUE(constant_accumulator.add_sample(sample(30.0, 5.0, 1000000000LL), &error)) << error;
     ASSERT_TRUE(constant_accumulator.add_sample(sample(30.0, 5.0, 2000000000LL), &error)) << error;
     constant_accumulator.end_source();
-    const Cn0BinStatistics* bin = find_bin(constant_accumulator.finalize(), SignalId::kGpsL1Ca, 0.0);
+    const std::vector<Cn0BinStatistics> bins = constant_accumulator.finalize();
+    const Cn0BinStatistics* bin = find_bin(bins, SignalId::kGpsL1Ca, 0.0);
     ASSERT_NE(bin, nullptr);
     EXPECT_EQ(bin->ar1_status, Cn0Ar1Status::kZeroVariance);
     EXPECT_FALSE(std::isfinite(bin->ar1));
@@ -252,8 +247,8 @@ TEST(Cn0Statistics, BuilderModelAndMetadataAreByteIdenticalForFixedSources) {
     const std::filesystem::path model_b = directory / "gnss_sim_cn0_model_b.csv";
     const std::filesystem::path meta_a = directory / "gnss_sim_cn0_meta_a.json";
     const std::filesystem::path meta_b = directory / "gnss_sim_cn0_meta_b.json";
-    ASSERT_TRUE(gnss_sim::cn0_builder::write_cn0_model_csv(model_a.string(), config, first.aggregation_summary, first.bins,
-                                                           &error))
+    ASSERT_TRUE(gnss_sim::cn0_builder::write_cn0_model_csv(model_a.string(), config, first.aggregation_summary,
+                                                           first.bins, &error))
         << error;
     ASSERT_TRUE(gnss_sim::cn0_builder::write_cn0_model_csv(model_b.string(), config, second.aggregation_summary,
                                                            second.bins, &error))

@@ -94,7 +94,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     if (!gnss_sim::cn0_builder::write_cn0_model_csv(output_path, config, result.aggregation_summary, result.bins,
-                                                     &error)) {
+                                                    &error)) {
         std::cerr << "CN0 model write failed: " << error << '\n';
         return 1;
     }

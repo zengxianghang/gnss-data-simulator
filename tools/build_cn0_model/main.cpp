@@ -1,116 +1,112 @@
-#include "tools/build_cn0_model/rinex_obs_stream.h"
+#include "tools/build_cn0_model/cn0_builder.h"
 
-#include <cmath>
-#include <fstream>
-#include <iomanip>
+#include <cerrno>
+#include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string>
+#include <vector>
 
 namespace {
 
-std::string csv_escape(const std::string& value) {
-    if (value.find_first_of(",\"\r\n") == std::string::npos) {
-        return value;
+bool parse_double(const char* text, double* value) {
+    if (text == nullptr || value == nullptr) {
+        return false;
     }
-    std::string result = "\"";
-    for (const char character : value) {
-        if (character == '\"') {
-            result += "\"\"";
-        } else {
-            result += character;
-        }
+    errno = 0;
+    char* end = nullptr;
+    const double parsed = std::strtod(text, &end);
+    if (errno != 0 || end == text || *end != '\0') {
+        return false;
     }
-    result += '\"';
-    return result;
+    *value = parsed;
+    return true;
+}
+
+bool parse_u64(const char* text, std::uint64_t* value) {
+    if (text == nullptr || value == nullptr || text[0] == '-') {
+        return false;
+    }
+    errno = 0;
+    char* end = nullptr;
+    const unsigned long long parsed = std::strtoull(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0') {
+        return false;
+    }
+    *value = static_cast<std::uint64_t>(parsed);
+    return true;
 }
 
 void usage(const char* program) {
-    std::cerr << "Usage: " << program << " --obs <rinex.obs> --nav <rinex.nav> --output <samples.csv>\n";
+    std::cerr << "Usage: " << program
+              << " --source <rinex.obs> <rinex.nav> [--source <rinex.obs> <rinex.nav> ...]"
+                 " --output <cn0_model.csv> --metadata <cn0_model.meta.json>"
+                 " [--bin-width-deg <deg>] [--min-bin-count <n>] [--min-temporal-pairs <n>]\n";
 }
 
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string observation_path;
-    std::string navigation_path;
+    std::vector<gnss_sim::cn0_builder::Cn0InputSource> sources;
+    gnss_sim::cn0_builder::Cn0AggregationConfig config{};
     std::string output_path;
+    std::string metadata_path;
+
     for (int index = 1; index < argc; ++index) {
         const std::string argument = argv[index];
-        if ((argument == "--obs" || argument == "--nav" || argument == "--output") && index + 1 < argc) {
-            const std::string value = argv[++index];
-            if (argument == "--obs") {
-                observation_path = value;
-            } else if (argument == "--nav") {
-                navigation_path = value;
-            } else {
-                output_path = value;
+        if (argument == "--source" && index + 2 < argc) {
+            sources.push_back({argv[index + 1], argv[index + 2]});
+            index += 2;
+        } else if (argument == "--output" && index + 1 < argc) {
+            output_path = argv[++index];
+        } else if (argument == "--metadata" && index + 1 < argc) {
+            metadata_path = argv[++index];
+        } else if (argument == "--bin-width-deg" && index + 1 < argc) {
+            if (!parse_double(argv[++index], &config.elevation_bin_width_deg)) {
+                std::cerr << "Invalid --bin-width-deg value\n";
+                return 2;
+            }
+        } else if (argument == "--min-bin-count" && index + 1 < argc) {
+            if (!parse_u64(argv[++index], &config.min_samples_per_bin)) {
+                std::cerr << "Invalid --min-bin-count value\n";
+                return 2;
+            }
+        } else if (argument == "--min-temporal-pairs" && index + 1 < argc) {
+            if (!parse_u64(argv[++index], &config.min_temporal_pairs)) {
+                std::cerr << "Invalid --min-temporal-pairs value\n";
+                return 2;
             }
         } else {
             usage(argv[0]);
             return 2;
         }
     }
-    if (observation_path.empty() || navigation_path.empty() || output_path.empty()) {
+
+    if (sources.empty() || output_path.empty() || metadata_path.empty()) {
         usage(argv[0]);
         return 2;
     }
 
-    std::ofstream output(output_path);
-    if (!output) {
-        std::cerr << "Cannot open output CSV: " << output_path << '\n';
-        return 1;
-    }
-    output << "gps_week,sow_sec,station,constellation,prn,signal,signal_strength,cn0_dbhz,azimuth_rad,"
-              "elevation_rad,validity,signal_strength_unit_status\n";
-    output << std::setprecision(15);
-
-    gnss_sim::cn0_builder::RinexObsProvenance provenance{};
-    gnss_sim::cn0_builder::RinexObsStreamSummary summary{};
+    gnss_sim::cn0_builder::Cn0BuildResult result{};
     std::string error;
-    const bool ok = gnss_sim::cn0_builder::stream_rinex_cn0_samples(
-        observation_path, navigation_path,
-        [&](const gnss_sim::cn0_builder::RinexCn0Sample& sample) {
-            output << sample.time.gps_week << ',' << static_cast<double>(sample.time.tow_ns) / 1000000000.0 << ','
-                   << csv_escape(provenance.station_name) << ','
-                   << gnss_sim::cn0_builder::constellation_name(sample.constellation) << ',' << sample.prn << ','
-                   << sample.rinex_signal_code << ',' << sample.signal_strength_value << ',';
-            if (std::isfinite(sample.cn0_dbhz)) {
-                output << sample.cn0_dbhz;
-            }
-            output << ',';
-            if (std::isfinite(sample.azimuth_rad)) {
-                output << sample.azimuth_rad;
-            }
-            output << ',';
-            if (std::isfinite(sample.elevation_rad)) {
-                output << sample.elevation_rad;
-            }
-            output << ',' << gnss_sim::cn0_builder::cn0_sample_validity_name(sample.validity) << ','
-                   << gnss_sim::cn0_builder::signal_strength_unit_status_name(provenance.signal_strength_unit_status)
-                   << '\n';
-            return static_cast<bool>(output);
-        },
-        &provenance, &summary, &error);
-
-    if (!ok) {
-        std::cerr << "CN0 extraction failed: " << error << '\n';
+    if (!gnss_sim::cn0_builder::build_cn0_model(sources, config, &result, &error)) {
+        std::cerr << "CN0 model build failed: " << error << '\n';
         return 1;
     }
-    output.close();
-    if (!output) {
-        std::cerr << "Failed while writing output CSV: " << output_path << '\n';
+    if (!gnss_sim::cn0_builder::write_cn0_model_csv(output_path, config, result.aggregation_summary, result.bins,
+                                                     &error)) {
+        std::cerr << "CN0 model write failed: " << error << '\n';
+        return 1;
+    }
+    if (!gnss_sim::cn0_builder::write_cn0_metadata_json(metadata_path, config, result, &error)) {
+        std::cerr << "CN0 metadata write failed: " << error << '\n';
         return 1;
     }
 
-    std::cerr << "RINEX " << provenance.rinex_version << ", station=" << provenance.station_name
-              << ", signal-strength-unit="
-              << gnss_sim::cn0_builder::signal_strength_unit_status_name(provenance.signal_strength_unit_status)
-              << ", epochs=" << summary.epochs << ", records=" << summary.observation_records
-              << ", samples=" << summary.emitted_samples << ", valid_dbhz=" << summary.valid_dbhz_samples
-              << ", missing_s=" << summary.missing_signal_strength
-              << ", unsupported=" << summary.unsupported_signal_observables << '\n';
-    for (const std::string& observable : summary.unsupported_observables) {
-        std::cerr << "Unsupported S observable: " << observable << '\n';
-    }
+    std::cerr << "CN0 model built: sources=" << result.aggregation_summary.sources
+              << ", input_samples=" << result.aggregation_summary.input_samples
+              << ", accepted_samples=" << result.aggregation_summary.accepted_samples
+              << ", temporal_pairs=" << result.aggregation_summary.temporal_pairs << ", bins=" << result.bins.size()
+              << '\n';
     return 0;
 }

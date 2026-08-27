@@ -7,6 +7,7 @@ on:
     paths:
       - tools/apply_issue51_glo_l3oc_patch.py
       - tools/apply_issue51_rtklib_link_fix.py
+      - tools/apply_issue51_doppler_family_policy.py
       - .github/workflows/apply-issue51-glo-l3oc.yml
 
 permissions:
@@ -29,12 +30,17 @@ jobs:
           python-version: '3.x'
 
       - name: Syntax-check guarded patch drivers
-        run: python -m py_compile tools/apply_issue51_glo_l3oc_patch.py tools/apply_issue51_rtklib_link_fix.py
+        run: >-
+          python -m py_compile
+          tools/apply_issue51_glo_l3oc_patch.py
+          tools/apply_issue51_rtklib_link_fix.py
+          tools/apply_issue51_doppler_family_policy.py
 
       - name: Apply guarded implementation changes
         run: |
           python tools/apply_issue51_glo_l3oc_patch.py
           python tools/apply_issue51_rtklib_link_fix.py
+          python tools/apply_issue51_doppler_family_policy.py
 
       - name: Format modified C and C++ sources
         run: >-
@@ -66,7 +72,7 @@ jobs:
 
       - name: Commit validated implementation and remove scaffolding
         run: |
-          rm -f tools/apply_issue51_glo_l3oc_patch.py tools/apply_issue51_rtklib_link_fix.py .github/workflows/apply-issue51-glo-l3oc.yml
+          rm -f tools/apply_issue51_glo_l3oc_patch.py tools/apply_issue51_rtklib_link_fix.py tools/apply_issue51_doppler_family_policy.py .github/workflows/apply-issue51-glo-l3oc.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A

@@ -167,8 +167,8 @@ TEST(V1Acceptance, RealBrd400DlrRinex4RunsFiveSystemReceiverNavLoopback) {
     const std::filesystem::path directory = "gnss_sim_acceptance_brd4_five_system";
     gnss_sim::SimulatorRunSummary summary{};
     std::string error_message;
-    ASSERT_TRUE(run_in_directory_with_nav(directory, config, brd4_nav_path(), brd4_start_time(), &summary,
-                                          &error_message))
+    ASSERT_TRUE(
+        run_in_directory_with_nav(directory, config, brd4_nav_path(), brd4_start_time(), &summary, &error_message))
         << error_message;
 
     expect_five_system_observations(directory / "observation_truth.csv");

@@ -35,10 +35,12 @@ enum class RtklibBroadcastMessageFamily {
     kCnav2,
     kGalileoInav,
     kGalileoFnav,
+    kGalileoCnav,
     kBeidouBcnav1,
     kBeidouBcnav2,
     kBeidouBcnav3,
     kGlonassFdma,
+    kGlonassL3Oc,
 };
 
 struct RtklibNavCounts {

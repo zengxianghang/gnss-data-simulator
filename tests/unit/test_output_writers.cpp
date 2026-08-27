@@ -21,9 +21,9 @@ int satellite_number(const char* satellite_id) {
     return number;
 }
 
-gnss_sim::MeasurementObservation observation(const char* satellite_id, gnss_sim::SignalId signal_id,
-                                              int glonass_fcn, double pseudorange_m, double adr_cycles,
-                                              double doppler_hz, double cn0_dbhz, double lock_time_sec) {
+gnss_sim::MeasurementObservation observation(const char* satellite_id, gnss_sim::SignalId signal_id, int glonass_fcn,
+                                             double pseudorange_m, double adr_cycles, double doppler_hz,
+                                             double cn0_dbhz, double lock_time_sec) {
     gnss_sim::MeasurementObservation result{};
     result.signal_id = signal_id;
     result.satellite_number = satellite_number(satellite_id);
@@ -41,39 +41,32 @@ gnss_sim::MeasurementObservation observation(const char* satellite_id, gnss_sim:
 }
 
 TEST(NovatelAscii, OfficialBestPosCrcVectorMatchesOem7Documentation) {
-    const std::string payload =
-        "BESTPOSA,COM1,0,78.0,FINESTEERING,1427,325298.000,00000000,6145,2748;"
-        "SOL_COMPUTED,SINGLE,51.11678928753,-114.03886216575,1064.3470,-16.2708,WGS84,"
-        "2.3434,1.3043,4.7300,\"\",0.000,0.000,7,7,0,0,0,06,0,03";
+    const std::string payload = "BESTPOSA,COM1,0,78.0,FINESTEERING,1427,325298.000,00000000,6145,2748;"
+                                "SOL_COMPUTED,SINGLE,51.11678928753,-114.03886216575,1064.3470,-16.2708,WGS84,"
+                                "2.3434,1.3043,4.7300,\"\",0.000,0.000,7,7,0,0,0,06,0,03";
     EXPECT_EQ(gnss_sim::novatel_ascii::crc32(payload), 0x9c9a92bbU);
 }
 
 TEST(NovatelRangeWriter, MultiConstellationRangeAIsByteStable) {
     gnss_sim::MeasurementObservation observations[] = {
-        observation("C19", gnss_sim::SignalId::kBeidouB1C, 0, 22500000.250, -118000000.125000, 25.500, 43.3,
-                    6.750),
-        observation("G03", gnss_sim::SignalId::kGpsL1Ca, 0, 20200000.125, -106151716.123456, -1234.500, 45.2,
-                    12.345),
-        observation("J02", gnss_sim::SignalId::kQzssL5Q, 0, 24000000.000, -100000000.000000, -50.000, 40.0,
-                    5.000),
-        observation("R05", gnss_sim::SignalId::kGlonassG2, -4, 21400000.500, -87654321.250000, 345.125, 39.5,
-                    3.000),
-        observation("E11", gnss_sim::SignalId::kGalileoE5B, 0, 23200000.750, -121234567.750000, 678.250, 42.0,
-                    4.500),
+        observation("C19", gnss_sim::SignalId::kBeidouB1C, 0, 22500000.250, -118000000.125000, 25.500, 43.3, 6.750),
+        observation("G03", gnss_sim::SignalId::kGpsL1Ca, 0, 20200000.125, -106151716.123456, -1234.500, 45.2, 12.345),
+        observation("J02", gnss_sim::SignalId::kQzssL5Q, 0, 24000000.000, -100000000.000000, -50.000, 40.0, 5.000),
+        observation("R05", gnss_sim::SignalId::kGlonassG2, -4, 21400000.500, -87654321.250000, 345.125, 39.5, 3.000),
+        observation("E11", gnss_sim::SignalId::kGalileoE5B, 0, 23200000.750, -121234567.750000, 678.250, 42.0, 4.500),
     };
 
     std::string message;
     std::string error_message;
     ASSERT_TRUE(gnss_sim::format_novatel_rangea(writer_time(), observations, 5, &message, &error_message))
         << error_message;
-    EXPECT_EQ(message,
-              "#RANGEA,COM1,0,0.0,FINE,2300,12345.678,00000000,0,0;5,"
-              "3,0,20200000.125,0.500,-106151716.123456,0.050,-1234.500,45.2,12.345,00001c04,"
-              "42,3,21400000.500,0.500,-87654321.250000,0.050,345.125,39.5,3.000,00211c04,"
-              "11,0,23200000.750,0.500,-121234567.750000,0.050,678.250,42.0,4.500,02231c04,"
-              "194,0,24000000.000,0.500,-100000000.000000,0.050,-50.000,40.0,5.000,01c51c04,"
-              "19,0,22500000.250,0.500,-118000000.125000,0.050,25.500,43.3,6.750,00e41c04"
-              "*6d3dc9c0\r\n");
+    EXPECT_EQ(message, "#RANGEA,COM1,0,0.0,FINE,2300,12345.678,00000000,0,0;5,"
+                       "3,0,20200000.125,0.500,-106151716.123456,0.050,-1234.500,45.2,12.345,00001c04,"
+                       "42,3,21400000.500,0.500,-87654321.250000,0.050,345.125,39.5,3.000,00211c04,"
+                       "11,0,23200000.750,0.500,-121234567.750000,0.050,678.250,42.0,4.500,02231c04,"
+                       "194,0,24000000.000,0.500,-100000000.000000,0.050,-50.000,40.0,5.000,01c51c04,"
+                       "19,0,22500000.250,0.500,-118000000.125000,0.050,25.500,43.3,6.750,00e41c04"
+                       "*6d3dc9c0\r\n");
 }
 
 TEST(NovatelRangeWriter, ReaSignalOffEmitsZeroObservationGoldenRecord) {
@@ -100,10 +93,9 @@ TEST(NovatelSolutionWriter, ValidPsrPosAIsByteStable) {
     std::string message;
     std::string error_message;
     ASSERT_TRUE(gnss_sim::format_novatel_psrposa(solution, 8, &message, &error_message)) << error_message;
-    EXPECT_EQ(message,
-              "#PSRPOSA,COM1,0,0.0,FINE,2300,12345.678,00000000,0,0;"
-              "SOL_COMPUTED,SINGLE,20.00000000000,120.00000000000,100.0000,0.0000,WGS84,"
-              "0.2500,0.3000,0.5000,\"\",0.000,0.000,8,6,0,0,00,00,00,00*491dcb86\r\n");
+    EXPECT_EQ(message, "#PSRPOSA,COM1,0,0.0,FINE,2300,12345.678,00000000,0,0;"
+                       "SOL_COMPUTED,SINGLE,20.00000000000,120.00000000000,100.0000,0.0000,WGS84,"
+                       "0.2500,0.3000,0.5000,\"\",0.000,0.000,8,6,0,0,00,00,00,00*491dcb86\r\n");
 }
 
 TEST(NovatelSolutionWriter, InvalidPsrPosAIsStillScheduledAndByteStable) {
@@ -115,10 +107,9 @@ TEST(NovatelSolutionWriter, InvalidPsrPosAIsStillScheduledAndByteStable) {
     std::string message;
     std::string error_message;
     ASSERT_TRUE(gnss_sim::format_novatel_psrposa(solution, 3, &message, &error_message)) << error_message;
-    EXPECT_EQ(message,
-              "#PSRPOSA,COM1,0,0.0,FINE,2300,12345.678,00000000,0,0;"
-              "INSUFFICIENT_OBS,NONE,0.00000000000,0.00000000000,0.0000,0.0000,WGS84,"
-              "0.0000,0.0000,0.0000,\"\",0.000,0.000,3,0,0,0,00,00,00,00*ac9735bf\r\n");
+    EXPECT_EQ(message, "#PSRPOSA,COM1,0,0.0,FINE,2300,12345.678,00000000,0,0;"
+                       "INSUFFICIENT_OBS,NONE,0.00000000000,0.00000000000,0.0000,0.0000,WGS84,"
+                       "0.0000,0.0000,0.0000,\"\",0.000,0.000,3,0,0,0,00,00,00,00*ac9735bf\r\n");
 }
 
 TEST(NovatelSolutionWriter, VelocityValidityIsIndependentOfCurrentPosition) {
@@ -137,9 +128,8 @@ TEST(NovatelSolutionWriter, VelocityValidityIsIndependentOfCurrentPosition) {
     std::string message;
     std::string error_message;
     ASSERT_TRUE(gnss_sim::format_novatel_psrvela(solution, &message, &error_message)) << error_message;
-    EXPECT_EQ(message,
-              "#PSRVELA,COM1,0,0.0,FINE,2300,12345.678,00000000,0,0;"
-              "SOL_COMPUTED,SINGLE,0.000,0.000,12.3456,89.123456,-0.2500,0*e2198853\r\n");
+    EXPECT_EQ(message, "#PSRVELA,COM1,0,0.0,FINE,2300,12345.678,00000000,0,0;"
+                       "SOL_COMPUTED,SINGLE,0.000,0.000,12.3456,89.123456,-0.2500,0*e2198853\r\n");
 }
 
 TEST(NovatelSolutionWriter, InvalidPsrVelAIsStillScheduledAndByteStable) {
@@ -151,9 +141,8 @@ TEST(NovatelSolutionWriter, InvalidPsrVelAIsStillScheduledAndByteStable) {
     std::string message;
     std::string error_message;
     ASSERT_TRUE(gnss_sim::format_novatel_psrvela(solution, &message, &error_message)) << error_message;
-    EXPECT_EQ(message,
-              "#PSRVELA,COM1,0,0.0,FINE,2300,12345.678,00000000,0,0;"
-              "INSUFFICIENT_OBS,NONE,0.000,0.000,0.0000,0.000000,0.0000,0*e0538e06\r\n");
+    EXPECT_EQ(message, "#PSRVELA,COM1,0,0.0,FINE,2300,12345.678,00000000,0,0;"
+                       "INSUFFICIENT_OBS,NONE,0.000,0.000,0.0000,0.000000,0.0000,0*e0538e06\r\n");
 }
 
 TEST(NovatelAscii, MillisecondRoundingCarriesAcrossGpsWeek) {

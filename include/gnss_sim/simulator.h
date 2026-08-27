@@ -37,6 +37,7 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
                    std::string* error_message);
 
 const char* simulator_version();
+const char* simulator_commit_sha();
 const char* rtklib_commit_sha();
 
 } // namespace gnss_sim

@@ -11,6 +11,7 @@ from pathlib import Path
 import run_extended_validation as core
 
 MU_GPS = 3.9860050e14
+ORIGINAL_CASE_DEFINITION = core.case_definition
 
 
 def periodic_on_epochs(total_epochs: int, rate_hz: int, on_sec: float, off_sec: float) -> int:
@@ -69,9 +70,7 @@ def validate_exact(run, config):
     failures = []
     manifest = run.get("manifest")
     if not isinstance(manifest, dict) or not isinstance(manifest.get("run_summary"), dict):
-        stderr = run.get("stderr_tail", "")
-        suffix = f"; stderr: {stderr}" if stderr else ""
-        return [f"run_manifest.json/run_summary missing{suffix}"]
+        return ["run_manifest.json/run_summary missing"]
     summary = manifest["run_summary"]
 
     for key, expected in expected_epoch_counts(config).items():
@@ -166,6 +165,19 @@ def materialize_continuous_long_gps_nav(source, destination, week, start_sow, du
     destination.write_text("".join(out), encoding="ascii", newline="\n")
 
 
+def case_definition(name):
+    config, nav_kind, week, sow = ORIGINAL_CASE_DEFINITION(name)
+    # The committed BRD400DLR fixture is deliberately reduced for short RINEX4
+    # correctness regression and does not carry a full hour of fresh ephemeris.
+    # Use the continuously refreshed full-sky GPS fixture for the 1 h resource
+    # stress so the load remains valid for all 180,000 epochs. BRD400DLR remains
+    # exercised by the 10 min determinism and 15 min memory-trend cases, while
+    # its five-system semantics are covered by the normal #40 acceptance suite.
+    if name == "stress_50hz_1h":
+        return config, "long_gps", 2253, 172900
+    return config, nav_kind, week, sow
+
+
 def self_test():
     core.self_test()
 
@@ -198,8 +210,6 @@ def self_test():
     assert counts["signal_off_epochs"] == 20
     assert counts["range_messages"] == 60
 
-    # Verify the reference-epoch transform itself instead of merely checking
-    # that the materializer emits syntactically valid RINEX.
     sample = [
         "G01 2023 03 14 00 00 00 1.000000000000E-04 2.000000000000E-12 3.000000000000E-20\n",
         "     1.000000000000E+00 0.000000000000E+00 4.000000000000E-09 5.000000000000E-01\n",
@@ -217,8 +227,14 @@ def self_test():
     assert math.isclose(field_value(shifted[1], 4, 3), 0.5 + n * delta, rel_tol=0.0, abs_tol=1e-11)
     assert math.isclose(field_value(shifted[3], 4, 2), 1.0 - 8.0e-9 * delta, rel_tol=0.0, abs_tol=1e-11)
     assert math.isclose(field_value(shifted[4], 4, 0), 0.95 + 1.0e-10 * delta, rel_tol=0.0, abs_tol=1e-11)
-    assert math.isclose(field_value(shifted[0], 23, 0), 1.0e-4 + 2.0e-12 * delta + 3.0e-20 * delta**2,
-                        rel_tol=0.0, abs_tol=1e-15)
+    assert math.isclose(
+        field_value(shifted[0], 23, 0),
+        1.0e-4 + 2.0e-12 * delta + 3.0e-20 * delta**2,
+        rel_tol=0.0,
+        abs_tol=1e-15,
+    )
+    assert case_definition("stress_50hz_1h")[1:] == ("long_gps", 2253, 172900)
+    assert case_definition("determinism_50hz_10m")[1] == "brd4"
 
 
 def main() -> int:
@@ -232,6 +248,7 @@ def main() -> int:
 
     core.validate = validate_exact
     core.materialize_long_gps_nav = materialize_continuous_long_gps_nav
+    core.case_definition = case_definition
 
     if args.self_test:
         self_test()

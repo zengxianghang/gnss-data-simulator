@@ -70,8 +70,8 @@ bool rtklib_broadcast_ionosphere_reference_delay(const RtklibNavStore* store, Rt
     double variance_m2 = 0.0;
     const int representative_satellite = satno(SYS_GPS, 1);
     if (representative_satellite <= 0 ||
-        ionocorr(time, &store->nav, representative_satellite, position_rad_m, azel, IONOOPT_BRDC,
-                 &ionosphere_delay_m, &variance_m2) == 0 ||
+        ionocorr(time, &store->nav, representative_satellite, position_rad_m, azel, IONOOPT_BRDC, &ionosphere_delay_m,
+                 &variance_m2) == 0 ||
         !std::isfinite(ionosphere_delay_m) || ionosphere_delay_m < 0.0) {
         set_error(error_message, "RTKLIB returned an invalid broadcast ionosphere delay");
         return false;

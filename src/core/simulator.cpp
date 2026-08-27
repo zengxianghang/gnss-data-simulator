@@ -84,8 +84,9 @@ void set_error(std::string* error_message, const std::string& message) {
 }
 
 bool valid_run_options(const SimulatorRunOptions& options) {
-    return options.rinex_nav_path != nullptr && options.rinex_nav_path[0] != '\0' && options.output_log_path != nullptr &&
-           options.output_log_path[0] != '\0' && options.start_time.gps_week >= 0 && options.start_time.tow_ns >= 0 &&
+    return options.rinex_nav_path != nullptr && options.rinex_nav_path[0] != '\0' &&
+           options.output_log_path != nullptr && options.output_log_path[0] != '\0' &&
+           options.start_time.gps_week >= 0 && options.start_time.tow_ns >= 0 &&
            options.start_time.tow_ns < GPS_WEEK_NANOSECONDS;
 }
 
@@ -260,9 +261,8 @@ bool build_satellite_runtimes(const std::vector<TruthScheduleEntry>& schedule, c
     }
     std::vector<int> satellite_numbers;
     for (const TruthScheduleEntry& entry : schedule) {
-        if (entry.info.satellite_number > 0 &&
-            std::find(satellite_numbers.begin(), satellite_numbers.end(), entry.info.satellite_number) ==
-                satellite_numbers.end()) {
+        if (entry.info.satellite_number > 0 && std::find(satellite_numbers.begin(), satellite_numbers.end(),
+                                                         entry.info.satellite_number) == satellite_numbers.end()) {
             satellite_numbers.push_back(entry.info.satellite_number);
         }
     }
@@ -450,8 +450,8 @@ bool apply_and_emit_nav(RuntimeState* runtime, const SimConfig& config, const Tr
                         std::string* error_message) {
     NavigationUpdateEvent event{};
     bool emitted = false;
-    if (!apply_truth_navigation_record(runtime->navigation, entry.truth_record_index, availability_time, &event, &emitted,
-                                       error_message)) {
+    if (!apply_truth_navigation_record(runtime->navigation, entry.truth_record_index, availability_time, &event,
+                                       &emitted, error_message)) {
         return false;
     }
     if (!emitted) {
@@ -512,18 +512,20 @@ bool suppress_superseded_cold_records(RuntimeState* runtime, const TruthSchedule
         if (compare_sim_time(entry.transmit_time, target.transmit_time) > 0) {
             break;
         }
-        if (entry.truth_record_index != target.truth_record_index && entry.info.satellite_number == target.info.satellite_number &&
-            entry.has_family && target.has_family && entry.family == target.family &&
+        if (entry.truth_record_index != target.truth_record_index &&
+            entry.info.satellite_number == target.info.satellite_number && entry.has_family && target.has_family &&
+            entry.family == target.family &&
             !navigation_truth_record_delivered(runtime->navigation, entry.truth_record_index) &&
-            !consume_truth_navigation_record_without_copy(runtime->navigation, entry.truth_record_index, error_message)) {
+            !consume_truth_navigation_record_without_copy(runtime->navigation, entry.truth_record_index,
+                                                          error_message)) {
             return false;
         }
     }
     return true;
 }
 
-bool process_cold_nav(RuntimeState* runtime, const SimConfig& config, const SimTime& current_time, std::ofstream* output,
-                      SimulatorRunSummary* summary, std::string* error_message) {
+bool process_cold_nav(RuntimeState* runtime, const SimConfig& config, const SimTime& current_time,
+                      std::ofstream* output, SimulatorRunSummary* summary, std::string* error_message) {
     const bool have_any_tracking = any_tracking(runtime->satellites);
     for (const TruthScheduleEntry& entry : runtime->truth_schedule) {
         if (!record_is_available(entry, current_time)) {
@@ -575,15 +577,17 @@ bool process_cold_nav(RuntimeState* runtime, const SimConfig& config, const SimT
 
             NavigationUpdateEvent event{};
             bool emitted = false;
-            if (!deliver_cold_nav_plan_if_complete(family_state.plan, family_state.target_truth_record_index, current_time,
-                                                   runtime->navigation, &event, &emitted, error_message)) {
+            if (!deliver_cold_nav_plan_if_complete(family_state.plan, family_state.target_truth_record_index,
+                                                   current_time, runtime->navigation, &event, &emitted,
+                                                   error_message)) {
                 return false;
             }
             if (!emitted) {
                 continue;
             }
-            if (!emit_receiver_nav_record(config, receiver_navigation_store(runtime->navigation), event.receiver_record_index,
-                                          event.availability_time, output, summary, error_message) ||
+            if (!emit_receiver_nav_record(config, receiver_navigation_store(runtime->navigation),
+                                          event.receiver_record_index, event.availability_time, output, summary,
+                                          error_message) ||
                 !suppress_superseded_cold_records(runtime, *target, error_message)) {
                 return false;
             }
@@ -632,7 +636,8 @@ bool process_receiver_nav(RuntimeState* runtime, const SimConfig& config, const 
     return process_normal_nav(runtime, config, current_time, output, summary, error_message);
 }
 
-bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& config, const ScenarioEpochState& scenario,
+bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& config,
+                                      const ScenarioEpochState& scenario,
                                       std::vector<MeasurementObservation>* measurements, int* tracked_satellites,
                                       std::string* error_message) {
     measurements->clear();
@@ -651,20 +656,22 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
         for (SignalRuntime& signal : satellite.signals) {
             const bool signal_available = scenario.signal_available && geometry.visible;
             if (signal_available && !signal.tracker.scheduled) {
-                const AcquisitionContext context = signal.ever_scheduled ? AcquisitionContext::kReacquisition : initial_context;
+                const AcquisitionContext context =
+                    signal.ever_scheduled ? AcquisitionContext::kReacquisition : initial_context;
                 SimTime search_ready_time = scenario.time;
-                if (!signal.ever_scheduled && compare_sim_time(runtime->startup_search_ready_time, search_ready_time) > 0) {
+                if (!signal.ever_scheduled &&
+                    compare_sim_time(runtime->startup_search_ready_time, search_ready_time) > 0) {
                     search_ready_time = runtime->startup_search_ready_time;
                 }
-                if (!schedule_signal_acquisition(&signal.tracker, context, scenario.time, search_ready_time, elevation_deg,
-                                                 runtime->cn0_model, runtime->tracking_config, &runtime->rng,
-                                                 error_message)) {
+                if (!schedule_signal_acquisition(&signal.tracker, context, scenario.time, search_ready_time,
+                                                 elevation_deg, runtime->cn0_model, runtime->tracking_config,
+                                                 &runtime->rng, error_message)) {
                     return false;
                 }
                 signal.ever_scheduled = true;
             }
-            if (!update_signal_tracker(&signal.tracker, scenario.time, signal_available, elevation_deg, runtime->cn0_model,
-                                       error_message)) {
+            if (!update_signal_tracker(&signal.tracker, scenario.time, signal_available, elevation_deg,
+                                       runtime->cn0_model, error_message)) {
                 return false;
             }
             if (signal.tracker.phase != SignalTrackingPhase::kTracking) {
@@ -673,9 +680,10 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
             }
             satellite_tracking = true;
             AtmosphereCorrection atmosphere{};
-            if (!compute_atmosphere_correction(config.atmosphere_mode, truth_nav, scenario.time, signal.tracker.signal_id,
-                                               0, runtime->receiver.position_ecef_m, geometry.azimuth_rad,
-                                               geometry.elevation_rad, &atmosphere, error_message)) {
+            if (!compute_atmosphere_correction(config.atmosphere_mode, truth_nav, scenario.time,
+                                               signal.tracker.signal_id, 0, runtime->receiver.position_ecef_m,
+                                               geometry.azimuth_rad, geometry.elevation_rad, &atmosphere,
+                                               error_message)) {
                 return false;
             }
             MeasurementObservation observation{};
@@ -740,10 +748,11 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         return false;
     }
 
-    bool ok = load_truth_navigation(runtime.navigation, options.rinex_nav_path, error_message) &&
-              make_static_receiver_truth(config.receiver, &runtime.receiver, error_message) &&
-              build_truth_schedule(truth_navigation_store(runtime.navigation), &runtime.truth_schedule, error_message) &&
-              build_satellite_runtimes(runtime.truth_schedule, options.start_time, &runtime.satellites, error_message);
+    bool ok =
+        load_truth_navigation(runtime.navigation, options.rinex_nav_path, error_message) &&
+        make_static_receiver_truth(config.receiver, &runtime.receiver, error_message) &&
+        build_truth_schedule(truth_navigation_store(runtime.navigation), &runtime.truth_schedule, error_message) &&
+        build_satellite_runtimes(runtime.truth_schedule, options.start_time, &runtime.satellites, error_message);
     if (!ok) {
         destroy_navigation_state(runtime.navigation);
         return false;
@@ -836,8 +845,8 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         SolutionEpoch solution{};
         const MeasurementObservation* data = measurements.empty() ? nullptr : measurements.data();
         if (!solve_receiver_epoch(receiver_navigation_store(runtime.navigation), current_time, data,
-                                  static_cast<int>(measurements.size()), config.elevation_mask_deg, config.atmosphere_mode,
-                                  &runtime.solution_state, &solution, error_message) ||
+                                  static_cast<int>(measurements.size()), config.elevation_mask_deg,
+                                  config.atmosphere_mode, &runtime.solution_state, &solution, error_message) ||
             !emit_epoch_logs(config, scenario, measurements, tracked_satellites, solution, &output, &result,
                              error_message)) {
             ok = false;

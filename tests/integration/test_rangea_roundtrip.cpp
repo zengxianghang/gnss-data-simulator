@@ -72,6 +72,7 @@ TEST(RangeaRoundtripIntegration, RealWhuRinex4SerializedRangeaPositionsWithinHal
     std::string error_message;
     ASSERT_TRUE(run_simulator(directory, &simulator_summary, &error_message)) << error_message;
     ASSERT_GT(simulator_summary.range_messages, 0U);
+    ASSERT_GT(simulator_summary.valid_position_epochs, 0U);
 
     gnss_sim::RangeaRoundtripSummary roundtrip{};
     const std::string log_path = (directory / "simulated.log").string();
@@ -82,7 +83,8 @@ TEST(RangeaRoundtripIntegration, RealWhuRinex4SerializedRangeaPositionsWithinHal
     EXPECT_EQ(roundtrip.range_epochs, simulator_summary.range_messages);
     EXPECT_GT(roundtrip.parsed_observations, 0U);
     EXPECT_GT(roundtrip.selected_position_observations, 0U);
-    EXPECT_GT(roundtrip.valid_position_epochs, 0U);
+    EXPECT_EQ(roundtrip.valid_position_epochs, simulator_summary.valid_position_epochs)
+        << "serialized RANGEA and the maintained in-memory SPP path must agree on position availability";
     EXPECT_LT(roundtrip.max_position_error_m, 0.5)
         << "serialized RANGEA must retain enough precision and mapping fidelity for RTKLIB SPP";
 

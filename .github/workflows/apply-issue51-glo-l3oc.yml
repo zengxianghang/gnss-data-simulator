@@ -17,6 +17,7 @@ on:
       - tools/apply_issue51_multisite_coverage.py
       - tools/apply_issue51_gps_cnav_window.py
       - tools/apply_issue51_snapshot_family.py
+      - tools/apply_issue51_real_gps_modern_probe.py
       - .github/workflows/apply-issue51-glo-l3oc.yml
 
 permissions:
@@ -38,6 +39,18 @@ jobs:
         with:
           python-version: '3.x'
 
+      - name: Download provenance-pinned real DLR GPS modern companions
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --retry-delay 1 \
+            'https://raw.githubusercontent.com/neilberkman/sidereon/267b28f69f7678921c11689531f8fa250e7cca78/crates/sidereon-core/tests/fixtures/nav/BRD400DLR_S_20261800000_01H_MN_trim.rnx' \
+            -o /tmp/issue51_brd400dlr_2026180_trim.rnx
+          curl -fsSL --retry 3 --retry-delay 1 \
+            'https://raw.githubusercontent.com/CS-SI/Orekit/c5b14ff008eb02482ad4e2a2347c97ce4800969c/src/test/resources/gnss/navigation/Example_GPS_Rinex400.n' \
+            -o /tmp/issue51_orekit_dlr_2022278_gps.rnx
+          grep -q 'BRD400DLR' /tmp/issue51_brd400dlr_2026180_trim.rnx
+          grep -q 'EXTRACT FROM BRD400DLR_S_20222780000_01D_MN.rnx' /tmp/issue51_orekit_dlr_2022278_gps.rnx
+
       - name: Syntax-check guarded patch drivers
         run: >-
           python -m py_compile
@@ -52,6 +65,7 @@ jobs:
           tools/apply_issue51_multisite_coverage.py
           tools/apply_issue51_gps_cnav_window.py
           tools/apply_issue51_snapshot_family.py
+          tools/apply_issue51_real_gps_modern_probe.py
 
       - name: Apply guarded implementation and multi-site validation
         run: |
@@ -66,6 +80,7 @@ jobs:
           python tools/apply_issue51_multisite_coverage.py
           python tools/apply_issue51_gps_cnav_window.py
           python tools/apply_issue51_snapshot_family.py
+          python tools/apply_issue51_real_gps_modern_probe.py
 
       - name: Format modified C and C++ sources
         run: >-
@@ -100,6 +115,11 @@ jobs:
       - name: Test full suite
         run: ctest --test-dir build -C Release --output-on-failure
 
+      - name: Print real GPS modern companion probe
+        run: >-
+          ./build/gnss_sim_integration_tests
+          --gtest_filter=V1Acceptance.RealDlrGpsModernCompanionsExposePinnedRtklibStatus
+
       - name: Print GPS CNAV residual diagnostics
         run: >-
           ./build/gnss_sim_integration_tests
@@ -108,4 +128,4 @@ jobs:
       - name: Diagnostic branch remains uncommitted
         run: |
           echo 'Guarded implementation validated in the worktree only.'
-          echo 'GPS L1C remains pending a real GPS CNV2 fixture companion.'
+          echo 'Real GPS modern companions are provenance-pinned diagnostics until strict residual legs pass.'

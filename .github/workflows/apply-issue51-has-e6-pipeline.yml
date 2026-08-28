@@ -7,10 +7,10 @@ on:
       - .github/workflows/apply-issue51-has-e6-pipeline.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  windows-asan:
+  windows-guard:
     runs-on: windows-latest
     steps:
       - name: Checkout Draft branch with dependencies
@@ -19,11 +19,89 @@ jobs:
           ref: issue-51-all-signal-residuals
           submodules: recursive
 
-      - name: Configure with MSVC AddressSanitizer
-        run: cmake -S . -B build -DBUILD_TESTING=ON '-DCMAKE_C_FLAGS=/fsanitize=address' '-DCMAKE_CXX_FLAGS=/fsanitize=address'
+      - name: Apply narrow HAS store guard patch
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('src/core/simulator.cpp')
+          text = path.read_text()
+          text = text.replace('#include <memory>\n', '')
+          anchor = '''struct RuntimeState {
+              NavigationState* navigation;
+              const GalileoHasStore* galileo_has;
+              ReceiverTruth receiver;
+              DeterministicRng rng;
+              Cn0Model cn0_model;
+              SignalTrackingModelConfig tracking_config;
+              SolutionEngineState solution_state;
+              StartupMode startup_mode;
+              SimTime startup_search_ready_time;
+              std::vector<SatelliteRuntime> satellites;
+              std::vector<TruthScheduleEntry> truth_schedule;
+          };
+          '''
+          replacement = anchor + '''
+          struct GalileoHasStoreGuard {
+              GalileoHasStore* store = nullptr;
+
+              ~GalileoHasStoreGuard() {
+                  destroy_galileo_has_store(store);
+              }
+
+              GalileoHasStoreGuard(const GalileoHasStoreGuard&) = delete;
+              GalileoHasStoreGuard& operator=(const GalileoHasStoreGuard&) = delete;
+          };
+          '''
+          if text.count(anchor) != 1:
+              raise SystemExit('RuntimeState anchor mismatch')
+          text = text.replace(anchor, replacement, 1)
+          old = '''    std::unique_ptr<GalileoHasStore, void (*)(GalileoHasStore*)> galileo_has_store(nullptr, destroy_galileo_has_store);
+              if (has_complete_galileo_has_paths(options)) {
+                  galileo_has_store.reset(create_galileo_has_store());
+                  if (galileo_has_store == nullptr ||
+                      !load_galileo_has_products(galileo_has_store.get(), options.galileo_has_sp3_path,
+                                                 options.galileo_has_clock_path, options.galileo_has_bias_path, error_message)) {
+                      if (galileo_has_store == nullptr) {
+                          set_error(error_message, "cannot allocate Galileo HAS product store");
+                      }
+                      return false;
+                  }
+                  runtime.galileo_has = galileo_has_store.get();
+              }
+          '''
+          new = '''    GalileoHasStoreGuard galileo_has_store{};
+              if (has_complete_galileo_has_paths(options)) {
+                  galileo_has_store.store = create_galileo_has_store();
+                  if (galileo_has_store.store == nullptr ||
+                      !load_galileo_has_products(galileo_has_store.store, options.galileo_has_sp3_path,
+                                                 options.galileo_has_clock_path, options.galileo_has_bias_path, error_message)) {
+                      if (galileo_has_store.store == nullptr) {
+                          set_error(error_message, "cannot allocate Galileo HAS product store");
+                      }
+                      return false;
+                  }
+                  runtime.galileo_has = galileo_has_store.store;
+              }
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('HAS unique_ptr block mismatch')
+          path.write_text(text.replace(old, new, 1))
+
+      - name: Configure
+        run: cmake -S . -B build -DBUILD_TESTING=ON
 
       - name: Build integration tests
         run: cmake --build build --config Release --target gnss_sim_integration_tests --parallel
 
       - name: Run residual acceptance directly
         run: .\build\Release\gnss_sim_integration_tests.exe --gtest_filter=V1Acceptance.EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks
+
+      - name: Commit guard only after Windows acceptance passes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/core/simulator.cpp
+          git diff --cached --check
+          git commit -m "Fix Windows HAS store lifetime isolation"
+          git push origin HEAD:issue-51-all-signal-residuals

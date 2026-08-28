@@ -6,6 +6,8 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <iomanip>
+#include <iostream>
 #include <iterator>
 #include <sstream>
 #include <string>
@@ -80,6 +82,11 @@ TEST(RangeaRoundtripIntegration, RealWhuRinex4SerializedRangeaPositionsWithinHal
     ASSERT_TRUE(gnss_sim::validate_rangea_roundtrip_file(log_path.c_str(), nav_path.c_str(), 20.0, 120.0, 100.0, 0.0,
                                                          true, &roundtrip, &error_message))
         << error_message;
+    std::cout << std::fixed << std::setprecision(9)
+              << "rangea_roundtrip_max_3d_error_m=" << roundtrip.max_position_error_m << '\n'
+              << "rangea_roundtrip_max_error_gpst=" << roundtrip.max_error_gps_week << '/'
+              << roundtrip.max_error_sow_sec << '\n'
+              << "rangea_roundtrip_valid_position_epochs=" << roundtrip.valid_position_epochs << '\n';
     EXPECT_EQ(roundtrip.range_epochs, simulator_summary.range_messages);
     EXPECT_GT(roundtrip.parsed_observations, 0U);
     EXPECT_GT(roundtrip.selected_position_observations, 0U);

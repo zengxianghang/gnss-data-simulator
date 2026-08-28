@@ -1,15 +1,15 @@
 from pathlib import Path
 
-path = Path("src/gnss/rtklib_bias_adapter.cpp")
-text = path.read_text()
-old = '''    if (status <= 0) {
+bias_path = Path("src/gnss/rtklib_bias_adapter.cpp")
+bias_text = bias_path.read_text()
+old_status = '''    if (status <= 0) {
         set_error(error_message, "no matching signal/message-family ephemeris for health");
         return false;
     }
 
     const int raw_health = info.system == SYS_GLO ? geph.svh : eph.svh;
 '''
-new = '''    if (status == 0) {
+new_status = '''    if (status == 0) {
         *signal_health = 1;
         return true;
     }
@@ -20,8 +20,40 @@ new = '''    if (status == 0) {
 
     const int raw_health = info.system == SYS_GLO ? geph.svh : eph.svh;
 '''
-count = text.count(old)
-if count != 1:
-    raise RuntimeError(f"signal status anchor count={count}")
-path.write_text(text.replace(old, new, 1))
-print("missing signal family is non-fatal unavailable status")
+if bias_text.count(old_status) != 1:
+    raise RuntimeError(f"signal status anchor count={bias_text.count(old_status)}")
+bias_path.write_text(bias_text.replace(old_status, new_status, 1))
+
+sim_path = Path("src/core/simulator.cpp")
+sim_text = sim_path.read_text()
+old_availability = '''            const bool signal_available =
+                scenario.signal_available && geometry.above_elevation_mask && signal_healthy;
+            if (signal_available && !signal.tracker.scheduled) {'''
+new_availability = '''            // Broadcast health controls measurement validity, not RF tracking.
+            // Preserve legacy behavior outside GPS CNAV/CNV2.
+            const bool signal_available =
+                scenario.signal_available &&
+                (health_family != RtklibBroadcastMessageFamily::kUnknown ? geometry.above_elevation_mask
+                                                                         : geometry.visible);
+            SatelliteGeometry signal_geometry = geometry;
+            if (health_family != RtklibBroadcastMessageFamily::kUnknown) {
+                signal_geometry.healthy = signal_healthy;
+                signal_geometry.visible = geometry.above_elevation_mask && signal_healthy;
+            }
+            if (signal_available && !signal.tracker.scheduled) {'''
+if sim_text.count(old_availability) != 1:
+    raise RuntimeError(f"signal availability anchor count={sim_text.count(old_availability)}")
+sim_text = sim_text.replace(old_availability, new_availability, 1)
+old_measurement = '''            if (!generate_zero_noise_measurement(truth_nav, geometry, signal.tracker, atmosphere, &signal.ambiguity,
+                                                 &observation, error_message) ||
+                !truth_writer_write_observation(truth_writer, runtime->receiver, geometry, signal.tracker, observation,
+                                                error_message)) {'''
+new_measurement = '''            if (!generate_zero_noise_measurement(truth_nav, signal_geometry, signal.tracker, atmosphere,
+                                                 &signal.ambiguity, &observation, error_message) ||
+                !truth_writer_write_observation(truth_writer, runtime->receiver, signal_geometry, signal.tracker,
+                                                observation, error_message)) {'''
+if sim_text.count(old_measurement) != 1:
+    raise RuntimeError(f"signal geometry measurement anchor count={sim_text.count(old_measurement)}")
+sim_path.write_text(sim_text.replace(old_measurement, new_measurement, 1))
+
+print("missing family is non-fatal and GPS modern RF tracking is separated from broadcast-health validity")

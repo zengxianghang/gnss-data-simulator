@@ -81,7 +81,7 @@ jobs:
             "scenario": "KS",
             "duration_sec": 600,
             "sampling_rate_hz": 1,
-            "elevation_mask_deg": 0.0,
+            "elevation_mask_deg": 3.0,
             "output_eph": true,
             "output_ion": true,
             "measurement_noise_enabled": false,
@@ -124,7 +124,7 @@ jobs:
             --truth-lat 20 \
             --truth-lon 120 \
             --truth-height 100 \
-            --elevation-mask 0 \
+            --elevation-mask 3 \
             --broadcast-atmosphere \
             | tee extended-results/rangea_roundtrip_10m/roundtrip.txt
 

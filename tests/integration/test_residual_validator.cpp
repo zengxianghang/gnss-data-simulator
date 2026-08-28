@@ -4,11 +4,10 @@
 #include "gnss_sim/simulator.h"
 #include "residual_validator.h"
 
-#include <gtest/gtest.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <gtest/gtest.h>
 #include <string>
 
 namespace {
@@ -17,8 +16,8 @@ std::string data_path(const char* name) {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/" + name;
 }
 
-const gnss_sim::residual_validator::SummaryRow* signal_summary(
-    const gnss_sim::residual_validator::ValidationReport& report, gnss_sim::SignalId signal_id) {
+const gnss_sim::residual_validator::SummaryRow*
+signal_summary(const gnss_sim::residual_validator::ValidationReport& report, gnss_sim::SignalId signal_id) {
     return gnss_sim::residual_validator::find_signal_summary(report, static_cast<int>(signal_id));
 }
 
@@ -32,9 +31,9 @@ std::size_t signal_summary_count(const gnss_sim::residual_validator::ValidationR
     return count;
 }
 
-const gnss_sim::residual_validator::SummaryRow* family_summary(
-    const gnss_sim::residual_validator::ValidationReport& report, gnss_sim::SignalId signal_id,
-    const std::string& family) {
+const gnss_sim::residual_validator::SummaryRow*
+family_summary(const gnss_sim::residual_validator::ValidationReport& report, gnss_sim::SignalId signal_id,
+               const std::string& family) {
     const int expected_id = static_cast<int>(signal_id);
     for (const auto& row : report.rows) {
         if (row.scope == "signal_family" && row.signal_id == expected_id && row.family == family) {
@@ -44,8 +43,8 @@ const gnss_sim::residual_validator::SummaryRow* family_summary(
     return nullptr;
 }
 
-void configure_zero_noise_ks(gnss_sim::SimConfig* config, gnss_sim::AtmosphereMode atmosphere_mode,
-                             double latitude_deg, double longitude_deg) {
+void configure_zero_noise_ks(gnss_sim::SimConfig* config, gnss_sim::AtmosphereMode atmosphere_mode, double latitude_deg,
+                             double longitude_deg) {
     ASSERT_NE(config, nullptr);
     *config = gnss_sim::default_sim_config();
     config->scenario = gnss_sim::ScenarioType::KS;
@@ -97,9 +96,9 @@ TEST(ResidualValidatorIntegration, CompactBroadcastTruthUsesSharedRtklibEvaluato
     EXPECT_GT(report.input_rows, 0U);
     EXPECT_EQ(signal_summary_count(report), 21U);
 
-    for (gnss_sim::SignalId signal_id : {gnss_sim::SignalId::kGpsL1Ca, gnss_sim::SignalId::kQzssL1Ca,
-                                         gnss_sim::SignalId::kGlonassG1, gnss_sim::SignalId::kGalileoE1,
-                                         gnss_sim::SignalId::kBeidouB1I}) {
+    for (gnss_sim::SignalId signal_id :
+         {gnss_sim::SignalId::kGpsL1Ca, gnss_sim::SignalId::kQzssL1Ca, gnss_sim::SignalId::kGlonassG1,
+          gnss_sim::SignalId::kGalileoE1, gnss_sim::SignalId::kBeidouB1I}) {
         const auto* summary = signal_summary(report, signal_id);
         ASSERT_NE(summary, nullptr);
         EXPECT_GT(summary->code_residuals, 0U);

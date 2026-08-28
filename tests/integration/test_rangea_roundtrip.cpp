@@ -90,12 +90,13 @@ TEST(RangeaRoundtripIntegration, RealWhuRinex4SerializedRangeaPositionsWithinHal
 }
 
 TEST(RangeaRoundtripIntegration, MalformedSerializedRangeaFailsExplicitly) {
-    std::istringstream malformed("#RANGEA,COM1,0,0.0,FINE,2347,436500.000,00000000,0,0;1,1,0,20000000.000*00000000\r\n");
+    std::istringstream malformed(
+        "#RANGEA,COM1,0,0.0,FINE,2347,436500.000,00000000,0,0;1,1,0,20000000.000*00000000\r\n");
     gnss_sim::RangeaRoundtripSummary summary{};
     std::string error_message;
     const std::string nav_path = brd4_nav_path();
-    EXPECT_FALSE(gnss_sim::validate_rangea_roundtrip_stream(&malformed, nav_path.c_str(), 20.0, 120.0, 100.0, 0.0,
-                                                            true, &summary, &error_message));
+    EXPECT_FALSE(gnss_sim::validate_rangea_roundtrip_stream(&malformed, nav_path.c_str(), 20.0, 120.0, 100.0, 0.0, true,
+                                                            &summary, &error_message));
     EXPECT_FALSE(error_message.empty());
 }
 
@@ -117,8 +118,8 @@ TEST(RangeaRoundtripIntegration, SameInputProducesIdenticalRoundtripResult) {
     ASSERT_TRUE(gnss_sim::validate_rangea_roundtrip_file(first_log.c_str(), nav_path.c_str(), 20.0, 120.0, 100.0, 0.0,
                                                          true, &first_roundtrip, &error_message))
         << error_message;
-    ASSERT_TRUE(gnss_sim::validate_rangea_roundtrip_file(second_log.c_str(), nav_path.c_str(), 20.0, 120.0, 100.0,
-                                                         0.0, true, &second_roundtrip, &error_message))
+    ASSERT_TRUE(gnss_sim::validate_rangea_roundtrip_file(second_log.c_str(), nav_path.c_str(), 20.0, 120.0, 100.0, 0.0,
+                                                         true, &second_roundtrip, &error_message))
         << error_message;
 
     EXPECT_EQ(first_roundtrip.range_epochs, second_roundtrip.range_epochs);

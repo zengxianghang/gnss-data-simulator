@@ -151,8 +151,8 @@ bool write_g3_overlay_nav(const std::filesystem::path& directory, std::string* o
     return true;
 }
 
-void configure_zero_noise_ks(gnss_sim::SimConfig* config, gnss_sim::AtmosphereMode atmosphere_mode,
-                             double latitude_deg, double longitude_deg, int duration_sec) {
+void configure_zero_noise_ks(gnss_sim::SimConfig* config, gnss_sim::AtmosphereMode atmosphere_mode, double latitude_deg,
+                             double longitude_deg, int duration_sec) {
     ASSERT_NE(config, nullptr);
     *config = gnss_sim::default_sim_config();
     config->scenario = gnss_sim::ScenarioType::KS;
@@ -259,8 +259,7 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
 
         gnss_sim::residual_validator::ValidationReport report{};
         ASSERT_TRUE(run_and_validate(directory / site.name, config, start, overlay_nav_path,
-                                     gnss_sim::residual_validator::AtmosphereMode::kBroadcast, &report,
-                                     &error_message))
+                                     gnss_sim::residual_validator::AtmosphereMode::kBroadcast, &report, &error_message))
             << "site=" << site.name << " " << error_message;
         merge_signal_report(report, &aggregate);
     }
@@ -319,8 +318,8 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
         const SignalResidualUnion& stats = aggregate.at(signal_id);
 
         EXPECT_GT(stats.rows, 0U) << definition.name;
-        EXPECT_GT(stats.doppler_residuals, 0U) << "every V1 frequency must execute shared Doppler residual: "
-                                                << definition.name;
+        EXPECT_GT(stats.doppler_residuals, 0U)
+            << "every V1 frequency must execute shared Doppler residual: " << definition.name;
         if (stats.doppler_residuals > 0U) {
             ++doppler_covered_signal_count;
         }
@@ -350,12 +349,13 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
         } else if (definition.signal_id == gnss_sim::SignalId::kGalileoE6) {
             EXPECT_STREQ(definition.rinex_signal_code, "6C");
             EXPECT_EQ(definition.novatel_oem7_signal_type, 7);
-            EXPECT_GT(stats.code_residuals, 0U) << "official JRC HAS companion must exercise Galileo E6-C code residual";
+            EXPECT_GT(stats.code_residuals, 0U)
+                << "official JRC HAS companion must exercise Galileo E6-C code residual";
             EXPECT_GT(stats.code_unavailable, 0U)
                 << "2025 compact broadcast coverage must retain missing HAS code-bias evidence";
         } else {
-            EXPECT_GT(stats.code_residuals, 0U) << "compact coverage union must exercise code residual: "
-                                                << definition.name;
+            EXPECT_GT(stats.code_residuals, 0U)
+                << "compact coverage union must exercise code residual: " << definition.name;
         }
     }
 

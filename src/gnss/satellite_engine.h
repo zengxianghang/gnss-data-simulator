@@ -27,6 +27,14 @@ struct SatelliteGeometry {
     bool visible;
 };
 
+using SatelliteStateProvider = bool (*)(const void* context, int gps_week, double sow_sec, int satellite_number,
+                                        RtklibSatelliteState* state, std::string* error_message);
+
+bool compute_satellite_geometry_with_provider(SatelliteStateProvider state_provider, const void* state_context,
+                                              const ReceiverTruth& receiver, const SimTime& receive_time,
+                                              int satellite_number, double elevation_mask_deg,
+                                              SatelliteGeometry* geometry, std::string* error_message);
+
 bool subtract_propagation_time(const SimTime& receive_time, double propagation_time_sec, int* transmit_gps_week,
                                double* transmit_sow_sec);
 bool elevation_passes_mask(double elevation_rad, double elevation_mask_deg);

@@ -119,6 +119,9 @@ bool format_novatel_nav_output_record(const NavOutputRecord& source, const SimTi
     const char* log_name = nullptr;
     std::string body;
     if (record.kind == RtklibNavRecordKind::kGlonassEphemeris) {
+        if (record.glonass.message_family != RtklibBroadcastMessageFamily::kGlonassFdma) {
+            return true;
+        }
         log_name = "GLOEPHEMERISA";
         body = glonass_body(record.glonass);
     } else if (record.kind == RtklibNavRecordKind::kEphemeris) {

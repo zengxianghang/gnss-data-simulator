@@ -12,7 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(CTest)
 include(cmake/CompilerWarnings.cmake)
 
-set(GNSS_SIM_RTKLIB_COMMIT "dc596ba725ccaa5ab5963d7e7ec85b52ae743969" CACHE STRING
+set(GNSS_SIM_RTKLIB_COMMIT "c03a768a180caea7c85586fe0f3c6842f832df27" CACHE STRING
     "Pinned RTKLIB commit used by this simulator build")
 set(GNSS_SIM_CJSON_COMMIT "acc76239bee01d8e9c858ae2cab296704e52d916" CACHE STRING
     "Pinned cJSON commit used by this simulator build")
@@ -54,6 +54,8 @@ add_library(rtklib_pinned STATIC
     third_party/RTKLIB/src/rtkcmn.c
     third_party/RTKLIB/src/rtklib_obs_ext.c
     third_party/RTKLIB/src/rtklib_pntvel_ext.c
+    third_party/RTKLIB/src/rtklib_residual_ext.c
+    third_party/RTKLIB/src/rtklib_signal_state_ext.c
     third_party/RTKLIB/src/sbas.c
 )
 add_library(gnss_sim::rtklib ALIAS rtklib_pinned)
@@ -87,6 +89,7 @@ add_library(gnss_sim_core STATIC
     src/core/sim_config.cpp
     src/core/sim_time.cpp
     src/core/simulator.cpp
+    src/gnss/galileo_has_adapter.cpp
     src/gnss/nav_message_scheduler.cpp
     src/gnss/nav_output_metadata.cpp
     src/gnss/navigation_state.cpp
@@ -150,6 +153,25 @@ add_executable(build-cn0-model
 target_link_libraries(build-cn0-model PRIVATE cn0_model_builder_core)
 gnss_sim_set_project_warnings(build-cn0-model)
 
+add_library(residual_validator_core STATIC
+    tools/residual_validator/residual_validator.cpp
+)
+target_include_directories(residual_validator_core
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/tools/residual_validator"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_link_libraries(residual_validator_core
+    PUBLIC gnss_sim::core
+    PRIVATE gnss_sim::rtklib
+)
+gnss_sim_set_project_warnings(residual_validator_core)
+
+add_executable(validate-residuals
+    tools/residual_validator/main.cpp
+)
+target_link_libraries(validate-residuals PRIVATE residual_validator_core)
+gnss_sim_set_project_warnings(validate-residuals)
+
 if(BUILD_TESTING)
     include(FetchContent)
 
@@ -167,6 +189,7 @@ if(BUILD_TESTING)
         tests/unit/test_cn0_model.cpp
         tests/unit/test_cn0_statistics.cpp
         tests/unit/test_deterministic_rng.cpp
+        tests/unit/test_galileo_has_adapter.cpp
         tests/unit/test_measurement_model.cpp
         tests/unit/test_nav_message_scheduler.cpp
         tests/unit/test_nav_message_scheduler_gal_bds.cpp
@@ -200,6 +223,8 @@ if(BUILD_TESTING)
 
     add_executable(gnss_sim_integration_tests
         tests/integration/test_scenarios.cpp
+        tests/integration/test_all_signal_residuals.cpp
+        tests/integration/test_residual_validator.cpp
         tests/integration/test_truth_outputs.cpp
         tests/integration/test_v1_acceptance.cpp
     )
@@ -210,6 +235,7 @@ if(BUILD_TESTING)
     target_link_libraries(gnss_sim_integration_tests PRIVATE
         gnss_sim::core
         gnss_sim::rtklib
+        residual_validator_core
         GTest::gtest_main
     )
     gnss_sim_set_project_warnings(gnss_sim_integration_tests)

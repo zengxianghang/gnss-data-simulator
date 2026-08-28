@@ -39,6 +39,10 @@ std::string invalid_nav_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/invalid_nav.rnx";
 }
 
+std::string rinex4_acceptance_nav_path() {
+    return std::string(GNSS_SIM_TEST_DATA_DIR) + "/brd400dlr_rinex4_acceptance_nav.rnx";
+}
+
 class RtklibAdapterTest : public ::testing::Test {
   protected:
     void SetUp() override {
@@ -119,6 +123,58 @@ TEST_F(RtklibAdapterTest, BroadcastSatelliteStateMatchesDirectRtklibReference) {
     EXPECT_EQ(adapter_state.health, reference_health);
 
     freenav(&reference_nav, 0xFF);
+}
+
+TEST_F(RtklibAdapterTest, SnapshotRetainsSameSatelliteLegacyAndModernMessageFamilies) {
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(store_, rinex4_acceptance_nav_path().c_str(), &error_message))
+        << error_message;
+
+    gnss_sim::RtklibNavStore* snapshot = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(snapshot, nullptr);
+    ASSERT_TRUE(gnss_sim::rtklib_copy_nav_snapshot(store_, 2347, 437100.0, snapshot, &error_message)) << error_message;
+
+    int g17 = 0;
+    ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number("G17", &g17));
+    bool have_lnav = false;
+    bool have_cnav = false;
+    int g17_ephemeris_count = 0;
+    for (int index = 0; index < gnss_sim::rtklib_nav_record_count(snapshot); ++index) {
+        gnss_sim::RtklibNavRecordInfo info{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_record_info(snapshot, index, &info));
+        if (info.kind != gnss_sim::RtklibNavRecordKind::kEphemeris || info.satellite_number != g17) {
+            continue;
+        }
+        ++g17_ephemeris_count;
+        have_lnav = have_lnav || (info.message_type & NAV_LNAV) != 0;
+        have_cnav = have_cnav || (info.message_type & NAV_CNAV) != 0;
+    }
+    EXPECT_TRUE(have_lnav);
+    EXPECT_TRUE(have_cnav);
+    EXPECT_GE(g17_ephemeris_count, 2);
+
+    gnss_sim::destroy_rtklib_nav_store(snapshot);
+}
+
+TEST_F(RtklibAdapterTest, GpsCnavHealthIsInterpretedPerSignal) {
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(store_, rinex4_acceptance_nav_path().c_str(), &error_message))
+        << error_message;
+
+    int g17 = 0;
+    ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number("G17", &g17));
+
+    int l2c_health = -1;
+    ASSERT_TRUE(gnss_sim::rtklib_signal_health_for_family(
+        store_, 2347, 437100.0, g17, "2S", gnss_sim::RtklibBroadcastMessageFamily::kCnav, &l2c_health, &error_message))
+        << error_message;
+    EXPECT_EQ(l2c_health, 0);
+
+    int l5q_health = -1;
+    ASSERT_TRUE(gnss_sim::rtklib_signal_health_for_family(
+        store_, 2347, 437100.0, g17, "5Q", gnss_sim::RtklibBroadcastMessageFamily::kCnav, &l5q_health, &error_message))
+        << error_message;
+    EXPECT_NE(l5q_health, 0);
 }
 
 TEST(RtklibAdapterCoordinates, LlhEcefRoundTripUsesRtklibReferenceFunctions) {

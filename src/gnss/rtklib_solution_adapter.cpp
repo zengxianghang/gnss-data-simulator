@@ -3,6 +3,7 @@
 extern "C" {
 #include <rtklib.h>
 #include <rtklib_pntvel_ext.h>
+#include <rtklib_signal_bias_ext.h>
 }
 
 #include <cmath>
@@ -68,6 +69,68 @@ unsigned char snr_quarter_dbhz(double cn0_dbhz) {
     return static_cast<unsigned char>(scaled + 0.5);
 }
 
+int required_message_mask(int system, RtklibBroadcastMessageFamily family) {
+    switch (family) {
+        case RtklibBroadcastMessageFamily::kLegacy:
+            if (system == SYS_GPS || system == SYS_QZS)
+                return NAV_LNAV;
+            if (system == SYS_CMP)
+                return NAV_D1 | NAV_D2 | NAV_D1D2;
+            break;
+        case RtklibBroadcastMessageFamily::kCnav:
+            return NAV_CNAV;
+        case RtklibBroadcastMessageFamily::kCnav2:
+            return NAV_CNV2;
+        case RtklibBroadcastMessageFamily::kGalileoInav:
+            return NAV_INAV;
+        case RtklibBroadcastMessageFamily::kGalileoFnav:
+            return NAV_FNAV;
+        case RtklibBroadcastMessageFamily::kBeidouBcnav1:
+            return NAV_CNV1;
+        case RtklibBroadcastMessageFamily::kBeidouBcnav2:
+            return NAV_CNV2;
+        case RtklibBroadcastMessageFamily::kBeidouBcnav3:
+            return NAV_CNV3;
+        case RtklibBroadcastMessageFamily::kGlonassFdma:
+            return NAV_FDMA;
+        case RtklibBroadcastMessageFamily::kGlonassL3Oc:
+            return NAV_L3OC;
+        case RtklibBroadcastMessageFamily::kUnknown:
+            break;
+    }
+    return 0;
+}
+
+bool append_solution_ephemeris(const nav_t& source_nav, gtime_t time, const RtklibSolutionObservation& observation,
+                               nav_t* solver_nav, eph_t solver_eph[MAXOBS], geph_t solver_geph[MAXOBS]) {
+    if (solver_nav == nullptr || observation.satellite_number <= 0 || observation.observation_code <= 0 ||
+        observation.observation_code > 255) {
+        return false;
+    }
+    const int system = satsys(observation.satellite_number, nullptr);
+    const int mask = required_message_mask(system, observation.message_family);
+    if (mask == 0)
+        return false;
+
+    eph_t eph{};
+    geph_t geph{};
+    if (rtklib_signal_ephemeris_ext(time, observation.satellite_number,
+                                    static_cast<unsigned char>(observation.observation_code), mask, &source_nav, &eph,
+                                    &geph, nullptr) != 1) {
+        return false;
+    }
+    if (system == SYS_GLO) {
+        if (solver_nav->ng >= MAXOBS)
+            return false;
+        solver_geph[solver_nav->ng++] = geph;
+    } else {
+        if (solver_nav->n >= MAXOBS)
+            return false;
+        solver_eph[solver_nav->n++] = eph;
+    }
+    return true;
+}
+
 bool legacy_prange_adjustment_m(const nav_t& nav, int satellite_number, int observation_code, double* adjustment_m) {
     if (adjustment_m == nullptr || satellite_number <= 0 || satellite_number > MAXSAT || observation_code <= 0 ||
         observation_code > 255) {
@@ -107,23 +170,35 @@ bool legacy_prange_adjustment_m(const nav_t& nav, int satellite_number, int obse
     return std::isfinite(adjustment);
 }
 
-bool solver_pseudorange_m(const nav_t& nav, const RtklibSolutionObservation& observation, double* pseudorange_m) {
+bool solver_pseudorange_m(const nav_t& nav, gtime_t time, const RtklibSolutionObservation& observation,
+                          double* pseudorange_m) {
     if (pseudorange_m == nullptr || !std::isfinite(observation.pseudorange_m) || observation.pseudorange_m <= 0.0 ||
-        !std::isfinite(observation.code_bias_m)) {
+        !std::isfinite(observation.code_bias_m) || observation.satellite_number <= 0 ||
+        observation.satellite_number > MAXSAT)
         return false;
-    }
 
-    double legacy_adjustment_m = 0.0;
-    if (!legacy_prange_adjustment_m(nav, observation.satellite_number, observation.observation_code,
-                                    &legacy_adjustment_m)) {
-        return false;
+    const int satellite_index = observation.satellite_number - 1;
+    const bool external_dcb = nav.cbias[satellite_index][0] != 0.0 ||
+                              (observation.observation_code == CODE_L1C && nav.cbias[satellite_index][1] != 0.0);
+    if (external_dcb) {
+        double legacy_adjustment_m = 0.0;
+        if (!legacy_prange_adjustment_m(nav, observation.satellite_number, observation.observation_code,
+                                        &legacy_adjustment_m))
+            return false;
+        *pseudorange_m = observation.pseudorange_m - observation.code_bias_m - legacy_adjustment_m;
+    } else {
+        double rtklib_code_bias_m = 0.0;
+        const int system = satsys(observation.satellite_number, nullptr);
+        const int mask = required_message_mask(system, observation.message_family);
+        if (mask == 0)
+            return false;
+        const int status = rtklib_signal_code_bias_ext(time, observation.satellite_number,
+                                                       static_cast<unsigned char>(observation.observation_code), mask,
+                                                       &nav, &rtklib_code_bias_m, nullptr);
+        if (status <= 0)
+            return false;
+        *pseudorange_m = observation.pseudorange_m - observation.code_bias_m + rtklib_code_bias_m;
     }
-
-    // #11 emits raw signal-specific pseudorange. Remove its explicit
-    // TGD/BGD/ISC term, then pre-compensate the adjustment that the pinned
-    // RTKLIB prange() applies. The PC seen by rescode() is therefore the
-    // broadcast-clock-referenced pseudorange without modifying pntpos().
-    *pseudorange_m = observation.pseudorange_m - observation.code_bias_m - legacy_adjustment_m;
     return std::isfinite(*pseudorange_m) && *pseudorange_m > 0.0;
 }
 
@@ -151,6 +226,15 @@ bool rtklib_solve_single_position(const RtklibNavStore* receiver_nav, int gps_we
 
     RtklibPositionSolution result{};
     obsd_t rtklib_observations[MAXOBS]{};
+    eph_t solver_eph[MAXOBS]{};
+    geph_t solver_geph[MAXOBS]{};
+    nav_t solver_nav = receiver_nav->nav;
+    solver_nav.eph = solver_eph;
+    solver_nav.n = 0;
+    solver_nav.nmax = MAXOBS;
+    solver_nav.geph = solver_geph;
+    solver_nav.ng = 0;
+    solver_nav.ngmax = MAXOBS;
     const gtime_t epoch_time = gpst2time(gps_week, sow_sec);
     bool used_satellite[MAXSAT]{};
     int usable_count = 0;
@@ -162,8 +246,11 @@ bool rtklib_solve_single_position(const RtklibNavStore* receiver_nav, int gps_we
             used_satellite[source.satellite_number - 1]) {
             continue;
         }
+        if (!append_solution_ephemeris(receiver_nav->nav, epoch_time, source, &solver_nav, solver_eph, solver_geph)) {
+            continue;
+        }
         double pseudorange_m = 0.0;
-        if (!solver_pseudorange_m(receiver_nav->nav, source, &pseudorange_m)) {
+        if (!solver_pseudorange_m(solver_nav, epoch_time, source, &pseudorange_m)) {
             continue;
         }
         fill_common_observation(source, epoch_time, &rtklib_observations[usable_count]);
@@ -181,8 +268,8 @@ bool rtklib_solve_single_position(const RtklibNavStore* receiver_nav, int gps_we
     prcopt_t options = solution_options(elevation_mask_deg, broadcast_atmosphere);
     sol_t rtklib_solution{};
     char message[128]{};
-    const int status = pntpos(rtklib_observations, usable_count, &receiver_nav->nav, &options, &rtklib_solution,
-                              nullptr, nullptr, message);
+    const int status =
+        pntpos(rtklib_observations, usable_count, &solver_nav, &options, &rtklib_solution, nullptr, nullptr, message);
     copy_diagnostic(result.diagnostic, message);
     if (status == 0) {
         *solution = result;

@@ -36,6 +36,38 @@ bool family_is_beidou_modern(RtklibBroadcastMessageFamily family) {
            family == RtklibBroadcastMessageFamily::kBeidouBcnav3;
 }
 
+RtklibBroadcastMessageFamily requested_bias_family(NavMessageFamily family) {
+    switch (family) {
+        case NavMessageFamily::kGpsLnav:
+        case NavMessageFamily::kQzssLnav:
+        case NavMessageFamily::kBeidouD1D2:
+            return RtklibBroadcastMessageFamily::kLegacy;
+        case NavMessageFamily::kGpsCnav:
+        case NavMessageFamily::kQzssCnav:
+            return RtklibBroadcastMessageFamily::kCnav;
+        case NavMessageFamily::kGpsCnav2:
+        case NavMessageFamily::kQzssCnav2:
+            return RtklibBroadcastMessageFamily::kCnav2;
+        case NavMessageFamily::kGlonassFdma:
+            return RtklibBroadcastMessageFamily::kGlonassFdma;
+        case NavMessageFamily::kGlonassL3Oc:
+            return RtklibBroadcastMessageFamily::kGlonassL3Oc;
+        case NavMessageFamily::kGalileoInav:
+            return RtklibBroadcastMessageFamily::kGalileoInav;
+        case NavMessageFamily::kGalileoFnav:
+            return RtklibBroadcastMessageFamily::kGalileoFnav;
+        case NavMessageFamily::kBeidouBcnav1:
+            return RtklibBroadcastMessageFamily::kBeidouBcnav1;
+        case NavMessageFamily::kBeidouBcnav2:
+            return RtklibBroadcastMessageFamily::kBeidouBcnav2;
+        case NavMessageFamily::kBeidouBcnav3:
+            return RtklibBroadcastMessageFamily::kBeidouBcnav3;
+        case NavMessageFamily::kGalileoCnav:
+            return RtklibBroadcastMessageFamily::kUnknown;
+    }
+    return RtklibBroadcastMessageFamily::kUnknown;
+}
+
 double frequency_ratio_squared(double reference_frequency_hz, double signal_frequency_hz) {
     const double ratio = reference_frequency_hz / signal_frequency_hz;
     return ratio * ratio;
@@ -144,7 +176,11 @@ bool compute_broadcast_code_bias_m(const SignalDefinition& signal, const RtklibB
             set_bias(bias_data.glonass_dtaun_sec, code_bias_m, status);
             return true;
         case CodeBiasModel::kGlonassG3:
-            set_unavailable(code_bias_m, status);
+            if (bias_data.message_family != RtklibBroadcastMessageFamily::kGlonassL3Oc) {
+                set_unavailable(code_bias_m, status);
+            } else {
+                set_bias(-bias_data.glonass_isc_l3ocp_sec, code_bias_m, status);
+            }
             return true;
         case CodeBiasModel::kGalileoE1:
             if (bias_data.message_family == RtklibBroadcastMessageFamily::kGalileoFnav) {
@@ -213,25 +249,23 @@ bool compute_broadcast_code_bias_m(const SignalDefinition& signal, const RtklibB
     return false;
 }
 
-bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const SatelliteGeometry& geometry,
-                                     const SignalTracker& tracker, const AtmosphereCorrection& atmosphere,
-                                     CarrierAmbiguityState* ambiguity_state, MeasurementObservation* observation,
-                                     std::string* error_message) {
-    const SignalDefinition* signal = find_signal_definition(tracker.signal_id);
-    if (nav_store == nullptr || ambiguity_state == nullptr || observation == nullptr || signal == nullptr ||
-        !finite_measurement_input(geometry, atmosphere) || atmosphere.mode == AtmosphereMode::UNSPECIFIED) {
-        set_error(error_message, "zero-noise measurement request has invalid arguments");
-        return false;
-    }
+namespace {
 
-    RtklibBroadcastBiasData bias_data{};
-    if (!rtklib_broadcast_bias_data(nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec,
-                                    geometry.satellite_number, &bias_data, error_message)) {
-        return false;
-    }
+struct CodeModelSelection {
+    RtklibSatelliteState satellite_state;
+    double geometric_range_m;
+    RtklibBroadcastBiasData bias_data;
+    double code_bias_m;
+    BroadcastCodeBiasStatus code_bias_status;
+};
 
+bool finish_zero_noise_measurement(const SignalDefinition& signal, const SatelliteGeometry& geometry,
+                                   const ReceiverTruth& receiver, const SignalTracker& tracker,
+                                   const AtmosphereCorrection& atmosphere, const CodeModelSelection& code_model,
+                                   CarrierAmbiguityState* ambiguity_state, MeasurementObservation* observation,
+                                   std::string* error_message) {
     double wavelength_m = 0.0;
-    if (!signal_wavelength_m(*signal, bias_data.glonass_fcn, &wavelength_m) || !std::isfinite(wavelength_m) ||
+    if (!signal_wavelength_m(signal, code_model.bias_data.glonass_fcn, &wavelength_m) || !std::isfinite(wavelength_m) ||
         wavelength_m <= 0.0) {
         set_error(error_message, "cannot determine signal wavelength");
         return false;
@@ -240,29 +274,26 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
     MeasurementObservation result{};
     result.signal_id = tracker.signal_id;
     result.satellite_number = geometry.satellite_number;
-    result.glonass_fcn = bias_data.glonass_fcn;
+    result.glonass_fcn = code_model.bias_data.glonass_fcn;
     result.wavelength_m = wavelength_m;
-    result.geometric_range_m = geometry.geometric_range_m;
+    result.geometric_range_m = code_model.geometric_range_m;
     result.range_rate_mps = geometry.range_rate_mps;
-    result.satellite_clock_bias_m = kSpeedOfLightMps * geometry.satellite_state.clock_bias_sec;
+    result.satellite_clock_bias_m = kSpeedOfLightMps * code_model.satellite_state.clock_bias_sec;
     result.satellite_clock_drift_mps = kSpeedOfLightMps * geometry.satellite_state.clock_drift_sec_per_sec;
-    result.broadcast_message_family = bias_data.message_family;
+    result.broadcast_message_family = code_model.bias_data.message_family;
     for (int index = 0; index < 4; ++index) {
-        result.tgd_sec[index] = bias_data.tgd_sec[index];
+        result.tgd_sec[index] = code_model.bias_data.tgd_sec[index];
     }
     for (int index = 0; index < 6; ++index) {
-        result.isc_sec[index] = bias_data.isc_sec[index];
+        result.isc_sec[index] = code_model.bias_data.isc_sec[index];
     }
-    result.glonass_dtaun_sec = bias_data.glonass_dtaun_sec;
+    result.glonass_dtaun_sec = code_model.bias_data.glonass_dtaun_sec;
+    result.code_bias_m = code_model.code_bias_m;
+    result.code_bias_status = code_model.code_bias_status;
     result.ionosphere_code_delay_m = atmosphere.ionosphere_code_delay_m;
     result.troposphere_delay_m = atmosphere.troposphere_delay_m;
     result.cn0_dbhz = tracker.cn0_dbhz;
     result.lock_time_ns = tracker.lock_time_ns;
-
-    if (!compute_broadcast_code_bias_m(*signal, bias_data, &result.code_bias_m, &result.code_bias_status,
-                                       error_message)) {
-        return false;
-    }
 
     const double clock_corrected_range_m = result.geometric_range_m - result.satellite_clock_bias_m;
     result.pseudorange_m =
@@ -288,15 +319,91 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
         result.adr_cycles = 0.0;
     }
 
-    const bool geometry_usable = geometry.visible;
+    const bool measurement_geometry_usable = geometry.above_elevation_mask;
     const bool code_bias_available = result.code_bias_status != BroadcastCodeBiasStatus::kUnavailableForMessageFamily;
-    result.observation_available = geometry_usable && tracker.observation_available;
-    result.pseudorange_valid = geometry_usable && tracker.psr_valid && code_bias_available;
-    result.doppler_valid = geometry_usable && tracker.doppler_valid;
-    result.adr_valid = geometry_usable && tracker.adr_valid && ambiguity_state->initialized;
+    result.observation_available = measurement_geometry_usable && tracker.observation_available;
+    result.pseudorange_valid = measurement_geometry_usable && tracker.psr_valid && code_bias_available;
+    result.doppler_valid = measurement_geometry_usable && tracker.doppler_valid;
+    result.adr_valid = measurement_geometry_usable && tracker.adr_valid && ambiguity_state->initialized;
 
     *observation = result;
     return true;
+}
+
+} // namespace
+
+bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const SatelliteGeometry& geometry,
+                                     const ReceiverTruth& receiver, const SignalTracker& tracker,
+                                     const AtmosphereCorrection& atmosphere, CarrierAmbiguityState* ambiguity_state,
+                                     MeasurementObservation* observation, std::string* error_message) {
+    const SignalDefinition* signal = find_signal_definition(tracker.signal_id);
+    if (nav_store == nullptr || ambiguity_state == nullptr || observation == nullptr || signal == nullptr ||
+        !finite_measurement_input(geometry, atmosphere) || atmosphere.mode == AtmosphereMode::UNSPECIFIED) {
+        set_error(error_message, "zero-noise measurement request has invalid arguments");
+        return false;
+    }
+
+    RtklibBroadcastBiasData bias_data{};
+    const bool signal_family_bias_available = rtklib_broadcast_bias_data_for_family(
+        nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec, geometry.satellite_number,
+        requested_bias_family(signal->nav_message_family), &bias_data, nullptr);
+    if (!signal_family_bias_available &&
+        !rtklib_broadcast_bias_data(nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec,
+                                    geometry.satellite_number, &bias_data, error_message)) {
+        return false;
+    }
+
+    CodeModelSelection code_model{};
+    code_model.satellite_state = geometry.satellite_state;
+    code_model.geometric_range_m = geometry.geometric_range_m;
+    code_model.bias_data = bias_data;
+    if (!signal_family_bias_available) {
+        set_unavailable(&code_model.code_bias_m, &code_model.code_bias_status);
+    } else if (!compute_broadcast_code_bias_m(*signal, bias_data, &code_model.code_bias_m, &code_model.code_bias_status,
+                                              error_message)) {
+        return false;
+    }
+
+    const bool family_code_bias_available =
+        signal_family_bias_available &&
+        code_model.code_bias_status != BroadcastCodeBiasStatus::kUnavailableForMessageFamily;
+    if (family_code_bias_available) {
+        int observation_code = 0;
+        int frequency_index = 0;
+        double code_line_of_sight_ecef[3]{};
+        if (!signal_rtklib_observation_code(*signal, &observation_code, &frequency_index) ||
+            !get_rtklib_signal_satellite_state(nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec,
+                                               geometry.satellite_number, observation_code, bias_data.message_family,
+                                               &code_model.satellite_state, error_message) ||
+            !rtklib_geometric_distance(code_model.satellite_state.position_ecef_m, receiver.position_ecef_m,
+                                       &code_model.geometric_range_m, code_line_of_sight_ecef)) {
+            return false;
+        }
+    }
+
+    return finish_zero_noise_measurement(*signal, geometry, receiver, tracker, atmosphere, code_model, ambiguity_state,
+                                         observation, error_message);
+}
+
+bool generate_zero_noise_measurement_with_explicit_code_bias(
+    const SatelliteGeometry& geometry, const ReceiverTruth& receiver, const SignalTracker& tracker,
+    const AtmosphereCorrection& atmosphere, double code_bias_m, CarrierAmbiguityState* ambiguity_state,
+    MeasurementObservation* observation, std::string* error_message) {
+    const SignalDefinition* signal = find_signal_definition(tracker.signal_id);
+    if (ambiguity_state == nullptr || observation == nullptr || signal == nullptr || !std::isfinite(code_bias_m) ||
+        !finite_measurement_input(geometry, atmosphere) || atmosphere.mode == AtmosphereMode::UNSPECIFIED) {
+        set_error(error_message, "explicit-code zero-noise measurement request has invalid arguments");
+        return false;
+    }
+
+    CodeModelSelection code_model{};
+    code_model.satellite_state = geometry.satellite_state;
+    code_model.geometric_range_m = geometry.geometric_range_m;
+    code_model.bias_data.message_family = RtklibBroadcastMessageFamily::kUnknown;
+    code_model.code_bias_m = code_bias_m;
+    code_model.code_bias_status = BroadcastCodeBiasStatus::kApplied;
+    return finish_zero_noise_measurement(*signal, geometry, receiver, tracker, atmosphere, code_model, ambiguity_state,
+                                         observation, error_message);
 }
 
 const char* broadcast_code_bias_status_name(BroadcastCodeBiasStatus status) {

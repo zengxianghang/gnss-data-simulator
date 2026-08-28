@@ -5,7 +5,7 @@ CN0_ACCEPTANCE                                              MARKER NAME
   1090852.8702  6186534.0507  1100265.9126                  APPROX POSITION XYZ 
 G   10 C1C S1C C1L S1L C2P S2P C2S S2S C5Q S5Q              SYS / # / OBS TYPES 
 R    6 C1C S1C C2C S2C C3Q S3Q                              SYS / # / OBS TYPES 
-E    8 C1C S1C C5Q S5Q C7Q S7Q C6B S6B                      SYS / # / OBS TYPES 
+E    8 C1C S1C C5Q S5Q C7Q S7Q C6C S6C                      SYS / # / OBS TYPES 
 C   10 C2I S2I C6I S6I C1P S1P C5P S5P C7D S7D              SYS / # / OBS TYPES 
 J    8 C1C S1C C1L S1L C2S S2S C5Q S5Q                      SYS / # / OBS TYPES 
 DBHZ                                                        SIGNAL STRENGTH UNIT

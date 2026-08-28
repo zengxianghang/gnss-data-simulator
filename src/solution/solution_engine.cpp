@@ -52,6 +52,7 @@ bool make_rtklib_observation(const MeasurementObservation& source, RtklibSolutio
     RtklibSolutionObservation result{};
     result.satellite_number = source.satellite_number;
     result.observation_code = observation_code;
+    result.message_family = source.broadcast_message_family;
     result.pseudorange_m = source.pseudorange_m;
     result.code_bias_m = source.code_bias_m;
     result.doppler_hz = source.doppler_hz;

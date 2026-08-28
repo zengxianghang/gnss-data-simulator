@@ -91,7 +91,7 @@ bool generate_measurements(const gnss_sim::RtklibNavStore* truth_nav, const gnss
 
         gnss_sim::SignalTracker tracker = tracking_gps_l1ca(tracking_start);
         gnss_sim::CarrierAmbiguityState ambiguity{};
-        if (!gnss_sim::generate_zero_noise_measurement(truth_nav, geometry, tracker, atmosphere, &ambiguity,
+        if (!gnss_sim::generate_zero_noise_measurement(truth_nav, geometry, receiver, tracker, atmosphere, &ambiguity,
                                                        &measurements[index], error_message)) {
             return false;
         }

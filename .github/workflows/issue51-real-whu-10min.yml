@@ -1,0 +1,165 @@
+name: Issue 51 real WHU 10-minute residual validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - issue-51-all-signal-residuals
+    paths:
+      - .github/workflows/issue51-real-whu-10min.yml
+      - CMakeLists.txt
+      - third_party/RTKLIB
+      - tools/residual_validator/**
+      - src/**
+
+permissions:
+  contents: read
+
+jobs:
+  validate-whu-10min:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout with RTKLIB
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build simulator and residual validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --parallel
+          ./build/gnss-data-simulator --version | tee simulator_version.txt
+
+      - name: Download full WHU BRD400DLR navigation file
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p real_whu
+          filename='BRD400DLR_S_20250030000_01D_MN.rnx.gz'
+          urls=(
+            "https://igs.gnsswhu.cn/pub/gps/data/daily/2025/003/25p/${filename}"
+            "http://igs.gnsswhu.cn/pub/gps/data/daily/2025/003/25p/${filename}"
+            "ftp://igs.gnsswhu.cn/pub/gps/data/daily/2025/003/25p/${filename}"
+          )
+          : > real_whu/download_attempts.txt
+          found=0
+          for url in "${urls[@]}"; do
+            echo "TRY ${url}" | tee -a real_whu/download_attempts.txt
+            rm -f "real_whu/${filename}.tmp"
+            if curl --fail --location --retry 2 --connect-timeout 20 --max-time 180 \
+              "${url}" -o "real_whu/${filename}.tmp"; then
+              if gzip -t "real_whu/${filename}.tmp"; then
+                mv "real_whu/${filename}.tmp" "real_whu/${filename}"
+                printf '%s\n' "${url}" > real_whu/download_source.txt
+                found=1
+                break
+              fi
+              echo 'Downloaded payload is not a valid gzip file' | tee -a real_whu/download_attempts.txt
+            fi
+          done
+          if [ "${found}" -ne 1 ]; then
+            echo 'Unable to download the required file from WHU candidates' >&2
+            exit 1
+          fi
+          sha256sum "real_whu/${filename}" | tee real_whu/source_sha256.txt
+          gzip -dc "real_whu/${filename}" > real_whu/BRD400DLR_S_20250030000_01D_MN.rnx
+          sha256sum real_whu/BRD400DLR_S_20250030000_01D_MN.rnx | tee real_whu/nav_sha256.txt
+          head -n 12 real_whu/BRD400DLR_S_20250030000_01D_MN.rnx | tee real_whu/nav_header.txt
+
+      - name: Generate 600-second zero-noise KS truth
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > real_whu/ks_10min_config.json <<'JSON'
+          {
+            "schema_version": 1,
+            "scenario": "KS",
+            "duration_sec": 600,
+            "sampling_rate_hz": 1,
+            "elevation_mask_deg": 3.0,
+            "output_eph": true,
+            "output_ion": true,
+            "measurement_noise_enabled": false,
+            "multipath_enabled": false,
+            "receiver_clock_bias_m": 0.0,
+            "receiver_clock_drift_mps": 0.0,
+            "atmosphere_mode": "broadcast",
+            "receiver": {
+              "latitude_deg": 20.0,
+              "longitude_deg": 120.0,
+              "height_m": 100.0
+            },
+            "seed": 81
+          }
+          JSON
+          ./build/gnss-data-simulator \
+            --config real_whu/ks_10min_config.json \
+            --nav real_whu/BRD400DLR_S_20250030000_01D_MN.rnx \
+            --output real_whu/simulated.log \
+            --week 2347 \
+            --sow 436500 \
+            2>&1 | tee real_whu/simulator_stdout.txt
+
+      - name: Validate RTKLIB truth-state residuals
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./build/validate-residuals \
+            --nav real_whu/BRD400DLR_S_20250030000_01D_MN.rnx \
+            --truth real_whu/observation_truth.csv \
+            --output real_whu/residual_summary.csv \
+            --atmosphere broadcast \
+            --code-limit-m 0.02 \
+            --doppler-limit-mps 0.002 \
+            2>&1 | tee real_whu/validator_stdout.txt
+
+      - name: Preserve compact evidence package
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f real_whu/observation_truth.csv ]; then
+            gzip -9 real_whu/observation_truth.csv
+          fi
+          if [ -f real_whu/simulated.log ]; then
+            gzip -9 real_whu/simulated.log
+          fi
+          {
+            echo "simulator_commit=${GITHUB_SHA}"
+            echo "rtklib_commit=$(git -C third_party/RTKLIB rev-parse HEAD)"
+            echo "gps_week=2347"
+            echo "start_sow=436500"
+            echo "duration_sec=600"
+            echo "sampling_rate_hz=1"
+            echo "elevation_mask_deg=3.0"
+            echo "atmosphere=broadcast"
+            echo "code_limit_m=0.02"
+            echo "doppler_limit_mps=0.002"
+          } > real_whu/validation_manifest.txt
+          find real_whu -maxdepth 1 -type f -printf '%f %s bytes\n' | sort | tee real_whu/evidence_files.txt
+
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue51-whu-10min-residual-evidence
+          path: |
+            simulator_version.txt
+            real_whu/download_attempts.txt
+            real_whu/download_source.txt
+            real_whu/source_sha256.txt
+            real_whu/nav_sha256.txt
+            real_whu/nav_header.txt
+            real_whu/ks_10min_config.json
+            real_whu/simulator_stdout.txt
+            real_whu/validator_stdout.txt
+            real_whu/residual_summary.csv
+            real_whu/validation_manifest.txt
+            real_whu/evidence_files.txt
+            real_whu/observation_truth.csv.gz
+            real_whu/simulated.log.gz
+          if-no-files-found: warn
+          retention-days: 30

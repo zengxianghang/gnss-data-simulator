@@ -14,6 +14,9 @@ struct SimulatorRunOptions {
     const char* output_log_path;
     SimTime start_time;
     const char* cn0_model_path;
+    const char* galileo_has_sp3_path;
+    const char* galileo_has_clock_path;
+    const char* galileo_has_bias_path;
 };
 
 struct SimulatorRunSummary {

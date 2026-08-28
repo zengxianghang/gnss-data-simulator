@@ -1,6 +1,7 @@
 #include "gnss_sim/simulator.h"
 
 #include "core/deterministic_rng.h"
+#include "gnss/galileo_has_adapter.h"
 #include "gnss/nav_message_scheduler.h"
 #include "gnss/nav_output_record.h"
 #include "gnss/navigation_state.h"
@@ -24,6 +25,7 @@
 #include <cmath>
 #include <cstddef>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -70,6 +72,7 @@ struct TruthScheduleEntry {
 
 struct RuntimeState {
     NavigationState* navigation;
+    const GalileoHasStore* galileo_has;
     ReceiverTruth receiver;
     DeterministicRng rng;
     Cn0Model cn0_model;
@@ -87,11 +90,37 @@ void set_error(std::string* error_message, const std::string& message) {
     }
 }
 
+bool nonempty_path(const char* path) {
+    return path != nullptr && path[0] != '\0';
+}
+
+bool has_complete_galileo_has_paths(const SimulatorRunOptions& options) {
+    return nonempty_path(options.galileo_has_sp3_path) && nonempty_path(options.galileo_has_clock_path) &&
+           nonempty_path(options.galileo_has_bias_path);
+}
+
 bool valid_run_options(const SimulatorRunOptions& options) {
-    return options.rinex_nav_path != nullptr && options.rinex_nav_path[0] != '\0' &&
-           options.output_log_path != nullptr && options.output_log_path[0] != '\0' &&
+    const int has_path_count = static_cast<int>(nonempty_path(options.galileo_has_sp3_path)) +
+                               static_cast<int>(nonempty_path(options.galileo_has_clock_path)) +
+                               static_cast<int>(nonempty_path(options.galileo_has_bias_path));
+    return nonempty_path(options.rinex_nav_path) && nonempty_path(options.output_log_path) &&
            options.start_time.gps_week >= 0 && options.start_time.tow_ns >= 0 &&
-           options.start_time.tow_ns < GPS_WEEK_NANOSECONDS;
+           options.start_time.tow_ns < GPS_WEEK_NANOSECONDS && (has_path_count == 0 || has_path_count == 3);
+}
+
+bool galileo_has_state_provider(const void* context, int gps_week, double sow_sec, int satellite_number,
+                                RtklibSatelliteState* state, std::string* error_message) {
+    if (context == nullptr || state == nullptr) {
+        set_error(error_message, "Galileo HAS state-provider request is invalid");
+        return false;
+    }
+    GalileoHasE6Correction correction{};
+    if (!galileo_has_e6_correction(static_cast<const GalileoHasStore*>(context), gps_week, sow_sec, satellite_number,
+                                   &correction, error_message)) {
+        return false;
+    }
+    *state = correction.satellite_state;
+    return true;
 }
 
 bool write_message(std::ofstream* output, const std::string& message, std::string* error_message) {
@@ -141,8 +170,15 @@ bool nav_family_from_record(const NavOutputRecord& record, NavMessageFamily* fam
         return false;
     }
     if (record.kind == RtklibNavRecordKind::kGlonassEphemeris) {
-        *family = NavMessageFamily::kGlonassFdma;
-        return true;
+        if (record.glonass.message_family == RtklibBroadcastMessageFamily::kGlonassL3Oc) {
+            *family = NavMessageFamily::kGlonassL3Oc;
+            return true;
+        }
+        if (record.glonass.message_family == RtklibBroadcastMessageFamily::kGlonassFdma) {
+            *family = NavMessageFamily::kGlonassFdma;
+            return true;
+        }
+        return false;
     }
     if (record.kind != RtklibNavRecordKind::kEphemeris) {
         return false;
@@ -201,6 +237,9 @@ bool nav_family_from_record(const NavOutputRecord& record, NavMessageFamily* fam
             return true;
         case RtklibBroadcastMessageFamily::kGlonassFdma:
             *family = NavMessageFamily::kGlonassFdma;
+            return true;
+        case RtklibBroadcastMessageFamily::kGlonassL3Oc:
+            *family = NavMessageFamily::kGlonassL3Oc;
             return true;
         case RtklibBroadcastMessageFamily::kUnknown:
             return false;
@@ -648,33 +687,96 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
     *tracked_satellites = 0;
     const RtklibNavStore* truth_nav = truth_navigation_store(runtime->navigation);
     const AcquisitionContext initial_context = startup_context(runtime->startup_mode);
+    const double receive_sow_sec =
+        static_cast<double>(scenario.time.tow_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
 
     for (SatelliteRuntime& satellite : runtime->satellites) {
-        const double receive_sow_sec =
-            static_cast<double>(scenario.time.tow_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
-        if (!rtklib_satellite_state_available(truth_nav, scenario.time.gps_week, receive_sow_sec,
-                                              satellite.satellite_number)) {
-            continue;
-        }
-
-        SatelliteGeometry geometry{};
-        if (!compute_satellite_geometry(truth_nav, runtime->receiver, scenario.time, satellite.satellite_number,
-                                        config.elevation_mask_deg, &geometry, error_message)) {
+        const bool broadcast_geometry_available = rtklib_satellite_state_available(
+            truth_nav, scenario.time.gps_week, receive_sow_sec, satellite.satellite_number);
+        SatelliteGeometry broadcast_geometry{};
+        if (broadcast_geometry_available &&
+            !compute_satellite_geometry(truth_nav, runtime->receiver, scenario.time, satellite.satellite_number,
+                                        config.elevation_mask_deg, &broadcast_geometry, error_message)) {
             return false;
         }
+
         int glonass_fcn = 0;
-        if (satellite.constellation == GnssConstellation::kGlonass) {
+        if (broadcast_geometry_available && satellite.constellation == GnssConstellation::kGlonass) {
             RtklibBroadcastBiasData bias_data{};
-            if (!rtklib_broadcast_bias_data(truth_nav, geometry.transmit_gps_week, geometry.transmit_sow_sec,
-                                            satellite.satellite_number, &bias_data, error_message)) {
+            if (!rtklib_broadcast_bias_data(truth_nav, broadcast_geometry.transmit_gps_week,
+                                            broadcast_geometry.transmit_sow_sec, satellite.satellite_number, &bias_data,
+                                            error_message)) {
                 return false;
             }
             glonass_fcn = bias_data.glonass_fcn;
         }
-        const double elevation_deg = geometry.elevation_rad * kRadiansToDegrees;
+
         bool satellite_tracking = false;
         for (SignalRuntime& signal : satellite.signals) {
-            const bool signal_available = scenario.signal_available && geometry.visible;
+            const SignalDefinition* definition = find_signal_definition(signal.tracker.signal_id);
+            if (definition == nullptr) {
+                set_error(error_message, "signal definition is missing during tracking update");
+                return false;
+            }
+
+            SatelliteGeometry signal_geometry{};
+            bool use_has_e6 = false;
+            double has_e6_code_bias_m = 0.0;
+            if (definition->signal_id == SignalId::kGalileoE6 && runtime->galileo_has != nullptr) {
+                GalileoHasE6Correction receive_probe{};
+                if (galileo_has_e6_correction(runtime->galileo_has, scenario.time.gps_week, receive_sow_sec,
+                                              satellite.satellite_number, &receive_probe, nullptr)) {
+                    std::string has_error;
+                    if (!compute_satellite_geometry_with_provider(
+                            galileo_has_state_provider, runtime->galileo_has, runtime->receiver, scenario.time,
+                            satellite.satellite_number, config.elevation_mask_deg, &signal_geometry, &has_error)) {
+                        set_error(error_message, has_error);
+                        return false;
+                    }
+                    GalileoHasE6Correction transmit_correction{};
+                    if (!galileo_has_e6_correction(runtime->galileo_has, signal_geometry.transmit_gps_week,
+                                                   signal_geometry.transmit_sow_sec, satellite.satellite_number,
+                                                   &transmit_correction, error_message)) {
+                        return false;
+                    }
+                    has_e6_code_bias_m = transmit_correction.code_osb_m;
+                    use_has_e6 = true;
+                }
+            }
+            if (!use_has_e6) {
+                if (!broadcast_geometry_available) {
+                    continue;
+                }
+                signal_geometry = broadcast_geometry;
+            }
+
+            bool signal_healthy = signal_geometry.healthy;
+            RtklibBroadcastMessageFamily health_family = RtklibBroadcastMessageFamily::kUnknown;
+            if (definition->nav_message_family == NavMessageFamily::kGpsCnav) {
+                health_family = RtklibBroadcastMessageFamily::kCnav;
+            } else if (definition->nav_message_family == NavMessageFamily::kGpsCnav2) {
+                health_family = RtklibBroadcastMessageFamily::kCnav2;
+            }
+            if (health_family != RtklibBroadcastMessageFamily::kUnknown) {
+                int signal_health = 0;
+                if (!rtklib_signal_health_for_family(truth_nav, signal_geometry.transmit_gps_week,
+                                                     signal_geometry.transmit_sow_sec, satellite.satellite_number,
+                                                     definition->rinex_signal_code, health_family, &signal_health,
+                                                     error_message)) {
+                    return false;
+                }
+                signal_healthy = signal_health == 0;
+            }
+
+            const bool signal_available =
+                scenario.signal_available &&
+                (health_family != RtklibBroadcastMessageFamily::kUnknown ? signal_geometry.above_elevation_mask
+                                                                         : signal_geometry.visible);
+            if (health_family != RtklibBroadcastMessageFamily::kUnknown) {
+                signal_geometry.healthy = signal_healthy;
+                signal_geometry.visible = signal_geometry.above_elevation_mask && signal_healthy;
+            }
+            const double elevation_deg = signal_geometry.elevation_rad * kRadiansToDegrees;
             if (signal_available && !signal.tracker.scheduled) {
                 const AcquisitionContext context =
                     signal.ever_scheduled ? AcquisitionContext::kReacquisition : initial_context;
@@ -699,18 +801,24 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                 continue;
             }
             satellite_tracking = true;
+
             AtmosphereCorrection atmosphere{};
             if (!compute_atmosphere_correction(config.atmosphere_mode, truth_nav, scenario.time,
                                                signal.tracker.signal_id, glonass_fcn, runtime->receiver.position_ecef_m,
-                                               geometry.azimuth_rad, geometry.elevation_rad, &atmosphere,
+                                               signal_geometry.azimuth_rad, signal_geometry.elevation_rad, &atmosphere,
                                                error_message)) {
                 return false;
             }
             MeasurementObservation observation{};
-            if (!generate_zero_noise_measurement(truth_nav, geometry, signal.tracker, atmosphere, &signal.ambiguity,
-                                                 &observation, error_message) ||
-                !truth_writer_write_observation(truth_writer, runtime->receiver, geometry, signal.tracker, observation,
-                                                error_message)) {
+            const bool measurement_ok =
+                use_has_e6
+                    ? generate_zero_noise_measurement_with_explicit_code_bias(
+                          signal_geometry, runtime->receiver, signal.tracker, atmosphere, has_e6_code_bias_m,
+                          &signal.ambiguity, &observation, error_message)
+                    : generate_zero_noise_measurement(truth_nav, signal_geometry, runtime->receiver, signal.tracker,
+                                                      atmosphere, &signal.ambiguity, &observation, error_message);
+            if (!measurement_ok || !truth_writer_write_observation(truth_writer, runtime->receiver, signal_geometry,
+                                                                   signal.tracker, observation, error_message)) {
                 return false;
             }
             measurements->push_back(observation);
@@ -764,6 +872,19 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
 
     SimulatorRunSummary result{};
     RuntimeState runtime{};
+    std::unique_ptr<GalileoHasStore, void (*)(GalileoHasStore*)> galileo_has_store(nullptr, destroy_galileo_has_store);
+    if (has_complete_galileo_has_paths(options)) {
+        galileo_has_store.reset(create_galileo_has_store());
+        if (galileo_has_store == nullptr ||
+            !load_galileo_has_products(galileo_has_store.get(), options.galileo_has_sp3_path,
+                                       options.galileo_has_clock_path, options.galileo_has_bias_path, error_message)) {
+            if (galileo_has_store == nullptr) {
+                set_error(error_message, "cannot allocate Galileo HAS product store");
+            }
+            return false;
+        }
+        runtime.galileo_has = galileo_has_store.get();
+    }
     runtime.navigation = create_navigation_state();
     if (runtime.navigation == nullptr) {
         set_error(error_message, "cannot allocate simulator navigation state");

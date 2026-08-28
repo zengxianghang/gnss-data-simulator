@@ -85,7 +85,7 @@ block = r'''    // Real GPS CNAV-2 companion, provenance-fixed from Orekit commi
             ASSERT_TRUE(gnss_sim::signal_rtklib_observation_code(*definition, &observation_code, &frequency_index));
             static_cast<void>(frequency_index);
 
-            ASSERT_EQ(fields[column.at("broadcast_message_family")], "CNV2");
+            ASSERT_EQ(fields[column.at("broadcast_message_family")], "CNAV2");
             ASSERT_EQ(fields[column.at("code_bias_status")], "APPLIED");
             if (fields[column.at("pseudorange_valid")] != "1") {
                 ++signal_stats.code_unavailable;
@@ -95,7 +95,7 @@ block = r'''    // Real GPS CNAV-2 companion, provenance-fixed from Orekit commi
             obsd_t observation{};
             observation.time = gpst2time(std::stoi(fields[column.at("gps_week")]),
                                          std::stod(fields[column.at("sow_sec")]));
-            observation.sat = static_cast<unsigned char>(std::stoi(fields[column.at("satellite_number") ]));
+            observation.sat = static_cast<unsigned char>(std::stoi(fields[column.at("satellite_number")]));
             observation.rcv = 1;
             observation.code[0] = static_cast<unsigned char>(observation_code);
             observation.SNR[0] = static_cast<unsigned char>(

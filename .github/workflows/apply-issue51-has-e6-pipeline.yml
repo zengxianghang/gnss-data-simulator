@@ -1,0 +1,55 @@
+name: Apply issue 51 Galileo HAS E6 pipeline
+
+on:
+  push:
+    branches: [issue-51-all-signal-residuals]
+    paths:
+      - tools/apply_issue51_has_e6_pipeline.py
+      - .github/workflows/apply-issue51-has-e6-pipeline.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-test-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Draft branch with dependencies
+        uses: actions/checkout@v4
+        with:
+          ref: issue-51-all-signal-residuals
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Apply guarded E6 pipeline patch
+        run: python tools/apply_issue51_has_e6_pipeline.py
+
+      - name: Format changed C++
+        shell: bash
+        run: |
+          clang-format -i \
+            include/gnss_sim/simulator.h \
+            src/core/simulator.cpp \
+            tests/integration/test_all_signal_residuals.cpp
+          git diff --check
+
+      - name: Configure
+        run: cmake -S . -B build -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test full suite
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Commit validated implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add include/gnss_sim/simulator.h src/core/simulator.cpp tests/integration/test_all_signal_residuals.cpp
+          git commit -m 'Add Galileo HAS E6 simulator residual path'
+          git push origin HEAD:issue-51-all-signal-residuals

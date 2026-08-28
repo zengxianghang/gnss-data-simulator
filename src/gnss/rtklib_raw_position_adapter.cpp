@@ -170,8 +170,8 @@ bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gp
     for (int index = 0; index < observation_count && usable_count < MAXOBS; ++index) {
         const RtklibRawCodeObservation& source = observations[index];
         if (!source.pseudorange_valid || source.satellite_number <= 0 || source.satellite_number > MAXSAT ||
-            source.observation_code <= 0 || source.observation_code > 255 ||
-            !std::isfinite(source.pseudorange_m) || source.pseudorange_m <= 0.0 || !std::isfinite(source.cn0_dbhz) ||
+            source.observation_code <= 0 || source.observation_code > 255 || !std::isfinite(source.pseudorange_m) ||
+            source.pseudorange_m <= 0.0 || !std::isfinite(source.cn0_dbhz) ||
             used_satellite[source.satellite_number - 1]) {
             continue;
         }

@@ -44,16 +44,17 @@ new_availability = '''            // Broadcast health controls measurement valid
 if sim_text.count(old_availability) != 1:
     raise RuntimeError(f"signal availability anchor count={sim_text.count(old_availability)}")
 sim_text = sim_text.replace(old_availability, new_availability, 1)
-old_measurement = '''            if (!generate_zero_noise_measurement(truth_nav, geometry, signal.tracker, atmosphere, &signal.ambiguity,
-                                                 &observation, error_message) ||
-                !truth_writer_write_observation(truth_writer, runtime->receiver, geometry, signal.tracker, observation,
-                                                error_message)) {'''
-new_measurement = '''            if (!generate_zero_noise_measurement(truth_nav, signal_geometry, signal.tracker, atmosphere,
-                                                 &signal.ambiguity, &observation, error_message) ||
-                !truth_writer_write_observation(truth_writer, runtime->receiver, signal_geometry, signal.tracker,
-                                                observation, error_message)) {'''
-if sim_text.count(old_measurement) != 1:
-    raise RuntimeError(f"signal geometry measurement anchor count={sim_text.count(old_measurement)}")
-sim_path.write_text(sim_text.replace(old_measurement, new_measurement, 1))
+
+old_generate = "generate_zero_noise_measurement(truth_nav, geometry,"
+new_generate = "generate_zero_noise_measurement(truth_nav, signal_geometry,"
+if sim_text.count(old_generate) != 1:
+    raise RuntimeError(f"measurement geometry anchor count={sim_text.count(old_generate)}")
+sim_text = sim_text.replace(old_generate, new_generate, 1)
+
+old_truth = "truth_writer_write_observation(truth_writer, runtime->receiver, geometry,"
+new_truth = "truth_writer_write_observation(truth_writer, runtime->receiver, signal_geometry,"
+if sim_text.count(old_truth) != 1:
+    raise RuntimeError(f"truth geometry anchor count={sim_text.count(old_truth)}")
+sim_path.write_text(sim_text.replace(old_truth, new_truth, 1))
 
 print("missing family is non-fatal and GPS modern RF tracking is separated from broadcast-health validity")

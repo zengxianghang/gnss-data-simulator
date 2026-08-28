@@ -95,7 +95,7 @@ jobs:
           set -euo pipefail
           url='https://igs.bkg.bund.de/root_ftp/IGS/BRDC/2025/003/BRD400DLR_S_20250030000_01D_MN.rnx.gz'
           echo "CNV2_SOURCE ${url}"
-          curl -fsSL --retry 3 --retry-delay 2 "${url}" -o /tmp/brd400dlr_2025003.rnx.gz
+          curl -4 -fsSL --connect-timeout 15 --max-time 90 --retry 2 --retry-delay 2 "${url}" -o /tmp/brd400dlr_2025003.rnx.gz
           gzip -dc /tmp/brd400dlr_2025003.rnx.gz > /tmp/brd400dlr_2025003.rnx
           python - <<'PY'
           from datetime import datetime

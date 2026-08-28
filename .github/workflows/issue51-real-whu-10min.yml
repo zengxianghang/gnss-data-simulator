@@ -75,7 +75,7 @@ jobs:
             "scenario": "KS",
             "duration_sec": 600,
             "sampling_rate_hz": 1,
-            "elevation_mask_deg": 0.0,
+            "elevation_mask_deg": 3.0,
             "output_eph": true,
             "output_ion": true,
             "measurement_noise_enabled": false,
@@ -130,6 +130,7 @@ jobs:
             echo "start_sow=436500"
             echo "duration_sec=600"
             echo "sampling_rate_hz=1"
+            echo "elevation_mask_deg=3.0"
             echo "atmosphere=broadcast"
             echo "code_limit_m=0.02"
             echo "doppler_limit_mps=0.002"

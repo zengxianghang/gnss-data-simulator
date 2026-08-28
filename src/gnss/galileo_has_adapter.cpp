@@ -79,8 +79,8 @@ bool parse_bias_file(const char* path, std::vector<GalileoHasBiasRecord>* record
         std::string end_text;
         std::string unit;
         double value = 0.0;
-        if (!(stream >> kind >> satellite_id >> observable >> start_text >> end_text >> unit >> value) || kind != "OSB" ||
-            observable != "C6C") {
+        if (!(stream >> kind >> satellite_id >> observable >> start_text >> end_text >> unit >> value) ||
+            kind != "OSB" || observable != "C6C") {
             continue;
         }
         if (satellite_id.size() != 3U || satellite_id[0] != 'E' || unit != "ns" || !std::isfinite(value)) {
@@ -89,8 +89,8 @@ bool parse_bias_file(const char* path, std::vector<GalileoHasBiasRecord>* record
         const int satellite_number = satid2no(satellite_id.c_str());
         gtime_t start_time{};
         gtime_t end_time{};
-        if (satellite_number <= 0 || !parse_bias_epoch(start_text, &start_time) || !parse_bias_epoch(end_text, &end_time) ||
-            timediff(end_time, start_time) <= 0.0) {
+        if (satellite_number <= 0 || !parse_bias_epoch(start_text, &start_time) ||
+            !parse_bias_epoch(end_text, &end_time) || timediff(end_time, start_time) <= 0.0) {
             continue;
         }
         parsed.push_back({satellite_number, start_time, end_time, kSpeedOfLightMps * value * 1.0e-9});
@@ -128,8 +128,8 @@ void destroy_galileo_has_store(GalileoHasStore* store) {
 
 bool load_galileo_has_products(GalileoHasStore* store, const char* sp3_path, const char* clock_path,
                                const char* bias_path, std::string* error_message) {
-    if (store == nullptr || sp3_path == nullptr || clock_path == nullptr || bias_path == nullptr || sp3_path[0] == '\0' ||
-        clock_path[0] == '\0' || bias_path[0] == '\0') {
+    if (store == nullptr || sp3_path == nullptr || clock_path == nullptr || bias_path == nullptr ||
+        sp3_path[0] == '\0' || clock_path[0] == '\0' || bias_path[0] == '\0') {
         set_error(error_message, "Galileo HAS SP3/CLK/BIA product paths are required together");
         return false;
     }

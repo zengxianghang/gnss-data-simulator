@@ -57,5 +57,6 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Report RANGEA round-trip positioning error
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
+        shell: bash
         run: ./build/gnss_sim_integration_tests --gtest_filter=RangeaRoundtripIntegration.RealWhuRinex4SerializedRangeaPositionsWithinHalfMeter

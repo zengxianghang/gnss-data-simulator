@@ -1,0 +1,221 @@
+name: Temporary add residual max context
+
+on:
+  push:
+    branches:
+      - issue-51-all-signal-residuals
+    paths:
+      - .github/workflows/temporary-add-residual-max-context.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-remove-self:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: issue-51-all-signal-residuals
+          fetch-depth: 0
+
+      - name: Add max-residual epoch context and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('tools/residual_validator/residual_validator.cpp')
+          text = path.read_text()
+
+          replacements = []
+          replacements.append((
+          '''    double code_sum_squares = 0.0;
+              double doppler_sum_squares = 0.0;
+              std::vector<double> code_abs;
+              std::vector<double> doppler_abs;
+          };''',
+          '''    double code_sum_squares = 0.0;
+              double doppler_sum_squares = 0.0;
+              double code_max_abs_m = 0.0;
+              int code_max_gps_week = -1;
+              double code_max_sow_sec = 0.0;
+              double code_max_elevation_deg = 0.0;
+              double doppler_max_abs_mps = 0.0;
+              int doppler_max_gps_week = -1;
+              double doppler_max_sow_sec = 0.0;
+              double doppler_max_elevation_deg = 0.0;
+              std::vector<double> code_abs;
+              std::vector<double> doppler_abs;
+          };
+
+          struct ResidualContext {
+              int gps_week = -1;
+              double sow_sec = 0.0;
+              double elevation_deg = 0.0;
+          };'''))
+
+          replacements.append((
+          '''void update_group(Accumulator* accumulator, bool code_unavailable, bool diagnostic_code, const double* code_residual_m,
+                            bool diagnostic_doppler, const double* doppler_residual_mps) {
+              ++accumulator->rows;
+              if (code_unavailable) {
+                  ++accumulator->code_unavailable;
+              }
+              if (code_residual_m != nullptr) {
+                  const double absolute = std::fabs(*code_residual_m);
+                  accumulator->code_abs.push_back(absolute);
+                  accumulator->code_sum_squares += (*code_residual_m) * (*code_residual_m);
+                  if (diagnostic_code) {
+                      ++accumulator->diagnostic_code_rows;
+                  }
+              }
+              if (doppler_residual_mps != nullptr) {
+                  const double absolute = std::fabs(*doppler_residual_mps);
+                  accumulator->doppler_abs.push_back(absolute);
+                  accumulator->doppler_sum_squares += (*doppler_residual_mps) * (*doppler_residual_mps);
+                  if (diagnostic_doppler) {
+                      ++accumulator->diagnostic_doppler_rows;
+                  }
+              }
+          }
+
+          void update_all_groups(std::map<GroupKey, Accumulator>* groups, const SignalDefinition* definition,
+                                 const std::string& family, int satellite_number, bool code_unavailable, bool diagnostic_code,
+                                 const double* code_residual_m, bool diagnostic_doppler, const double* doppler_residual_mps) {
+              update_group(&get_group(groups, 0, definition, "ALL", 0), code_unavailable, diagnostic_code, code_residual_m,
+                           diagnostic_doppler, doppler_residual_mps);
+              update_group(&get_group(groups, 1, definition, family, 0), code_unavailable, diagnostic_code, code_residual_m,
+                           diagnostic_doppler, doppler_residual_mps);
+              update_group(&get_group(groups, 2, definition, family, satellite_number), code_unavailable, diagnostic_code,
+                           code_residual_m, diagnostic_doppler, doppler_residual_mps);
+          }''',
+          '''void update_group(Accumulator* accumulator, const ResidualContext& context, bool code_unavailable,
+                            bool diagnostic_code, const double* code_residual_m, bool diagnostic_doppler,
+                            const double* doppler_residual_mps) {
+              ++accumulator->rows;
+              if (code_unavailable) {
+                  ++accumulator->code_unavailable;
+              }
+              if (code_residual_m != nullptr) {
+                  const double absolute = std::fabs(*code_residual_m);
+                  if (accumulator->code_abs.empty() || absolute > accumulator->code_max_abs_m) {
+                      accumulator->code_max_abs_m = absolute;
+                      accumulator->code_max_gps_week = context.gps_week;
+                      accumulator->code_max_sow_sec = context.sow_sec;
+                      accumulator->code_max_elevation_deg = context.elevation_deg;
+                  }
+                  accumulator->code_abs.push_back(absolute);
+                  accumulator->code_sum_squares += (*code_residual_m) * (*code_residual_m);
+                  if (diagnostic_code) {
+                      ++accumulator->diagnostic_code_rows;
+                  }
+              }
+              if (doppler_residual_mps != nullptr) {
+                  const double absolute = std::fabs(*doppler_residual_mps);
+                  if (accumulator->doppler_abs.empty() || absolute > accumulator->doppler_max_abs_mps) {
+                      accumulator->doppler_max_abs_mps = absolute;
+                      accumulator->doppler_max_gps_week = context.gps_week;
+                      accumulator->doppler_max_sow_sec = context.sow_sec;
+                      accumulator->doppler_max_elevation_deg = context.elevation_deg;
+                  }
+                  accumulator->doppler_abs.push_back(absolute);
+                  accumulator->doppler_sum_squares += (*doppler_residual_mps) * (*doppler_residual_mps);
+                  if (diagnostic_doppler) {
+                      ++accumulator->diagnostic_doppler_rows;
+                  }
+              }
+          }
+
+          void update_all_groups(std::map<GroupKey, Accumulator>* groups, const SignalDefinition* definition,
+                                 const std::string& family, int satellite_number, const ResidualContext& context,
+                                 bool code_unavailable, bool diagnostic_code, const double* code_residual_m,
+                                 bool diagnostic_doppler, const double* doppler_residual_mps) {
+              update_group(&get_group(groups, 0, definition, "ALL", 0), context, code_unavailable, diagnostic_code,
+                           code_residual_m, diagnostic_doppler, doppler_residual_mps);
+              update_group(&get_group(groups, 1, definition, family, 0), context, code_unavailable, diagnostic_code,
+                           code_residual_m, diagnostic_doppler, doppler_residual_mps);
+              update_group(&get_group(groups, 2, definition, family, satellite_number), context, code_unavailable,
+                           diagnostic_code, code_residual_m, diagnostic_doppler, doppler_residual_mps);
+          }'''))
+
+          replacements.append((
+          '''        row.code_max_abs_m = *std::max_element(accumulator->code_abs.begin(), accumulator->code_abs.end());
+                  row.code_p95_abs_m = percentile95(&accumulator->code_abs);''',
+          '''        row.code_max_abs_m = accumulator->code_max_abs_m;
+                  row.code_max_gps_week = accumulator->code_max_gps_week;
+                  row.code_max_sow_sec = accumulator->code_max_sow_sec;
+                  row.code_max_elevation_deg = accumulator->code_max_elevation_deg;
+                  row.code_p95_abs_m = percentile95(&accumulator->code_abs);'''))
+
+          replacements.append((
+          '''        row.doppler_max_abs_mps = *std::max_element(accumulator->doppler_abs.begin(), accumulator->doppler_abs.end());
+                  row.doppler_p95_abs_mps = percentile95(&accumulator->doppler_abs);''',
+          '''        row.doppler_max_abs_mps = accumulator->doppler_max_abs_mps;
+                  row.doppler_max_gps_week = accumulator->doppler_max_gps_week;
+                  row.doppler_max_sow_sec = accumulator->doppler_max_sow_sec;
+                  row.doppler_max_elevation_deg = accumulator->doppler_max_elevation_deg;
+                  row.doppler_p95_abs_mps = percentile95(&accumulator->doppler_abs);'''))
+
+          replacements.append((
+          '''        "receiver_vz_mps",
+                  "cn0_dbhz",''',
+          '''        "receiver_vz_mps",
+                  "elevation_deg",
+                  "cn0_dbhz",'''))
+
+          replacements.append((
+          '''            const double sow_sec = std::stod(fields[columns.at("sow_sec")]);
+                      const int satellite_number = std::stoi(fields[columns.at("satellite_number")]);''',
+          '''            const double sow_sec = std::stod(fields[columns.at("sow_sec")]);
+                      const double elevation_deg = std::stod(fields[columns.at("elevation_deg")]);
+                      const int satellite_number = std::stoi(fields[columns.at("satellite_number")]);'''))
+
+          replacements.append((
+          '''            update_all_groups(&groups, definition, report_family, satellite_number, !pseudorange_valid, diagnostic_code,
+                                        code_residual_ptr, diagnostic_doppler, doppler_residual_ptr);''',
+          '''            const ResidualContext residual_context{gps_week, sow_sec, elevation_deg};
+                      update_all_groups(&groups, definition, report_family, satellite_number, residual_context,
+                                        !pseudorange_valid, diagnostic_code, code_residual_ptr, diagnostic_doppler,
+                                        doppler_residual_ptr);'''))
+
+          replacements.append((
+          '''    output << "scope,signal_id,signal_name,rinex_code,oem7_signal_type,family,satellite_number,rows,code_residuals,"
+                        "code_unavailable,diagnostic_code_rows,code_rms_m,code_p95_abs_m,code_max_abs_m,doppler_residuals,"
+                        "diagnostic_doppler_rows,doppler_rms_mps,doppler_p95_abs_mps,doppler_max_abs_mps\\n";''',
+          '''    output << "scope,signal_id,signal_name,rinex_code,oem7_signal_type,family,satellite_number,rows,code_residuals,"
+                        "code_unavailable,diagnostic_code_rows,code_rms_m,code_p95_abs_m,code_max_abs_m,code_max_gps_week,"
+                        "code_max_sow_sec,code_max_elevation_deg,doppler_residuals,diagnostic_doppler_rows,doppler_rms_mps,"
+                        "doppler_p95_abs_mps,doppler_max_abs_mps,doppler_max_gps_week,doppler_max_sow_sec,"
+                        "doppler_max_elevation_deg\\n";'''))
+
+          replacements.append((
+          '''               << row.code_residuals << ',' << row.code_unavailable << ',' << row.diagnostic_code_rows << ','
+                         << row.code_rms_m << ',' << row.code_p95_abs_m << ',' << row.code_max_abs_m << ','
+                         << row.doppler_residuals << ',' << row.diagnostic_doppler_rows << ',' << row.doppler_rms_mps << ','
+                         << row.doppler_p95_abs_mps << ',' << row.doppler_max_abs_mps << '\\n';''',
+          '''               << row.code_residuals << ',' << row.code_unavailable << ',' << row.diagnostic_code_rows << ','
+                         << row.code_rms_m << ',' << row.code_p95_abs_m << ',' << row.code_max_abs_m << ','
+                         << row.code_max_gps_week << ',' << row.code_max_sow_sec << ',' << row.code_max_elevation_deg << ','
+                         << row.doppler_residuals << ',' << row.diagnostic_doppler_rows << ',' << row.doppler_rms_mps << ','
+                         << row.doppler_p95_abs_mps << ',' << row.doppler_max_abs_mps << ',' << row.doppler_max_gps_week << ','
+                         << row.doppler_max_sow_sec << ',' << row.doppler_max_elevation_deg << '\\n';'''))
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected one replacement, found {count}: {old[:80]!r}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+          clang-format -i tools/residual_validator/residual_validator.h tools/residual_validator/residual_validator.cpp
+          rm .github/workflows/temporary-add-residual-max-context.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: report worst residual epoch context"
+          git push origin HEAD:issue-51-all-signal-residuals

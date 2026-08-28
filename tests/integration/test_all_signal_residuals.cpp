@@ -261,8 +261,8 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
 
     std::string nav_text;
     ASSERT_TRUE(write_g3_overlay_nav(directory, &nav_text));
-    nav_t nav{};
-    ASSERT_TRUE(load_nav(nav_text, &nav));
+    auto nav = std::make_unique<nav_t>();
+    ASSERT_TRUE(load_nav(nav_text, nav.get()));
 
     const gtime_t diagnostic_time = gpst2time(start.gps_week, gnss_sim::sim_time_sow_sec(start));
     const int g17 = satid2no("G17");
@@ -279,10 +279,12 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
         rtklib_signal_bias_info_ext_t eph_info{};
         rtklib_signal_bias_info_ext_t bias_info{};
         double bias_m = 0.0;
-        const int eph_status = rtklib_signal_ephemeris_ext(
-            diagnostic_time, g17, static_cast<unsigned char>(observation_code), NAV_CNAV, &nav, &eph, &geph, &eph_info);
-        const int bias_status = rtklib_signal_code_bias_ext(
-            diagnostic_time, g17, static_cast<unsigned char>(observation_code), NAV_CNAV, &nav, &bias_m, &bias_info);
+        const int eph_status =
+            rtklib_signal_ephemeris_ext(diagnostic_time, g17, static_cast<unsigned char>(observation_code), NAV_CNAV,
+                                        nav.get(), &eph, &geph, &eph_info);
+        const int bias_status =
+            rtklib_signal_code_bias_ext(diagnostic_time, g17, static_cast<unsigned char>(observation_code), NAV_CNAV,
+                                        nav.get(), &bias_m, &bias_info);
         std::fprintf(
             stderr,
             "GPS_CNAV_DIRECT signal=%s sat=G17 eph_status=%d eph_type=%d bias_status=%d bias_type=%d bias_m=%.9f\n",
@@ -333,8 +335,8 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
             int generic_svh = 0;
             double generic_los[3]{};
             double generic_azel[2]{};
-            const int generic_status = satpos(site_time, site_time, g17, EPHOPT_BRDC, &nav, generic_rs, generic_dts,
-                                              &generic_var, &generic_svh);
+            const int generic_status = satpos(site_time, site_time, g17, EPHOPT_BRDC, nav.get(), generic_rs,
+                                              generic_dts, &generic_var, &generic_svh);
             if (generic_status == 1 && geodist(generic_rs, receiver_ecef, generic_los) > 0.0) {
                 satazel(receiver_llh, generic_los, generic_azel);
             }
@@ -348,8 +350,9 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
             ASSERT_NE(l2c_definition, nullptr);
             ASSERT_TRUE(gnss_sim::signal_rtklib_observation_code(*l2c_definition, &l2c_code, &l2c_frequency_index));
             static_cast<void>(l2c_frequency_index);
-            const int cnav_status = rtklib_signal_ephemeris_ext(site_time, g17, static_cast<unsigned char>(l2c_code),
-                                                                NAV_CNAV, &nav, &cnav_eph, &unused_geph, &cnav_info);
+            const int cnav_status =
+                rtklib_signal_ephemeris_ext(site_time, g17, static_cast<unsigned char>(l2c_code), NAV_CNAV, nav.get(),
+                                            &cnav_eph, &unused_geph, &cnav_info);
             double cnav_rs[3]{};
             double cnav_dts = 0.0;
             double cnav_var = 0.0;
@@ -367,8 +370,8 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
                          site.start_sow_sec, generic_status, generic_svh, generic_azel[1] * R2D, cnav_status,
                          cnav_eph.svh, cnav_azel[1] * R2D, cnav_info.message_type);
 
-            for (int eph_index = 0; eph_index < nav.n; ++eph_index) {
-                const eph_t& candidate = nav.eph[eph_index];
+            for (int eph_index = 0; eph_index < nav->n; ++eph_index) {
+                const eph_t& candidate = nav->eph[eph_index];
                 if (candidate.hdr.sys != SYS_GPS || candidate.hdr.msg_type != NAV_CNAV)
                     continue;
                 char candidate_id[16]{};
@@ -469,7 +472,7 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
             rtklib_signal_bias_info_ext_t bias_info{};
             double code_residual_m = 0.0;
             int code_status =
-                rtklib_rescode_signal_ext(&observation, &nav, &residual_options, receiver_position_m, 0.0, 0.0,
+                rtklib_rescode_signal_ext(&observation, nav.get(), &residual_options, receiver_position_m, 0.0, 0.0,
                                           required_message_type, wavelength_m, &code_residual_m, nullptr, &bias_info);
             const bool family_unavailable = fields[column.at("code_bias_status")] == "UNAVAILABLE_FOR_MESSAGE_FAMILY";
             const bool gps_l1c_developmental = signal_name == "GPS L1C";
@@ -482,7 +485,7 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
                 // Raw RANGE validity is independent of that navigation-health flag,
                 // but strict RTKLIB residual use must still reject it.
                 ASSERT_EQ(code_status, 0) << "strict code residual must preserve L5 broadcast-health exclusion";
-                code_status = rtklib_rescode_signal_diagnostic_ext(&observation, &nav, &residual_options,
+                code_status = rtklib_rescode_signal_diagnostic_ext(&observation, nav.get(), &residual_options,
                                                                    receiver_position_m, 0.0, 0.0, required_message_type,
                                                                    wavelength_m, &code_residual_m, nullptr, &bias_info);
                 ASSERT_EQ(code_status, 1) << "diagnostic L5Q code residual failed; site=" << site.name
@@ -513,7 +516,7 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
                 // and explicit exsats exclusions remain enforced by RTKLIB.
                 double doppler_residual_mps = 0.0;
                 const int doppler_status = rtklib_resdop_signal_diagnostic_ext(
-                    &observation, &nav, &residual_options, receiver_position_m, receiver_velocity_mps, 0.0, 0,
+                    &observation, nav.get(), &residual_options, receiver_position_m, receiver_velocity_mps, 0.0, 0,
                     wavelength_m, &doppler_residual_mps, nullptr);
                 ASSERT_EQ(doppler_status, 1) << "generic diagnostic L1C Doppler residual failed; site=" << site.name
                                              << " sat=" << static_cast<int>(observation.sat);
@@ -528,7 +531,7 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
                 // broadcast health for this diagnostic residual only.
                 double doppler_residual_mps = 0.0;
                 const int doppler_status = rtklib_resdop_signal_diagnostic_ext(
-                    &observation, &nav, &residual_options, receiver_position_m, receiver_velocity_mps, 0.0, 0,
+                    &observation, nav.get(), &residual_options, receiver_position_m, receiver_velocity_mps, 0.0, 0,
                     wavelength_m, &doppler_residual_mps, nullptr);
                 ASSERT_EQ(doppler_status, 1) << "diagnostic L5Q Doppler residual failed; site=" << site.name
                                              << " sat=" << static_cast<int>(observation.sat);
@@ -537,7 +540,7 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
                     (std::max)(signal_stats.max_abs_doppler_mps, std::fabs(doppler_residual_mps));
             } else if (doppler_valid) {
                 double doppler_residual_mps = 0.0;
-                const int doppler_status = rtklib_resdop_signal_ext(&observation, &nav, &residual_options,
+                const int doppler_status = rtklib_resdop_signal_ext(&observation, nav.get(), &residual_options,
                                                                     receiver_position_m, receiver_velocity_mps, 0.0, 0,
                                                                     wavelength_m, &doppler_residual_mps, nullptr);
                 ASSERT_EQ(doppler_status, 1) << "site=" << site.name << " signal=" << signal_name
@@ -754,7 +757,7 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
 
             double code_residual_m = 0.0;
             const int code_status = rtklib_rescode_state_ext(
-                &observation, &nav, &has_residual_options, receiver_position_m, 0.0, 0.0, satellite_state,
+                &observation, nav.get(), &has_residual_options, receiver_position_m, 0.0, 0.0, satellite_state,
                 satellite_clock, 0, code_bias_m, wavelength_m, &code_residual_m, nullptr);
             ASSERT_EQ(code_status, 1) << "JRC HAS E6 code residual failed at sow=" << fields[column.at("sow_sec")];
             ++signal_stats.code_residuals;
@@ -823,7 +826,7 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
     EXPECT_EQ(code_covered_signal_count, 21U)
         << "official JRC HAS E6 companion must complete all 21 V1 code-residual paths";
 
-    free_nav(&nav);
+    free_nav(nav.get());
     std::filesystem::remove_all(directory, filesystem_error);
 }
 

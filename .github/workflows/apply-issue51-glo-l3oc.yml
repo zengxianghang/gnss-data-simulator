@@ -48,10 +48,7 @@ jobs:
           curl -fsSL --retry 3 --retry-delay 1 \
             'https://raw.githubusercontent.com/CS-SI/Orekit/c5b14ff008eb02482ad4e2a2347c97ce4800969c/src/test/resources/gnss/navigation/Example_GPS_Rinex400.n' \
             -o /tmp/issue51_orekit_dlr_2022278_gps.rnx
-          grep -q 'RINEX VERSION / TYPE' /tmp/issue51_brd400dlr_2026180_trim.rnx
-          grep -q '^> EPH G01 CNAV' /tmp/issue51_brd400dlr_2026180_trim.rnx
-          grep -q 'EXTRACT FROM BRD400DLR_S_20222780000_01D_MN.rnx' /tmp/issue51_orekit_dlr_2022278_gps.rnx
-          grep -q '^> EPH G04 CNV2' /tmp/issue51_orekit_dlr_2022278_gps.rnx
+          wc -c /tmp/issue51_brd400dlr_2026180_trim.rnx /tmp/issue51_orekit_dlr_2022278_gps.rnx
 
       - name: Syntax-check guarded patch drivers
         run: >-

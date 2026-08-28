@@ -123,9 +123,19 @@ int main(int argc, char** argv) {
         }
         std::cout << row.signal_name << " code=" << row.code_residuals << " unavailable=" << row.code_unavailable
                   << " code_rms_m=" << row.code_rms_m << " code_p95_m=" << row.code_p95_abs_m
-                  << " code_max_m=" << row.code_max_abs_m << " doppler=" << row.doppler_residuals
-                  << " doppler_rms_mps=" << row.doppler_rms_mps << " doppler_p95_mps=" << row.doppler_p95_abs_mps
-                  << " doppler_max_mps=" << row.doppler_max_abs_mps << '\n';
+                  << " code_max_m=" << row.code_max_abs_m;
+        if (row.code_residuals > 0U) {
+            std::cout << " code_max_at=" << row.code_max_gps_week << '/' << row.code_max_sow_sec << '@'
+                      << row.code_max_elevation_deg << "deg";
+        }
+        std::cout << " doppler=" << row.doppler_residuals << " doppler_rms_mps=" << row.doppler_rms_mps
+                  << " doppler_p95_mps=" << row.doppler_p95_abs_mps << " doppler_max_mps="
+                  << row.doppler_max_abs_mps;
+        if (row.doppler_residuals > 0U) {
+            std::cout << " doppler_max_at=" << row.doppler_max_gps_week << '/' << row.doppler_max_sow_sec << '@'
+                      << row.doppler_max_elevation_deg << "deg";
+        }
+        std::cout << '\n';
     }
     std::cout << "Validated input rows: " << report.input_rows << ", signal summaries: " << signal_rows << '\n';
     std::cout << "Limits: code < " << code_limit_m << " m, Doppler < " << doppler_limit_mps << " m/s => "

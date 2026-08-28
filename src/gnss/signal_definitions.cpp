@@ -52,8 +52,11 @@ constexpr SignalDefinition kSignalDefinitions[] = {
      NavMessageFamily::kGalileoFnav, CodeBiasModel::kGalileoE5A, 12},
     {GnssConstellation::kGalileo, SignalId::kGalileoE5B, "Galileo E5b", "7Q", CarrierFrequencyModel::kFixed, 1207.14e6,
      NavMessageFamily::kGalileoInav, CodeBiasModel::kGalileoE5B, 17},
-    {GnssConstellation::kGalileo, SignalId::kGalileoE6, "Galileo E6", "6B", CarrierFrequencyModel::kFixed, 1278.75e6,
-     NavMessageFamily::kGalileoCnav, CodeBiasModel::kGalileoE6, 6},
+    // Galileo HAS is transmitted on the E6-B data component, but the HAS Initial
+    // Service code-bias observable is E6-C (RINEX C6C). OEM7 RANGE signal type
+    // 7 is E6C; type 6 would be E6B/C6B and must not consume a C6C OSB.
+    {GnssConstellation::kGalileo, SignalId::kGalileoE6, "Galileo E6", "6C", CarrierFrequencyModel::kFixed, 1278.75e6,
+     NavMessageFamily::kGalileoCnav, CodeBiasModel::kGalileoE6, 7},
 
     {GnssConstellation::kBeidou, SignalId::kBeidouB1I, "BeiDou B1I", "2I", CarrierFrequencyModel::kFixed, 1561.098e6,
      NavMessageFamily::kBeidouD1D2, CodeBiasModel::kBeidouB1I, 0},

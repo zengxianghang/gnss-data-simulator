@@ -55,6 +55,7 @@ add_library(rtklib_pinned STATIC
     third_party/RTKLIB/src/rtklib_obs_ext.c
     third_party/RTKLIB/src/rtklib_pntvel_ext.c
     third_party/RTKLIB/src/rtklib_residual_ext.c
+    third_party/RTKLIB/src/rtklib_signal_state_ext.c
     third_party/RTKLIB/src/sbas.c
 )
 add_library(gnss_sim::rtklib ALIAS rtklib_pinned)

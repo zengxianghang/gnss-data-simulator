@@ -42,7 +42,8 @@ NavOutputSystem output_system(int system) {
 
 RtklibBroadcastMessageFamily message_family(int system, int message_type) {
     if (system == SYS_GLO) {
-        return RtklibBroadcastMessageFamily::kGlonassFdma;
+        return message_type == NAV_L3OC ? RtklibBroadcastMessageFamily::kGlonassL3Oc
+                                        : RtklibBroadcastMessageFamily::kGlonassFdma;
     }
     switch (message_type) {
         case NAV_CNAV:
@@ -217,6 +218,8 @@ bool fill_glonass(const nav_t& nav, int index, NavOutputRecord* record) {
         return false;
     }
     GlonassNavOutputData output{};
+    output.message_type = geph.hdr.msg_type != 0 ? geph.hdr.msg_type : NAV_FDMA;
+    output.message_family = message_family(SYS_GLO, output.message_type);
     output.satellite_number = geph.sat;
     output.prn = prn;
     output.iode = geph.iode;

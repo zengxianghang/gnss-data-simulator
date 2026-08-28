@@ -141,8 +141,15 @@ bool nav_family_from_record(const NavOutputRecord& record, NavMessageFamily* fam
         return false;
     }
     if (record.kind == RtklibNavRecordKind::kGlonassEphemeris) {
-        *family = NavMessageFamily::kGlonassFdma;
-        return true;
+        if (record.glonass.message_family == RtklibBroadcastMessageFamily::kGlonassL3Oc) {
+            *family = NavMessageFamily::kGlonassL3Oc;
+            return true;
+        }
+        if (record.glonass.message_family == RtklibBroadcastMessageFamily::kGlonassFdma) {
+            *family = NavMessageFamily::kGlonassFdma;
+            return true;
+        }
+        return false;
     }
     if (record.kind != RtklibNavRecordKind::kEphemeris) {
         return false;
@@ -201,6 +208,9 @@ bool nav_family_from_record(const NavOutputRecord& record, NavMessageFamily* fam
             return true;
         case RtklibBroadcastMessageFamily::kGlonassFdma:
             *family = NavMessageFamily::kGlonassFdma;
+            return true;
+        case RtklibBroadcastMessageFamily::kGlonassL3Oc:
+            *family = NavMessageFamily::kGlonassL3Oc;
             return true;
         case RtklibBroadcastMessageFamily::kUnknown:
             return false;
@@ -674,7 +684,40 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
         const double elevation_deg = geometry.elevation_rad * kRadiansToDegrees;
         bool satellite_tracking = false;
         for (SignalRuntime& signal : satellite.signals) {
-            const bool signal_available = scenario.signal_available && geometry.visible;
+            const SignalDefinition* definition = find_signal_definition(signal.tracker.signal_id);
+            if (definition == nullptr) {
+                set_error(error_message, "signal definition is missing during tracking update");
+                return false;
+            }
+
+            bool signal_healthy = geometry.healthy;
+            RtklibBroadcastMessageFamily health_family = RtklibBroadcastMessageFamily::kUnknown;
+            if (definition->nav_message_family == NavMessageFamily::kGpsCnav) {
+                health_family = RtklibBroadcastMessageFamily::kCnav;
+            } else if (definition->nav_message_family == NavMessageFamily::kGpsCnav2) {
+                health_family = RtklibBroadcastMessageFamily::kCnav2;
+            }
+            if (health_family != RtklibBroadcastMessageFamily::kUnknown) {
+                int signal_health = 0;
+                if (!rtklib_signal_health_for_family(truth_nav, geometry.transmit_gps_week, geometry.transmit_sow_sec,
+                                                     satellite.satellite_number, definition->rinex_signal_code,
+                                                     health_family, &signal_health, error_message)) {
+                    return false;
+                }
+                signal_healthy = signal_health == 0;
+            }
+
+            // Broadcast health controls measurement validity, not RF tracking.
+            // Preserve legacy behavior outside GPS CNAV/CNV2.
+            const bool signal_available =
+                scenario.signal_available &&
+                (health_family != RtklibBroadcastMessageFamily::kUnknown ? geometry.above_elevation_mask
+                                                                         : geometry.visible);
+            SatelliteGeometry signal_geometry = geometry;
+            if (health_family != RtklibBroadcastMessageFamily::kUnknown) {
+                signal_geometry.healthy = signal_healthy;
+                signal_geometry.visible = geometry.above_elevation_mask && signal_healthy;
+            }
             if (signal_available && !signal.tracker.scheduled) {
                 const AcquisitionContext context =
                     signal.ever_scheduled ? AcquisitionContext::kReacquisition : initial_context;
@@ -707,10 +750,10 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                 return false;
             }
             MeasurementObservation observation{};
-            if (!generate_zero_noise_measurement(truth_nav, geometry, signal.tracker, atmosphere, &signal.ambiguity,
-                                                 &observation, error_message) ||
-                !truth_writer_write_observation(truth_writer, runtime->receiver, geometry, signal.tracker, observation,
-                                                error_message)) {
+            if (!generate_zero_noise_measurement(truth_nav, signal_geometry, runtime->receiver, signal.tracker,
+                                                 atmosphere, &signal.ambiguity, &observation, error_message) ||
+                !truth_writer_write_observation(truth_writer, runtime->receiver, signal_geometry, signal.tracker,
+                                                observation, error_message)) {
                 return false;
             }
             measurements->push_back(observation);

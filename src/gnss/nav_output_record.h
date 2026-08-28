@@ -73,6 +73,8 @@ struct KeplerianNavOutputData {
 };
 
 struct GlonassNavOutputData {
+    RtklibBroadcastMessageFamily message_family;
+    int message_type;
     int satellite_number;
     int prn;
     int slot_offset;

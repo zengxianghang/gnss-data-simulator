@@ -39,6 +39,7 @@ enum class RtklibBroadcastMessageFamily {
     kBeidouBcnav2,
     kBeidouBcnav3,
     kGlonassFdma,
+    kGlonassL3Oc,
 };
 
 struct RtklibNavCounts {
@@ -86,11 +87,13 @@ struct RtklibBroadcastBiasData {
     double tgd_sec[4];
     double isc_sec[6];
     double glonass_dtaun_sec;
+    double glonass_isc_l3ocp_sec;
 };
 
 struct RtklibSolutionObservation {
     int satellite_number;
     int observation_code;
+    RtklibBroadcastMessageFamily message_family;
     double pseudorange_m;
     double code_bias_m;
     double doppler_hz;
@@ -138,8 +141,15 @@ bool rtklib_satellite_state_available(const RtklibNavStore* store, int gps_week,
 bool rtklib_satellite_id_to_number(const char* satellite_id, int* satellite_number);
 bool rtklib_satellite_number_to_id(int satellite_number, char satellite_id[4]);
 bool rtklib_observation_code(const char* rinex_signal_code, int* observation_code, int* frequency_index);
+bool rtklib_signal_health_for_family(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
+                                     const char* rinex_signal_code,
+                                     RtklibBroadcastMessageFamily requested_message_family, int* signal_health,
+                                     std::string* error_message);
 bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
                                 RtklibSatelliteState* state, std::string* error_message);
+bool get_rtklib_signal_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
+                                       int observation_code, RtklibBroadcastMessageFamily requested_message_family,
+                                       RtklibSatelliteState* state, std::string* error_message);
 bool rtklib_broadcast_bias_data_for_family(const RtklibNavStore* store, int gps_week, double sow_sec,
                                            int satellite_number, RtklibBroadcastMessageFamily requested_message_family,
                                            RtklibBroadcastBiasData* data, std::string* error_message);

@@ -3,12 +3,17 @@
 extern "C" {
 #include <rtklib.h>
 #include <rtklib_obs_ext.h>
+#include <rtklib_signal_bias_ext.h>
 }
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <new>
+#include <utility>
+#include <vector>
 
 namespace gnss_sim {
 
@@ -337,23 +342,29 @@ bool rtklib_copy_nav_snapshot(const RtklibNavStore* source, int gps_week, double
     copy_nav_metadata(source->nav, &destination->nav, true);
     const gtime_t snapshot_time = gpst2time(gps_week, sow_sec);
 
-    int selected_eph[MAXSAT];
-    int selected_geph[MAXSAT];
-    for (int sat_index = 0; sat_index < MAXSAT; ++sat_index) {
-        selected_eph[sat_index] = -1;
-        selected_geph[sat_index] = -1;
-    }
+    // A receiver can cache several broadcast families for the same satellite
+    // at the same time (for example GPS LNAV + CNAV + CNV2). Keep the latest
+    // available record independently for each exact RINEX/RTKLIB message type.
+    // Selecting only by satellite silently discarded modern-family ephemerides
+    // during HOT/WARM initialization.
+    std::vector<int> selected_eph;
+    std::vector<int> selected_geph;
+    selected_eph.reserve(static_cast<std::size_t>(source->nav.n));
+    selected_geph.reserve(static_cast<std::size_t>(source->nav.ng));
 
     for (int index = 0; index < source->nav.n; ++index) {
         const eph_t& eph = source->nav.eph[index];
         if (eph.sat <= 0 || eph.sat > MAXSAT || !record_is_available(eph_transmission_time(eph), snapshot_time)) {
             continue;
         }
-        const int sat_index = eph.sat - 1;
-        const int selected = selected_eph[sat_index];
-        if (selected < 0 ||
-            timediff(eph_transmission_time(eph), eph_transmission_time(source->nav.eph[selected])) > 0.0) {
-            selected_eph[sat_index] = index;
+        auto selected = std::find_if(selected_eph.begin(), selected_eph.end(), [&](int candidate) {
+            return source->nav.eph[candidate].sat == eph.sat &&
+                   source->nav.eph[candidate].hdr.msg_type == eph.hdr.msg_type;
+        });
+        if (selected == selected_eph.end()) {
+            selected_eph.push_back(index);
+        } else if (timediff(eph_transmission_time(eph), eph_transmission_time(source->nav.eph[*selected])) > 0.0) {
+            *selected = index;
         }
     }
     for (int index = 0; index < source->nav.ng; ++index) {
@@ -361,27 +372,26 @@ bool rtklib_copy_nav_snapshot(const RtklibNavStore* source, int gps_week, double
         if (geph.sat <= 0 || geph.sat > MAXSAT || !record_is_available(geph_transmission_time(geph), snapshot_time)) {
             continue;
         }
-        const int sat_index = geph.sat - 1;
-        const int selected = selected_geph[sat_index];
-        if (selected < 0 ||
-            timediff(geph_transmission_time(geph), geph_transmission_time(source->nav.geph[selected])) > 0.0) {
-            selected_geph[sat_index] = index;
+        auto selected = std::find_if(selected_geph.begin(), selected_geph.end(), [&](int candidate) {
+            return source->nav.geph[candidate].sat == geph.sat &&
+                   source->nav.geph[candidate].hdr.msg_type == geph.hdr.msg_type;
+        });
+        if (selected == selected_geph.end()) {
+            selected_geph.push_back(index);
+        } else if (timediff(geph_transmission_time(geph), geph_transmission_time(source->nav.geph[*selected])) > 0.0) {
+            *selected = index;
         }
     }
 
-    for (int index = 0; index < source->nav.n; ++index) {
-        const int sat = source->nav.eph[index].sat;
-        if (sat > 0 && sat <= MAXSAT && selected_eph[sat - 1] == index &&
-            !append_eph(source->nav.eph[index], &destination->nav)) {
+    for (int selected : selected_eph) {
+        if (!append_eph(source->nav.eph[selected], &destination->nav)) {
             reset_nav(&destination->nav);
             set_error(error_message, "cannot allocate receiver ephemeris snapshot");
             return false;
         }
     }
-    for (int index = 0; index < source->nav.ng; ++index) {
-        const int sat = source->nav.geph[index].sat;
-        if (sat > 0 && sat <= MAXSAT && selected_geph[sat - 1] == index &&
-            !append_geph(source->nav.geph[index], &destination->nav)) {
+    for (int selected : selected_geph) {
+        if (!append_geph(source->nav.geph[selected], &destination->nav)) {
             reset_nav(&destination->nav);
             set_error(error_message, "cannot allocate receiver GLONASS ephemeris snapshot");
             return false;
@@ -513,6 +523,100 @@ bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, doubl
     state->clock_drift_sec_per_sec = clock[1];
     state->variance_m2 = variance_m2;
     state->health = health;
+    return true;
+}
+
+bool get_rtklib_signal_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
+                                       int observation_code, RtklibBroadcastMessageFamily requested_message_family,
+                                       RtklibSatelliteState* state, std::string* error_message) {
+    if (store == nullptr || state == nullptr || satellite_number <= 0 || observation_code <= 0 ||
+        observation_code > 255 || !valid_gps_time(gps_week, sow_sec)) {
+        set_error(error_message, "signal satellite-state request has invalid arguments");
+        return false;
+    }
+    if (requested_message_family == RtklibBroadcastMessageFamily::kUnknown) {
+        return get_rtklib_satellite_state(store, gps_week, sow_sec, satellite_number, state, error_message);
+    }
+
+    const int system = satsys(satellite_number, nullptr);
+    int required_message_mask = 0;
+    switch (requested_message_family) {
+        case RtklibBroadcastMessageFamily::kLegacy:
+            if (system == SYS_GPS || system == SYS_QZS) {
+                required_message_mask = NAV_LNAV;
+            } else if (system == SYS_CMP) {
+                required_message_mask = NAV_D1 | NAV_D2 | NAV_D1D2;
+            }
+            break;
+        case RtklibBroadcastMessageFamily::kCnav:
+            required_message_mask = NAV_CNAV;
+            break;
+        case RtklibBroadcastMessageFamily::kCnav2:
+            required_message_mask = NAV_CNV2;
+            break;
+        case RtklibBroadcastMessageFamily::kGalileoInav:
+            required_message_mask = NAV_INAV;
+            break;
+        case RtklibBroadcastMessageFamily::kGalileoFnav:
+            required_message_mask = NAV_FNAV;
+            break;
+        case RtklibBroadcastMessageFamily::kBeidouBcnav1:
+            required_message_mask = NAV_CNV1;
+            break;
+        case RtklibBroadcastMessageFamily::kBeidouBcnav2:
+            required_message_mask = NAV_CNV2;
+            break;
+        case RtklibBroadcastMessageFamily::kBeidouBcnav3:
+            required_message_mask = NAV_CNV3;
+            break;
+        case RtklibBroadcastMessageFamily::kGlonassFdma:
+            required_message_mask = NAV_FDMA;
+            break;
+        case RtklibBroadcastMessageFamily::kGlonassL3Oc:
+            required_message_mask = NAV_L3OC;
+            break;
+        case RtklibBroadcastMessageFamily::kUnknown:
+            break;
+    }
+    if (required_message_mask == 0) {
+        set_error(error_message, "unsupported signal NAV family for satellite state");
+        return false;
+    }
+
+    const gtime_t time = gpst2time(gps_week, sow_sec);
+    eph_t eph{};
+    geph_t geph{};
+    rtklib_signal_bias_info_ext_t info{};
+    const int status = rtklib_signal_ephemeris_ext(time, satellite_number, static_cast<unsigned char>(observation_code),
+                                                   required_message_mask, &store->nav, &eph, &geph, &info);
+    if (status != 1) {
+        set_error(error_message, "no compatible signal-family ephemeris for satellite state");
+        return false;
+    }
+
+    double position[3]{};
+    double next_position[3]{};
+    double clock_bias_sec = 0.0;
+    double next_clock_bias_sec = 0.0;
+    double variance_m2 = 0.0;
+    double next_variance_m2 = 0.0;
+    constexpr double kDifferenceSec = 1.0e-3;
+    if (info.system == SYS_GLO) {
+        geph2pos(time, &geph, position, &clock_bias_sec, &variance_m2);
+        geph2pos(timeadd(time, kDifferenceSec), &geph, next_position, &next_clock_bias_sec, &next_variance_m2);
+        state->health = geph.svh;
+    } else {
+        eph2pos(time, &eph, position, &clock_bias_sec, &variance_m2);
+        eph2pos(timeadd(time, kDifferenceSec), &eph, next_position, &next_clock_bias_sec, &next_variance_m2);
+        state->health = eph.svh;
+    }
+    for (int index = 0; index < 3; ++index) {
+        state->position_ecef_m[index] = position[index];
+        state->velocity_ecef_mps[index] = (next_position[index] - position[index]) / kDifferenceSec;
+    }
+    state->clock_bias_sec = clock_bias_sec;
+    state->clock_drift_sec_per_sec = (next_clock_bias_sec - clock_bias_sec) / kDifferenceSec;
+    state->variance_m2 = variance_m2;
     return true;
 }
 

@@ -50,6 +50,8 @@ RtklibBroadcastMessageFamily requested_bias_family(NavMessageFamily family) {
             return RtklibBroadcastMessageFamily::kCnav2;
         case NavMessageFamily::kGlonassFdma:
             return RtklibBroadcastMessageFamily::kGlonassFdma;
+        case NavMessageFamily::kGlonassL3Oc:
+            return RtklibBroadcastMessageFamily::kGlonassL3Oc;
         case NavMessageFamily::kGalileoInav:
             return RtklibBroadcastMessageFamily::kGalileoInav;
         case NavMessageFamily::kGalileoFnav:
@@ -60,7 +62,6 @@ RtklibBroadcastMessageFamily requested_bias_family(NavMessageFamily family) {
             return RtklibBroadcastMessageFamily::kBeidouBcnav2;
         case NavMessageFamily::kBeidouBcnav3:
             return RtklibBroadcastMessageFamily::kBeidouBcnav3;
-        case NavMessageFamily::kGlonassL3Oc:
         case NavMessageFamily::kGalileoCnav:
             return RtklibBroadcastMessageFamily::kUnknown;
     }
@@ -175,7 +176,11 @@ bool compute_broadcast_code_bias_m(const SignalDefinition& signal, const RtklibB
             set_bias(bias_data.glonass_dtaun_sec, code_bias_m, status);
             return true;
         case CodeBiasModel::kGlonassG3:
-            set_unavailable(code_bias_m, status);
+            if (bias_data.message_family != RtklibBroadcastMessageFamily::kGlonassL3Oc) {
+                set_unavailable(code_bias_m, status);
+            } else {
+                set_bias(-bias_data.glonass_isc_l3ocp_sec, code_bias_m, status);
+            }
             return true;
         case CodeBiasModel::kGalileoE1:
             if (bias_data.message_family == RtklibBroadcastMessageFamily::kGalileoFnav) {
@@ -245,9 +250,9 @@ bool compute_broadcast_code_bias_m(const SignalDefinition& signal, const RtklibB
 }
 
 bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const SatelliteGeometry& geometry,
-                                     const SignalTracker& tracker, const AtmosphereCorrection& atmosphere,
-                                     CarrierAmbiguityState* ambiguity_state, MeasurementObservation* observation,
-                                     std::string* error_message) {
+                                     const ReceiverTruth& receiver, const SignalTracker& tracker,
+                                     const AtmosphereCorrection& atmosphere, CarrierAmbiguityState* ambiguity_state,
+                                     MeasurementObservation* observation, std::string* error_message) {
     const SignalDefinition* signal = find_signal_definition(tracker.signal_id);
     if (nav_store == nullptr || ambiguity_state == nullptr || observation == nullptr || signal == nullptr ||
         !finite_measurement_input(geometry, atmosphere) || atmosphere.mode == AtmosphereMode::UNSPECIFIED) {
@@ -265,6 +270,32 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
         return false;
     }
 
+    double selected_code_bias_m = 0.0;
+    BroadcastCodeBiasStatus selected_code_bias_status = BroadcastCodeBiasStatus::kUnavailableForMessageFamily;
+    if (signal_family_bias_available && !compute_broadcast_code_bias_m(*signal, bias_data, &selected_code_bias_m,
+                                                                       &selected_code_bias_status, error_message)) {
+        return false;
+    }
+    const bool family_code_bias_available =
+        signal_family_bias_available &&
+        selected_code_bias_status != BroadcastCodeBiasStatus::kUnavailableForMessageFamily;
+
+    RtklibSatelliteState code_state = geometry.satellite_state;
+    double code_geometric_range_m = geometry.geometric_range_m;
+    if (family_code_bias_available) {
+        int observation_code = 0;
+        int frequency_index = 0;
+        double code_line_of_sight_ecef[3]{};
+        if (!signal_rtklib_observation_code(*signal, &observation_code, &frequency_index) ||
+            !get_rtklib_signal_satellite_state(nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec,
+                                               geometry.satellite_number, observation_code, bias_data.message_family,
+                                               &code_state, error_message) ||
+            !rtklib_geometric_distance(code_state.position_ecef_m, receiver.position_ecef_m, &code_geometric_range_m,
+                                       code_line_of_sight_ecef)) {
+            return false;
+        }
+    }
+
     double wavelength_m = 0.0;
     if (!signal_wavelength_m(*signal, bias_data.glonass_fcn, &wavelength_m) || !std::isfinite(wavelength_m) ||
         wavelength_m <= 0.0) {
@@ -277,9 +308,12 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
     result.satellite_number = geometry.satellite_number;
     result.glonass_fcn = bias_data.glonass_fcn;
     result.wavelength_m = wavelength_m;
-    result.geometric_range_m = geometry.geometric_range_m;
+    // Code/carrier terms use the broadcast state from the same NAV family as
+    // the code bias. Doppler deliberately remains on the generic stock satpos
+    // state because it has no signal-specific group-delay dependency.
+    result.geometric_range_m = code_geometric_range_m;
     result.range_rate_mps = geometry.range_rate_mps;
-    result.satellite_clock_bias_m = kSpeedOfLightMps * geometry.satellite_state.clock_bias_sec;
+    result.satellite_clock_bias_m = kSpeedOfLightMps * code_state.clock_bias_sec;
     result.satellite_clock_drift_mps = kSpeedOfLightMps * geometry.satellite_state.clock_drift_sec_per_sec;
     result.broadcast_message_family = bias_data.message_family;
     for (int index = 0; index < 4; ++index) {
@@ -296,9 +330,9 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
 
     if (!signal_family_bias_available) {
         set_unavailable(&result.code_bias_m, &result.code_bias_status);
-    } else if (!compute_broadcast_code_bias_m(*signal, bias_data, &result.code_bias_m, &result.code_bias_status,
-                                              error_message)) {
-        return false;
+    } else {
+        result.code_bias_m = selected_code_bias_m;
+        result.code_bias_status = selected_code_bias_status;
     }
 
     const double clock_corrected_range_m = result.geometric_range_m - result.satellite_clock_bias_m;
@@ -325,12 +359,16 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
         result.adr_cycles = 0.0;
     }
 
-    const bool geometry_usable = geometry.visible;
+    // RANGE measurement validity describes RF tracking/measurement quality,
+    // not whether the broadcast ephemeris is healthy for navigation.  Keep
+    // broadcast health in geometry.healthy/geometry.visible for PVT gating,
+    // while an above-mask tracked signal may still produce raw PSR/Doppler/ADR.
+    const bool measurement_geometry_usable = geometry.above_elevation_mask;
     const bool code_bias_available = result.code_bias_status != BroadcastCodeBiasStatus::kUnavailableForMessageFamily;
-    result.observation_available = geometry_usable && tracker.observation_available;
-    result.pseudorange_valid = geometry_usable && tracker.psr_valid && code_bias_available;
-    result.doppler_valid = geometry_usable && tracker.doppler_valid;
-    result.adr_valid = geometry_usable && tracker.adr_valid && ambiguity_state->initialized;
+    result.observation_available = measurement_geometry_usable && tracker.observation_available;
+    result.pseudorange_valid = measurement_geometry_usable && tracker.psr_valid && code_bias_available;
+    result.doppler_valid = measurement_geometry_usable && tracker.doppler_valid;
+    result.adr_valid = measurement_geometry_usable && tracker.adr_valid && ambiguity_state->initialized;
 
     *observation = result;
     return true;

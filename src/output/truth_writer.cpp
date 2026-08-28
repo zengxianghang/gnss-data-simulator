@@ -87,6 +87,8 @@ const char* broadcast_message_family_name(RtklibBroadcastMessageFamily family) {
             return "BEIDOU_BCNAV3";
         case RtklibBroadcastMessageFamily::kGlonassFdma:
             return "GLONASS_FDMA";
+        case RtklibBroadcastMessageFamily::kGlonassL3Oc:
+            return "GLONASS_L3OC";
     }
     return "UNKNOWN";
 }

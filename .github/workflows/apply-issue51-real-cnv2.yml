@@ -1,0 +1,52 @@
+name: Materialize real GPS CNV2 coverage
+
+on:
+  push:
+    branches:
+      - issue-51-all-signal-residuals
+    paths:
+      - tools/apply_issue51_real_gps_cnv2_coverage.py
+      - tests/data/minimal/gps_cnv2_g04_2022278.rnx
+      - .github/workflows/apply-issue51-real-cnv2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  materialize-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-51-all-signal-residuals
+          fetch-depth: 0
+          submodules: recursive
+      - name: Apply guarded real CNV2 coverage patch
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/apply_issue51_real_gps_cnv2_coverage.py
+          python tools/apply_issue51_real_gps_cnv2_coverage.py
+          clang-format -i tests/integration/test_all_signal_residuals.cpp
+          git diff --check
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -DBUILD_TESTING=ON
+          cmake --build build --config Release --parallel
+      - name: Test full suite
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Print compact residual diagnostics
+        run: >-
+          ./build/gnss_sim_integration_tests
+          --gtest_filter=V1Acceptance.EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks
+      - name: Commit permanent test only after green validation
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/integration/test_all_signal_residuals.cpp
+          if git diff --cached --quiet; then
+            echo 'No materialized test change'
+            exit 1
+          fi
+          git commit -m 'Validate GPS L1C with real CNV2 residuals'
+          git push origin HEAD:issue-51-all-signal-residuals

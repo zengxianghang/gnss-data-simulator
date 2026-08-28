@@ -414,6 +414,11 @@ Normal CI uses short fixtures/durations. Long-duration versions of these tests b
 
 ## 10. Pull request and commit rules
 
+- Every independently actionable bug, feature, validation gap, or engineering problem must be tracked by a dedicated GitHub Issue before implementation begins.
+- Issues should be kept as small and independently implementable, verifiable, and reviewable as practical. If an Issue contains multiple independently actionable concerns, split it into smaller Issues before implementation.
+- Prefer a strict one-Issue-to-one-PR workflow: one Issue defines one implementation scope, and one PR closes that Issue.
+- A PR must not bundle unrelated Issues or opportunistic fixes. Newly discovered unrelated problems must be recorded as separate Issues and handled by separate PRs.
+- For a large feature or engineering goal that requires multiple implementation stages, use a parent Issue for the overall goal and small child Issues/work packages for the independently reviewable stages. Each child Issue should normally have its own PR.
 - One PR should primarily solve one issue/work package.
 - Keep PRs reviewable; avoid one giant V1 implementation PR.
 - PR descriptions must include:

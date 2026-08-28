@@ -10,60 +10,31 @@ def replace_once(path, old, new):
     p.write_text(text.replace(old, new, 1))
 
 
-replace_once(
-    "src/gnss/rtklib_adapter.cpp",
-    '''    int selected_eph[MAXSAT];
-    int selected_geph[MAXSAT];
-    for (int sat_index = 0; sat_index < MAXSAT; ++sat_index) {
-        selected_eph[sat_index] = -1;
-        selected_geph[sat_index] = -1;
+adapter = Path("src/gnss/rtklib_adapter.cpp")
+text = adapter.read_text()
+include_anchor = "#include <new>\n"
+if text.count(include_anchor) != 1:
+    raise RuntimeError("rtklib_adapter.cpp include anchor mismatch")
+text = text.replace(include_anchor, "#include <algorithm>\n#include <new>\n#include <vector>\n", 1)
+
+start_marker = "bool rtklib_copy_nav_snapshot("
+end_marker = "\nbool rtklib_copy_nav_record("
+if text.count(start_marker) != 1 or text.count(end_marker) != 1:
+    raise RuntimeError("rtklib_copy_nav_snapshot function anchors mismatch")
+start = text.index(start_marker)
+end = text.index(end_marker, start)
+new_function = '''bool rtklib_copy_nav_snapshot(const RtklibNavStore* source, int gps_week, double sow_sec, RtklibNavStore* destination,
+                              std::string* error_message) {
+    if (source == nullptr || destination == nullptr || source == destination || !valid_gps_time(gps_week, sow_sec)) {
+        set_error(error_message, "navigation snapshot request has invalid arguments");
+        return false;
     }
 
-    for (int index = 0; index < source->nav.n; ++index) {
-        const eph_t& eph = source->nav.eph[index];
-        if (eph.sat <= 0 || eph.sat > MAXSAT || !record_is_available(eph_transmission_time(eph), snapshot_time)) {
-            continue;
-        }
-        const int sat_index = eph.sat - 1;
-        const int selected = selected_eph[sat_index];
-        if (selected < 0 ||
-            timediff(eph_transmission_time(eph), eph_transmission_time(source->nav.eph[selected])) > 0.0) {
-            selected_eph[sat_index] = index;
-        }
-    }
-    for (int index = 0; index < source->nav.ng; ++index) {
-        const geph_t& geph = source->nav.geph[index];
-        if (geph.sat <= 0 || geph.sat > MAXSAT || !record_is_available(geph_transmission_time(geph), snapshot_time)) {
-            continue;
-        }
-        const int sat_index = geph.sat - 1;
-        const int selected = selected_geph[sat_index];
-        if (selected < 0 ||
-            timediff(geph_transmission_time(geph), geph_transmission_time(source->nav.geph[selected])) > 0.0) {
-            selected_geph[sat_index] = index;
-        }
-    }
+    reset_nav(&destination->nav);
+    copy_nav_metadata(source->nav, &destination->nav, true);
+    const gtime_t snapshot_time = gpst2time(gps_week, sow_sec);
 
-    for (int index = 0; index < source->nav.n; ++index) {
-        const int sat = source->nav.eph[index].sat;
-        if (sat > 0 && sat <= MAXSAT && selected_eph[sat - 1] == index &&
-            !append_eph(source->nav.eph[index], &destination->nav)) {
-            reset_nav(&destination->nav);
-            set_error(error_message, "cannot allocate receiver ephemeris snapshot");
-            return false;
-        }
-    }
-    for (int index = 0; index < source->nav.ng; ++index) {
-        const int sat = source->nav.geph[index].sat;
-        if (sat > 0 && sat <= MAXSAT && selected_geph[sat - 1] == index &&
-            !append_geph(source->nav.geph[index], &destination->nav)) {
-            reset_nav(&destination->nav);
-            set_error(error_message, "cannot allocate receiver GLONASS ephemeris snapshot");
-            return false;
-        }
-    }
-''',
-    '''    // A receiver can cache several broadcast families for the same satellite
+    // A receiver can cache several broadcast families for the same satellite
     // at the same time (for example GPS LNAV + CNAV + CNV2). Keep the latest
     // available record independently for each exact RINEX/RTKLIB message type.
     // Selecting only by satellite silently discarded modern-family ephemerides
@@ -118,8 +89,19 @@ replace_once(
             return false;
         }
     }
-''',
-)
+    for (int index = 0; index < source->nav.nion; ++index) {
+        if (record_is_available(source->nav.ion[index].trans_time, snapshot_time) &&
+            !append_ion(source->nav.ion[index], &destination->nav)) {
+            reset_nav(&destination->nav);
+            set_error(error_message, "cannot allocate receiver ionosphere snapshot");
+            return false;
+        }
+    }
+    return true;
+}
+'''
+text = text[:start] + new_function + text[end:]
+adapter.write_text(text)
 
 replace_once(
     "tests/unit/test_rtklib_adapter.cpp",

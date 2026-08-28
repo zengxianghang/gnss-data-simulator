@@ -175,8 +175,8 @@ bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gp
                     std::snprintf(message, sizeof(message),
                                   "raw RANGEA observation %d has no matching real-RINEX ephemeris/code bias: "
                                   "sat=%d code=%d mask=%d snapshot_status=%d truth_status=%d",
-                                  index, source.satellite_number, source.observation_code, message_mask, snapshot_status,
-                                  truth_status);
+                                  index, source.satellite_number, source.observation_code, message_mask,
+                                  snapshot_status, truth_status);
                     *error_message = message;
                 }
                 destroy_rtklib_nav_store(receiver_snapshot);
@@ -208,9 +208,9 @@ bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gp
     }
 
     RtklibPositionSolution raw_solution{};
-    const bool solved = rtklib_solve_single_position(receiver_snapshot, gps_week, sow_sec, converted, prepared_count,
-                                                     elevation_mask_deg, broadcast_atmosphere, &raw_solution,
-                                                     error_message);
+    const bool solved =
+        rtklib_solve_single_position(receiver_snapshot, gps_week, sow_sec, converted, prepared_count,
+                                     elevation_mask_deg, broadcast_atmosphere, &raw_solution, error_message);
     destroy_rtklib_nav_store(receiver_snapshot);
     if (!solved) {
         return false;

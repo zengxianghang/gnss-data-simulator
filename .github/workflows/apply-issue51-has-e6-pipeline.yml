@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  e6-coverage:
-    runs-on: ubuntu-latest
+  windows-asan:
+    runs-on: windows-latest
     steps:
       - name: Checkout Draft branch with dependencies
         uses: actions/checkout@v4
@@ -19,11 +19,11 @@ jobs:
           ref: issue-51-all-signal-residuals
           submodules: recursive
 
-      - name: Configure
-        run: cmake -S . -B build -DBUILD_TESTING=ON
+      - name: Configure with MSVC AddressSanitizer
+        run: cmake -S . -B build -DBUILD_TESTING=ON '-DCMAKE_C_FLAGS=/fsanitize=address' '-DCMAKE_CXX_FLAGS=/fsanitize=address'
 
       - name: Build integration tests
         run: cmake --build build --config Release --target gnss_sim_integration_tests --parallel
 
       - name: Run residual acceptance directly
-        run: ./build/gnss_sim_integration_tests --gtest_filter=V1Acceptance.EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks
+        run: .\build\Release\gnss_sim_integration_tests.exe --gtest_filter=V1Acceptance.EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks

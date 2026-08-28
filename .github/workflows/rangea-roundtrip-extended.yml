@@ -1,7 +1,6 @@
 name: RANGEA round-trip extended validation
 
 on:
-  pull_request:
   workflow_dispatch:
   schedule:
     - cron: "47 18 * * 6"

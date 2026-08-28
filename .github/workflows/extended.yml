@@ -16,11 +16,6 @@ on:
           - stress_50hz_1h
           - determinism_50hz_10m
           - memory_trend_50hz
-  push:
-    branches:
-      - issue-51-all-signal-residuals
-    paths:
-      - .github/workflows/extended.yml
   schedule:
     - cron: "17 18 * * 6"
 
@@ -60,8 +55,6 @@ jobs:
           requested = os.environ.get("REQUESTED_CASE", "")
           if event == "schedule":
               selected = ["ks_8h", "memory_trend_50hz"]
-          elif event == "push":
-              selected = ["ks_8h"]
           elif requested == "all":
               selected = all_cases
           elif requested in all_cases:

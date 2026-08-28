@@ -61,8 +61,8 @@ int required_message_mask(int system, RtklibBroadcastMessageFamily family) {
 }
 
 bool prepare_raw_observation(const RtklibNavStore* receiver_snapshot, gtime_t epoch_time,
-                             const RtklibRawCodeObservation& source, int index,
-                             RtklibSolutionObservation* destination, std::string* error_message) {
+                             const RtklibRawCodeObservation& source, int index, RtklibSolutionObservation* destination,
+                             std::string* error_message) {
     if (receiver_snapshot == nullptr || destination == nullptr || !source.pseudorange_valid ||
         source.satellite_number <= 0 || source.satellite_number > MAXSAT || source.observation_code <= 0 ||
         source.observation_code > 255 || !std::isfinite(source.pseudorange_m) || source.pseudorange_m <= 0.0 ||
@@ -90,10 +90,9 @@ bool prepare_raw_observation(const RtklibNavStore* receiver_snapshot, gtime_t ep
 
     double rtklib_code_bias_m = 0.0;
     rtklib_signal_bias_info_ext_t bias_info{};
-    const int bias_status =
-        rtklib_signal_code_bias_ext(epoch_time, source.satellite_number,
-                                    static_cast<unsigned char>(source.observation_code), message_mask,
-                                    &receiver_snapshot->nav, &rtklib_code_bias_m, &bias_info);
+    const int bias_status = rtklib_signal_code_bias_ext(
+        epoch_time, source.satellite_number, static_cast<unsigned char>(source.observation_code), message_mask,
+        &receiver_snapshot->nav, &rtklib_code_bias_m, &bias_info);
     if (bias_status != 1 || !std::isfinite(rtklib_code_bias_m)) {
         if (error_message != nullptr) {
             char message[224]{};
@@ -169,7 +168,7 @@ bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gp
     }
 
     const bool solved = rtklib_solve_single_position(receiver_snapshot, gps_week, sow_sec, converted, observation_count,
-                                                      elevation_mask_deg, broadcast_atmosphere, solution, error_message);
+                                                     elevation_mask_deg, broadcast_atmosphere, solution, error_message);
     destroy_rtklib_nav_store(receiver_snapshot);
     return solved;
 }

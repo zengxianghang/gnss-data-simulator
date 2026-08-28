@@ -24,6 +24,8 @@ A signal-specific NAV family missing at an epoch is a per-signal availability co
 
 The validator deliberately preserves the raw truth pseudorange in `obs->P[0]` even when `pseudorange_valid=0`. RTKLIB's Doppler residual path uses that raw pseudorange only to reconstruct signal transmit time. `pseudorange_valid` still exclusively controls whether a code residual is evaluated, so this does not promote an invalid code measurement to valid. This distinction is required for signals such as GPS L1C whose code-bias NAV family can be unavailable while Doppler remains physically valid.
 
+Doppler validation with `required_message_mask=0` must use the nearest generic broadcast satellite state, because Doppler itself consumes no observable-specific code bias. Shared-validator parity exposed that RTKLIB PR #7 previously documented this behavior but still routed zero-mask requests through the signal-compatible ephemeris selector, which failed for GLONASS G3 when no L3OC record existed even though a generic GLONASS broadcast state was available. RTKLIB head `a5bc61990133830704f5040b7b9983b9b1e02681` fixes the contract by routing zero-mask Doppler state selection through `satposs()`; nonzero message masks remain signal/family constrained.
+
 Compact integration coverage exercises both the normal broadcast path and the JRC HAS explicit-state E6-C path through this shared evaluator before it is used on long-run data.
 
 ## Truth-state code residual
@@ -64,7 +66,7 @@ Bias ephemeris selection is observation-epoch and message-family aware; it must 
 
 ## Corrected compact acceptance evidence
 
-The simulator is pinned to RTKLIB commit `81e15b717ade0a5a91e365ed91511d414803dc05` from Draft PR `zengxianghang/RTKLIB#7` while this validation is under review.
+The simulator currently pins RTKLIB Draft PR #7 head `a5bc61990133830704f5040b7b9983b9b1e02681` while shared-validator parity is under review.
 
 CI run `33149275174` (run #362) on simulator head `5ecbbdd31cf5e3257f53feb2ba421b7f2f2f120a` passed after the Galileo E6-C mapping correction:
 
@@ -76,7 +78,7 @@ CI run `33149275174` (run #362) on simulator head `5ecbbdd31cf5e3257f53feb2ba421
 
 That acceptance test requires nonzero code and Doppler residual counts for each of all 21 frozen signals and applies the strict `< 0.02 m` / `< 0.002 m/s` maxima. Compact residual coverage is therefore **21/21 code and 21/21 Doppler** after correcting E6 to C6C/type 7. No residual threshold was widened to obtain this result.
 
-The reusable validator is being parity-checked against that compact oracle before the duplicate residual logic in the old integration test is removed.
+The reusable validator is being parity-checked against that compact oracle before the duplicate residual logic in the old integration test is removed. Parity testing has already found and corrected two implementation gaps without changing thresholds: preserving raw pseudorange for Doppler transmit-time reconstruction when code validity is false, and honoring RTKLIB's generic zero-message-mask Doppler-state contract.
 
 ## Remaining real-data gates
 

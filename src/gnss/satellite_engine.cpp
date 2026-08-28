@@ -114,6 +114,7 @@ bool compute_satellite_geometry_with_provider(SatelliteStateProvider state_provi
     SatelliteGeometry result{};
     result.receive_time = receive_time;
     result.satellite_number = satellite_number;
+    result.elevation_mask_deg = elevation_mask_deg;
 
     double propagation_time_sec = kInitialPropagationTimeSec;
     bool converged = false;

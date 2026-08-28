@@ -62,7 +62,7 @@ replace_once(
     atmosphere.troposphere_delay_m = 0.0;
     gnss_sim::CarrierAmbiguityState ambiguity{};
     gnss_sim::MeasurementObservation observation{};
-    ASSERT_TRUE(gnss_sim::generate_zero_noise_measurement(nav.store, geometry, tracker, atmosphere, &ambiguity,
+    ASSERT_TRUE(gnss_sim::generate_zero_noise_measurement(nav.store, geometry, receiver, tracker, atmosphere, &ambiguity,
                                                           &observation, &error_message))
         << error_message;
 

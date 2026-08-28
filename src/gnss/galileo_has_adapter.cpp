@@ -107,6 +107,36 @@ bool parse_bias_file(const char* path, std::vector<GalileoHasBiasRecord>* record
     return true;
 }
 
+std::string precise_state_outage_message(const nav_t& nav, gtime_t time, int satellite_number) {
+    int orbit_epochs_with_satellite = 0;
+    int clock_epochs_with_satellite = 0;
+    for (int index = 0; index < nav.ne; ++index) {
+        const double* position = nav.peph[index].pos[satellite_number - 1];
+        if (std::fabs(position[0]) + std::fabs(position[1]) + std::fabs(position[2]) > 0.0) {
+            ++orbit_epochs_with_satellite;
+        }
+    }
+    for (int index = 0; index < nav.nc; ++index) {
+        if (nav.pclk[index].clk[satellite_number - 1][0] != 0.0) {
+            ++clock_epochs_with_satellite;
+        }
+    }
+
+    std::ostringstream stream;
+    stream << "Galileo HAS precise orbit/clock state is unavailable at the requested epoch"
+           << "; ne=" << nav.ne << "; nc=" << nav.nc << "; sat_orbit_epochs=" << orbit_epochs_with_satellite
+           << "; sat_clock_epochs=" << clock_epochs_with_satellite;
+    if (nav.ne > 0) {
+        stream << "; orbit_from_first_s=" << timediff(time, nav.peph[0].time)
+               << "; orbit_to_last_s=" << timediff(nav.peph[nav.ne - 1].time, time);
+    }
+    if (nav.nc > 0) {
+        stream << "; clock_from_first_s=" << timediff(time, nav.pclk[0].time)
+               << "; clock_to_last_s=" << timediff(nav.pclk[nav.nc - 1].time, time);
+    }
+    return stream.str();
+}
+
 } // namespace
 
 struct GalileoHasStore {
@@ -186,7 +216,7 @@ bool galileo_has_e6_correction(const GalileoHasStore* store, int gps_week, doubl
     double dts[2]{};
     double variance_m2 = 0.0;
     if (peph2pos(time, satellite_number, &store->precise_nav, 0, rs, dts, &variance_m2) == 0) {
-        set_error(error_message, "Galileo HAS precise orbit/clock state is unavailable at the requested epoch");
+        set_error(error_message, precise_state_outage_message(store->precise_nav, time, satellite_number));
         return false;
     }
 

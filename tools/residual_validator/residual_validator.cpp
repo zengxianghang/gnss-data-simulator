@@ -46,8 +46,22 @@ struct Accumulator {
     std::uint64_t diagnostic_doppler_rows = 0;
     double code_sum_squares = 0.0;
     double doppler_sum_squares = 0.0;
+    double code_max_abs_m = 0.0;
+    int code_max_gps_week = -1;
+    double code_max_sow_sec = 0.0;
+    double code_max_elevation_deg = 0.0;
+    double doppler_max_abs_mps = 0.0;
+    int doppler_max_gps_week = -1;
+    double doppler_max_sow_sec = 0.0;
+    double doppler_max_elevation_deg = 0.0;
     std::vector<double> code_abs;
     std::vector<double> doppler_abs;
+};
+
+struct ResidualContext {
+    int gps_week = -1;
+    double sow_sec = 0.0;
+    double elevation_deg = 0.0;
 };
 
 void set_error(std::string* error_message, const std::string& value) {
@@ -195,14 +209,20 @@ Accumulator& get_group(std::map<GroupKey, Accumulator>* groups, int scope_rank, 
     return iterator->second;
 }
 
-void update_group(Accumulator* accumulator, bool code_unavailable, bool diagnostic_code, const double* code_residual_m,
-                  bool diagnostic_doppler, const double* doppler_residual_mps) {
+void update_group(Accumulator* accumulator, const ResidualContext& context, bool code_unavailable, bool diagnostic_code,
+                  const double* code_residual_m, bool diagnostic_doppler, const double* doppler_residual_mps) {
     ++accumulator->rows;
     if (code_unavailable) {
         ++accumulator->code_unavailable;
     }
     if (code_residual_m != nullptr) {
         const double absolute = std::fabs(*code_residual_m);
+        if (accumulator->code_abs.empty() || absolute > accumulator->code_max_abs_m) {
+            accumulator->code_max_abs_m = absolute;
+            accumulator->code_max_gps_week = context.gps_week;
+            accumulator->code_max_sow_sec = context.sow_sec;
+            accumulator->code_max_elevation_deg = context.elevation_deg;
+        }
         accumulator->code_abs.push_back(absolute);
         accumulator->code_sum_squares += (*code_residual_m) * (*code_residual_m);
         if (diagnostic_code) {
@@ -211,6 +231,12 @@ void update_group(Accumulator* accumulator, bool code_unavailable, bool diagnost
     }
     if (doppler_residual_mps != nullptr) {
         const double absolute = std::fabs(*doppler_residual_mps);
+        if (accumulator->doppler_abs.empty() || absolute > accumulator->doppler_max_abs_mps) {
+            accumulator->doppler_max_abs_mps = absolute;
+            accumulator->doppler_max_gps_week = context.gps_week;
+            accumulator->doppler_max_sow_sec = context.sow_sec;
+            accumulator->doppler_max_elevation_deg = context.elevation_deg;
+        }
         accumulator->doppler_abs.push_back(absolute);
         accumulator->doppler_sum_squares += (*doppler_residual_mps) * (*doppler_residual_mps);
         if (diagnostic_doppler) {
@@ -220,14 +246,15 @@ void update_group(Accumulator* accumulator, bool code_unavailable, bool diagnost
 }
 
 void update_all_groups(std::map<GroupKey, Accumulator>* groups, const SignalDefinition* definition,
-                       const std::string& family, int satellite_number, bool code_unavailable, bool diagnostic_code,
-                       const double* code_residual_m, bool diagnostic_doppler, const double* doppler_residual_mps) {
-    update_group(&get_group(groups, 0, definition, "ALL", 0), code_unavailable, diagnostic_code, code_residual_m,
-                 diagnostic_doppler, doppler_residual_mps);
-    update_group(&get_group(groups, 1, definition, family, 0), code_unavailable, diagnostic_code, code_residual_m,
-                 diagnostic_doppler, doppler_residual_mps);
-    update_group(&get_group(groups, 2, definition, family, satellite_number), code_unavailable, diagnostic_code,
+                       const std::string& family, int satellite_number, const ResidualContext& context,
+                       bool code_unavailable, bool diagnostic_code, const double* code_residual_m,
+                       bool diagnostic_doppler, const double* doppler_residual_mps) {
+    update_group(&get_group(groups, 0, definition, "ALL", 0), context, code_unavailable, diagnostic_code,
                  code_residual_m, diagnostic_doppler, doppler_residual_mps);
+    update_group(&get_group(groups, 1, definition, family, 0), context, code_unavailable, diagnostic_code,
+                 code_residual_m, diagnostic_doppler, doppler_residual_mps);
+    update_group(&get_group(groups, 2, definition, family, satellite_number), context, code_unavailable,
+                 diagnostic_code, code_residual_m, diagnostic_doppler, doppler_residual_mps);
 }
 
 SummaryRow finalize_group(Accumulator* accumulator) {
@@ -247,13 +274,19 @@ SummaryRow finalize_group(Accumulator* accumulator) {
     row.diagnostic_doppler_rows = accumulator->diagnostic_doppler_rows;
     if (!accumulator->code_abs.empty()) {
         row.code_rms_m = std::sqrt(accumulator->code_sum_squares / static_cast<double>(accumulator->code_abs.size()));
-        row.code_max_abs_m = *std::max_element(accumulator->code_abs.begin(), accumulator->code_abs.end());
+        row.code_max_abs_m = accumulator->code_max_abs_m;
+        row.code_max_gps_week = accumulator->code_max_gps_week;
+        row.code_max_sow_sec = accumulator->code_max_sow_sec;
+        row.code_max_elevation_deg = accumulator->code_max_elevation_deg;
         row.code_p95_abs_m = percentile95(&accumulator->code_abs);
     }
     if (!accumulator->doppler_abs.empty()) {
         row.doppler_rms_mps =
             std::sqrt(accumulator->doppler_sum_squares / static_cast<double>(accumulator->doppler_abs.size()));
-        row.doppler_max_abs_mps = *std::max_element(accumulator->doppler_abs.begin(), accumulator->doppler_abs.end());
+        row.doppler_max_abs_mps = accumulator->doppler_max_abs_mps;
+        row.doppler_max_gps_week = accumulator->doppler_max_gps_week;
+        row.doppler_max_sow_sec = accumulator->doppler_max_sow_sec;
+        row.doppler_max_elevation_deg = accumulator->doppler_max_elevation_deg;
         row.doppler_p95_abs_mps = percentile95(&accumulator->doppler_abs);
     }
     return row;
@@ -310,6 +343,7 @@ bool validate_observation_truth(const ValidationOptions& options, ValidationRepo
         "receiver_vx_mps",
         "receiver_vy_mps",
         "receiver_vz_mps",
+        "elevation_deg",
         "cn0_dbhz",
         "broadcast_message_family",
         "code_bias_status",
@@ -368,6 +402,7 @@ bool validate_observation_truth(const ValidationOptions& options, ValidationRepo
 
             const int gps_week = std::stoi(fields[columns.at("gps_week")]);
             const double sow_sec = std::stod(fields[columns.at("sow_sec")]);
+            const double elevation_deg = std::stod(fields[columns.at("elevation_deg")]);
             const int satellite_number = std::stoi(fields[columns.at("satellite_number")]);
             if (satellite_number <= 0 || satellite_number > 255) {
                 throw std::runtime_error("invalid RTKLIB satellite number");
@@ -478,8 +513,10 @@ bool validate_observation_truth(const ValidationOptions& options, ValidationRepo
                 doppler_residual_ptr = &doppler_residual_mps;
             }
 
-            update_all_groups(&groups, definition, report_family, satellite_number, !pseudorange_valid, diagnostic_code,
-                              code_residual_ptr, diagnostic_doppler, doppler_residual_ptr);
+            const ResidualContext residual_context{gps_week, sow_sec, elevation_deg};
+            update_all_groups(&groups, definition, report_family, satellite_number, residual_context,
+                              !pseudorange_valid, diagnostic_code, code_residual_ptr, diagnostic_doppler,
+                              doppler_residual_ptr);
             ++report->input_rows;
         }
     } catch (const std::exception& exception) {
@@ -505,16 +542,20 @@ bool write_summary_csv(const ValidationReport& report, const std::string& output
         return false;
     }
     output << "scope,signal_id,signal_name,rinex_code,oem7_signal_type,family,satellite_number,rows,code_residuals,"
-              "code_unavailable,diagnostic_code_rows,code_rms_m,code_p95_abs_m,code_max_abs_m,doppler_residuals,"
-              "diagnostic_doppler_rows,doppler_rms_mps,doppler_p95_abs_mps,doppler_max_abs_mps\n";
+              "code_unavailable,diagnostic_code_rows,code_rms_m,code_p95_abs_m,code_max_abs_m,code_max_gps_week,"
+              "code_max_sow_sec,code_max_elevation_deg,doppler_residuals,diagnostic_doppler_rows,doppler_rms_mps,"
+              "doppler_p95_abs_mps,doppler_max_abs_mps,doppler_max_gps_week,doppler_max_sow_sec,"
+              "doppler_max_elevation_deg\n";
     output << std::fixed << std::setprecision(12);
     for (const SummaryRow& row : report.rows) {
         output << row.scope << ',' << row.signal_id << ',' << row.signal_name << ',' << row.rinex_code << ','
                << row.oem7_signal_type << ',' << row.family << ',' << row.satellite_number << ',' << row.rows << ','
                << row.code_residuals << ',' << row.code_unavailable << ',' << row.diagnostic_code_rows << ','
                << row.code_rms_m << ',' << row.code_p95_abs_m << ',' << row.code_max_abs_m << ','
+               << row.code_max_gps_week << ',' << row.code_max_sow_sec << ',' << row.code_max_elevation_deg << ','
                << row.doppler_residuals << ',' << row.diagnostic_doppler_rows << ',' << row.doppler_rms_mps << ','
-               << row.doppler_p95_abs_mps << ',' << row.doppler_max_abs_mps << '\n';
+               << row.doppler_p95_abs_mps << ',' << row.doppler_max_abs_mps << ',' << row.doppler_max_gps_week << ','
+               << row.doppler_max_sow_sec << ',' << row.doppler_max_elevation_deg << '\n';
     }
     output.flush();
     if (!output) {

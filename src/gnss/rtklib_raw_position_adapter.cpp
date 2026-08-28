@@ -7,7 +7,6 @@ extern "C" {
 
 #include <cmath>
 #include <cstdio>
-#include <cstring>
 
 namespace gnss_sim {
 
@@ -17,9 +16,6 @@ struct RtklibNavStore {
 
 namespace {
 
-constexpr double kSpeedOfLightMps = 299792458.0;
-constexpr double kRadiansPerDegree = 3.141592653589793238462643383279502884 / 180.0;
-
 void set_error(std::string* error_message, const char* message) {
     if (error_message != nullptr) {
         *error_message = message;
@@ -28,38 +24,6 @@ void set_error(std::string* error_message, const char* message) {
 
 bool valid_time(int gps_week, double sow_sec) {
     return gps_week >= 0 && std::isfinite(sow_sec) && sow_sec >= 0.0 && sow_sec < 604800.0;
-}
-
-void copy_diagnostic(char destination[128], const char* source) {
-    if (source == nullptr) {
-        destination[0] = '\0';
-        return;
-    }
-    std::snprintf(destination, 128, "%s", source);
-}
-
-prcopt_t solution_options(double elevation_mask_deg, bool broadcast_atmosphere) {
-    prcopt_t options = prcopt_default;
-    options.mode = PMODE_SINGLE;
-    options.nf = 1;
-    options.navsys = SYS_GPS | SYS_GLO | SYS_GAL | SYS_QZS | SYS_CMP;
-    options.elmin = elevation_mask_deg * kRadiansPerDegree;
-    options.sateph = EPHOPT_BRDC;
-    options.ionoopt = broadcast_atmosphere ? IONOOPT_BRDC : IONOOPT_OFF;
-    options.tropopt = broadcast_atmosphere ? TROPOPT_SAAS : TROPOPT_OFF;
-    options.posopt[4] = 0;
-    return options;
-}
-
-unsigned char snr_quarter_dbhz(double cn0_dbhz) {
-    if (!std::isfinite(cn0_dbhz) || cn0_dbhz <= 0.0) {
-        return 0;
-    }
-    double scaled = cn0_dbhz * 4.0;
-    if (scaled > 255.0) {
-        scaled = 255.0;
-    }
-    return static_cast<unsigned char>(scaled + 0.5);
 }
 
 int required_message_mask(int system, RtklibBroadcastMessageFamily family) {
@@ -96,47 +60,66 @@ int required_message_mask(int system, RtklibBroadcastMessageFamily family) {
     return 0;
 }
 
-bool append_solution_ephemeris(const nav_t& source_nav, gtime_t time, const RtklibRawCodeObservation& observation,
-                               nav_t* solver_nav, eph_t solver_eph[MAXOBS], geph_t solver_geph[MAXOBS]) {
-    if (solver_nav == nullptr || observation.satellite_number <= 0 || observation.observation_code <= 0 ||
-        observation.observation_code > 255) {
-        return false;
-    }
-    const int system = satsys(observation.satellite_number, nullptr);
-    const int mask = required_message_mask(system, observation.message_family);
-    if (mask == 0) {
+bool prepare_raw_observation(const RtklibNavStore* receiver_snapshot, gtime_t epoch_time,
+                             const RtklibRawCodeObservation& source, int index,
+                             RtklibSolutionObservation* destination, std::string* error_message) {
+    if (receiver_snapshot == nullptr || destination == nullptr || !source.pseudorange_valid ||
+        source.satellite_number <= 0 || source.satellite_number > MAXSAT || source.observation_code <= 0 ||
+        source.observation_code > 255 || !std::isfinite(source.pseudorange_m) || source.pseudorange_m <= 0.0 ||
+        !std::isfinite(source.cn0_dbhz)) {
+        if (error_message != nullptr) {
+            char message[160]{};
+            std::snprintf(message, sizeof(message), "raw RANGEA observation %d is invalid", index);
+            *error_message = message;
+        }
         return false;
     }
 
-    eph_t eph{};
-    geph_t geph{};
-    if (rtklib_signal_ephemeris_ext(time, observation.satellite_number,
-                                    static_cast<unsigned char>(observation.observation_code), mask, &source_nav, &eph,
-                                    &geph, nullptr) != 1) {
+    const int system = satsys(source.satellite_number, nullptr);
+    const int message_mask = required_message_mask(system, source.message_family);
+    if (message_mask == 0) {
+        if (error_message != nullptr) {
+            char message[192]{};
+            std::snprintf(message, sizeof(message),
+                          "raw RANGEA observation %d has unsupported message family: sat=%d code=%d", index,
+                          source.satellite_number, source.observation_code);
+            *error_message = message;
+        }
         return false;
     }
-    if (system == SYS_GLO) {
-        if (solver_nav->ng >= MAXOBS) {
-            return false;
+
+    double rtklib_code_bias_m = 0.0;
+    rtklib_signal_bias_info_ext_t bias_info{};
+    const int bias_status =
+        rtklib_signal_code_bias_ext(epoch_time, source.satellite_number,
+                                    static_cast<unsigned char>(source.observation_code), message_mask,
+                                    &receiver_snapshot->nav, &rtklib_code_bias_m, &bias_info);
+    if (bias_status != 1 || !std::isfinite(rtklib_code_bias_m)) {
+        if (error_message != nullptr) {
+            char message[224]{};
+            std::snprintf(message, sizeof(message),
+                          "raw RANGEA observation %d has no receiver-available matching ephemeris/code bias: "
+                          "sat=%d code=%d mask=%d status=%d",
+                          index, source.satellite_number, source.observation_code, message_mask, bias_status);
+            *error_message = message;
         }
-        solver_geph[solver_nav->ng++] = geph;
-    } else {
-        if (solver_nav->n >= MAXOBS) {
-            return false;
-        }
-        solver_eph[solver_nav->n++] = eph;
+        return false;
     }
+
+    RtklibSolutionObservation converted{};
+    converted.satellite_number = source.satellite_number;
+    converted.observation_code = source.observation_code;
+    converted.message_family = source.message_family;
+    converted.pseudorange_m = source.pseudorange_m;
+    // The maintained solution adapter computes:
+    // solver_P = observation_P - code_bias_m + RTKLIB_code_bias.
+    // Supplying the same RTKLIB bias here preserves the serialized raw
+    // pseudorange exactly before pntpos() applies its own code-bias correction.
+    converted.code_bias_m = rtklib_code_bias_m;
+    converted.cn0_dbhz = source.cn0_dbhz;
+    converted.pseudorange_valid = true;
+    *destination = converted;
     return true;
-}
-
-void fill_observation(const RtklibRawCodeObservation& source, gtime_t time, obsd_t* destination) {
-    std::memset(destination, 0, sizeof(*destination));
-    destination->time = time;
-    destination->sat = static_cast<unsigned char>(source.satellite_number);
-    destination->rcv = 1;
-    destination->P[0] = source.pseudorange_m;
-    destination->SNR[0] = snr_quarter_dbhz(source.cn0_dbhz);
-    destination->code[0] = static_cast<unsigned char>(source.observation_code);
 }
 
 } // namespace
@@ -145,77 +128,50 @@ bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gp
                                       const RtklibRawCodeObservation* observations, int observation_count,
                                       double elevation_mask_deg, bool broadcast_atmosphere,
                                       RtklibPositionSolution* solution, std::string* error_message) {
-    if (receiver_nav == nullptr || observations == nullptr || observation_count < 0 || solution == nullptr ||
-        !valid_time(gps_week, sow_sec) || !std::isfinite(elevation_mask_deg) || elevation_mask_deg < -90.0 ||
-        elevation_mask_deg > 90.0) {
-        set_error(error_message, "raw position-solution request has invalid arguments");
+    if (receiver_nav == nullptr || observations == nullptr || observation_count < 0 || observation_count > MAXOBS ||
+        solution == nullptr || !valid_time(gps_week, sow_sec) || !std::isfinite(elevation_mask_deg) ||
+        elevation_mask_deg < -90.0 || elevation_mask_deg > 90.0) {
+        set_error(error_message, "raw position-solution request has invalid arguments or exceeds MAXOBS");
         return false;
     }
 
-    RtklibPositionSolution result{};
-    obsd_t rtklib_observations[MAXOBS]{};
-    eph_t solver_eph[MAXOBS]{};
-    geph_t solver_geph[MAXOBS]{};
-    nav_t solver_nav = receiver_nav->nav;
-    solver_nav.eph = solver_eph;
-    solver_nav.n = 0;
-    solver_nav.nmax = MAXOBS;
-    solver_nav.geph = solver_geph;
-    solver_nav.ng = 0;
-    solver_nav.ngmax = MAXOBS;
+    RtklibNavStore* receiver_snapshot = create_rtklib_nav_store();
+    if (receiver_snapshot == nullptr) {
+        set_error(error_message, "cannot allocate receiver-available NAV snapshot for raw RANGEA positioning");
+        return false;
+    }
+    if (!rtklib_copy_nav_snapshot(receiver_nav, gps_week, sow_sec, receiver_snapshot, error_message)) {
+        destroy_rtklib_nav_store(receiver_snapshot);
+        return false;
+    }
+
     const gtime_t epoch_time = gpst2time(gps_week, sow_sec);
-    bool used_satellite[MAXSAT]{};
-    int usable_count = 0;
-
-    for (int index = 0; index < observation_count && usable_count < MAXOBS; ++index) {
+    RtklibSolutionObservation converted[MAXOBS]{};
+    bool seen_satellite[MAXSAT]{};
+    for (int index = 0; index < observation_count; ++index) {
         const RtklibRawCodeObservation& source = observations[index];
-        if (!source.pseudorange_valid || source.satellite_number <= 0 || source.satellite_number > MAXSAT ||
-            source.observation_code <= 0 || source.observation_code > 255 || !std::isfinite(source.pseudorange_m) ||
-            source.pseudorange_m <= 0.0 || !std::isfinite(source.cn0_dbhz) ||
-            used_satellite[source.satellite_number - 1]) {
-            continue;
+        if (source.satellite_number > 0 && source.satellite_number <= MAXSAT &&
+            seen_satellite[source.satellite_number - 1]) {
+            if (error_message != nullptr) {
+                char message[160]{};
+                std::snprintf(message, sizeof(message), "raw RANGEA positioning received duplicate satellite %d",
+                              source.satellite_number);
+                *error_message = message;
+            }
+            destroy_rtklib_nav_store(receiver_snapshot);
+            return false;
         }
-        if (!append_solution_ephemeris(receiver_nav->nav, epoch_time, source, &solver_nav, solver_eph, solver_geph)) {
-            continue;
+        if (!prepare_raw_observation(receiver_snapshot, epoch_time, source, index, &converted[index], error_message)) {
+            destroy_rtklib_nav_store(receiver_snapshot);
+            return false;
         }
-        fill_observation(source, epoch_time, &rtklib_observations[usable_count]);
-        used_satellite[source.satellite_number - 1] = true;
-        ++usable_count;
+        seen_satellite[source.satellite_number - 1] = true;
     }
 
-    if (usable_count < 4) {
-        copy_diagnostic(result.diagnostic, "insufficient valid raw pseudorange observations");
-        *solution = result;
-        return true;
-    }
-
-    prcopt_t options = solution_options(elevation_mask_deg, broadcast_atmosphere);
-    sol_t rtklib_solution{};
-    char message[128]{};
-    const int status =
-        pntpos(rtklib_observations, usable_count, &solver_nav, &options, &rtklib_solution, nullptr, nullptr, message);
-    copy_diagnostic(result.diagnostic, message);
-    if (status == 0) {
-        *solution = result;
-        return true;
-    }
-
-    result.valid = true;
-    for (int index = 0; index < 3; ++index) {
-        result.position_ecef_m[index] = rtklib_solution.rr[index];
-    }
-    double position_rad[3]{};
-    ecef2pos(result.position_ecef_m, position_rad);
-    result.latitude_deg = position_rad[0] / kRadiansPerDegree;
-    result.longitude_deg = position_rad[1] / kRadiansPerDegree;
-    result.height_m = position_rad[2];
-    result.receiver_clock_bias_m = rtklib_solution.dtr[0] * kSpeedOfLightMps;
-    for (int index = 0; index < 6; ++index) {
-        result.covariance_ecef_m2[index] = static_cast<double>(rtklib_solution.qr[index]);
-    }
-    result.used_satellites = static_cast<int>(rtklib_solution.ns);
-    *solution = result;
-    return true;
+    const bool solved = rtklib_solve_single_position(receiver_snapshot, gps_week, sow_sec, converted, observation_count,
+                                                      elevation_mask_deg, broadcast_atmosphere, solution, error_message);
+    destroy_rtklib_nav_store(receiver_snapshot);
+    return solved;
 }
 
 } // namespace gnss_sim

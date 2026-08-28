@@ -13,42 +13,23 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
         with:
           ref: issue-51-all-signal-residuals
-      - name: Scan provenance-fixed DLR daily files for GPS CNV2
+      - name: Extract first GPS CNV2 block from provenance-pinned DLR fixture
         run: |
           set -euo pipefail
-          found=0
-          for spec in \
-            2025:003 \
-            2025:075 \
-            2025:180 \
-            2026:001 \
-            2026:068 \
-            2026:180 \
-            2026:238
-          do
-            year="${spec%%:*}"
-            doy="${spec##*:}"
-            file="BRD400DLR_S_${year}${doy}0000_01D_MN.rnx.gz"
-            url="https://igs.bkg.bund.de/root_ftp/IGS/BRDC/${year}/${doy}/${file}"
-            echo "SCAN ${url}"
-            if ! curl -fsSL --connect-timeout 5 --max-time 20 --retry 1 "${url}" -o "/tmp/${file}"; then
-              echo "DOWNLOAD_MISSING_OR_TIMEOUT year=${year} doy=${doy}"
-              continue
-            fi
-            gunzip -c "/tmp/${file}" > "/tmp/${file%.gz}"
-            count="$(grep -Ec '^> EPH G[0-9][0-9] CNV2' "/tmp/${file%.gz}" || true)"
-            cnav="$(grep -Ec '^> EPH G[0-9][0-9] CNAV' "/tmp/${file%.gz}" || true)"
-            echo "GPS_MODERN_RAW year=${year} doy=${doy} cnav=${cnav} cnv2=${count}"
-            if [ "${count}" -gt 0 ]; then
-              echo "GPS_CNV2_SOURCE year=${year} doy=${doy} url=${url}"
-              python - "/tmp/${file%.gz}" <<'PY'
-          import sys
+          url='https://raw.githubusercontent.com/h-shiono/MRTKLIB/8781ebf1448251544be7c7273a06176641510c24/tests/data/rinex4/BRD400DLR_S_20260680000_01D_MN.rnx.gz'
+          echo "GPS_CNV2_PROVENANCE repo=h-shiono/MRTKLIB commit=8781ebf1448251544be7c7273a06176641510c24 file=BRD400DLR_S_20260680000_01D_MN.rnx.gz"
+          curl -fsSL --connect-timeout 5 --max-time 60 --retry 2 --retry-delay 1 "${url}" -o /tmp/brd4.rnx.gz
+          gunzip -c /tmp/brd4.rnx.gz > /tmp/brd4.rnx
+          echo "GPS_CNV2_COUNT=$(grep -Ec '^> EPH G[0-9][0-9] CNV2' /tmp/brd4.rnx || true)"
+          echo "GPS_CNAV_COUNT=$(grep -Ec '^> EPH G[0-9][0-9] CNAV' /tmp/brd4.rnx || true)"
+          python - <<'PY'
           from pathlib import Path
-          lines = Path(sys.argv[1]).read_text().splitlines()
+          lines = Path('/tmp/brd4.rnx').read_text().splitlines()
           for i, line in enumerate(lines):
               if line.startswith('> EPH G') and line.rstrip().endswith(' CNV2'):
                   print('GPS_CNV2_BLOCK_BEGIN')
@@ -60,9 +41,6 @@ jobs:
                       j += 1
                   print('GPS_CNV2_BLOCK_END')
                   break
+          else:
+              raise SystemExit('no GPS CNV2 block in pinned DLR fixture')
           PY
-              found=1
-              break
-            fi
-          done
-          test "${found}" -eq 1

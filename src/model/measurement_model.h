@@ -60,7 +60,11 @@ void reset_carrier_ambiguity_state(CarrierAmbiguityState* state);
 bool compute_broadcast_code_bias_m(const SignalDefinition& signal, const RtklibBroadcastBiasData& bias_data,
                                    double* code_bias_m, BroadcastCodeBiasStatus* status, std::string* error_message);
 
-bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const SatelliteGeometry& geometry,
+// For a broadcast signal with a matching real RINEX message family, geometry is
+// refined in place using that exact family before the final atmosphere and
+// measurement terms are formed. This keeps the caller's geometry/truth output
+// synchronized with the physical state used by pseudorange, Doppler, and ADR.
+bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, SatelliteGeometry& geometry,
                                      const ReceiverTruth& receiver, const SignalTracker& tracker,
                                      const AtmosphereCorrection& atmosphere, CarrierAmbiguityState* ambiguity_state,
                                      MeasurementObservation* observation, std::string* error_message);

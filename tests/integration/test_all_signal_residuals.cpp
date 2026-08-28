@@ -45,6 +45,18 @@ std::string gps_cnv2_nav_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/gps_cnv2_g04_2022278.rnx";
 }
 
+std::string jrc_has_sp3_path() {
+    return std::string(GNSS_SIM_TEST_DATA_DIR) + "/jrc_has_2026001_e02.sp3";
+}
+
+std::string jrc_has_clock_path() {
+    return std::string(GNSS_SIM_TEST_DATA_DIR) + "/jrc_has_2026001_e02.clk";
+}
+
+std::string jrc_has_bias_path() {
+    return std::string(GNSS_SIM_TEST_DATA_DIR) + "/jrc_has_2026001_e02_c6c.bia";
+}
+
 double rinex4_field(const std::string& line, std::size_t offset) {
     return std::stod(line.substr(offset, 19));
 }
@@ -645,6 +657,128 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
         free_nav(cnv2_nav.get());
     }
 
+    // Official JRC Galileo HAS E6 companion. The RINEX NAV path supplies only
+    // the simulator's constellation/signal roster here; its 2025 ephemerides
+    // are deliberately stale at this 2026 epoch. Galileo E6 must therefore be
+    // generated from JRC HAS precise orbit/clock + C6C OSB, and the RTKLIB
+    // explicit-state oracle validates the exact truth state written by the
+    // simulator without reinterpreting HAS as INAV/FNAV broadcast data.
+    {
+        gnss_sim::SimConfig config = base_config;
+        config.atmosphere_mode = gnss_sim::AtmosphereMode::NONE;
+        config.receiver = {-43.2162386, -15.4759141, 100.0};
+        config.duration_ns = 60LL * gnss_sim::NANOSECONDS_PER_SECOND;
+        gnss_sim::SimTime has_start{};
+        ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2399, 346100.0, &has_start));
+
+        const std::filesystem::path has_directory = directory / "galileo_e6_jrc_has";
+        ASSERT_TRUE(std::filesystem::create_directories(has_directory, filesystem_error));
+        ASSERT_FALSE(filesystem_error);
+        const std::filesystem::path has_output_path = has_directory / "simulated.log";
+        const std::string has_output_text = has_output_path.string();
+        const std::string has_nav_text = brd4_nav_path();
+        const std::string has_sp3_text = jrc_has_sp3_path();
+        const std::string has_clock_text = jrc_has_clock_path();
+        const std::string has_bias_text = jrc_has_bias_path();
+        const gnss_sim::SimulatorRunOptions has_options{
+            has_nav_text.c_str(),   has_output_text.c_str(), has_start, nullptr, has_sp3_text.c_str(),
+            has_clock_text.c_str(), has_bias_text.c_str()};
+        gnss_sim::SimulatorRunSummary has_summary{};
+        std::string has_error_message;
+        ASSERT_TRUE(gnss_sim::run_simulator(config, has_options, &has_summary, &has_error_message))
+            << has_error_message;
+
+        prcopt_t has_residual_options = residual_options;
+        has_residual_options.ionoopt = IONOOPT_OFF;
+        has_residual_options.tropopt = TROPOPT_OFF;
+
+        std::ifstream input(has_directory / "observation_truth.csv");
+        ASSERT_TRUE(input.good());
+        std::string line;
+        ASSERT_TRUE(static_cast<bool>(std::getline(input, line)));
+        const std::map<std::string, std::size_t> column = header_columns(line);
+        std::uint64_t has_e6_rows = 0;
+        while (std::getline(input, line)) {
+            if (line.empty())
+                continue;
+            const std::vector<std::string> fields = split_csv(line);
+            ASSERT_EQ(fields.size(), column.size());
+            if (fields[column.at("signal_name")] != "Galileo E6")
+                continue;
+
+            seen_signals.insert("Galileo E6");
+            SignalResidualStats& signal_stats = stats["Galileo E6"];
+            ++signal_stats.rows;
+            ASSERT_EQ(fields[column.at("broadcast_message_family")], "UNKNOWN");
+            ASSERT_EQ(fields[column.at("code_bias_status")], "APPLIED");
+            ASSERT_EQ(fields[column.at("pseudorange_valid")], "1");
+            ASSERT_EQ(fields[column.at("doppler_valid")], "1");
+
+            const gnss_sim::SignalDefinition* definition =
+                gnss_sim::find_signal_definition(gnss_sim::SignalId::kGalileoE6);
+            ASSERT_NE(definition, nullptr);
+            int observation_code = 0;
+            int frequency_index = 0;
+            ASSERT_TRUE(gnss_sim::signal_rtklib_observation_code(*definition, &observation_code, &frequency_index));
+            static_cast<void>(frequency_index);
+
+            obsd_t observation{};
+            observation.time =
+                gpst2time(std::stoi(fields[column.at("gps_week")]), std::stod(fields[column.at("sow_sec")]));
+            observation.sat = static_cast<unsigned char>(std::stoi(fields[column.at("satellite_number")]));
+            observation.rcv = 1;
+            observation.code[0] = static_cast<unsigned char>(observation_code);
+            observation.SNR[0] = static_cast<unsigned char>(
+                std::clamp(std::lround(std::stod(fields[column.at("cn0_dbhz")]) * 4.0), 0L, 255L));
+            observation.P[0] = std::stod(fields[column.at("pseudorange_m")]);
+            observation.D[0] = static_cast<float>(std::stod(fields[column.at("doppler_hz")]));
+
+            char satellite_id[16]{};
+            satno2id(observation.sat, satellite_id);
+            ASSERT_STREQ(satellite_id, "E02");
+
+            const double receiver_position_m[3] = {std::stod(fields[column.at("receiver_x_m")]),
+                                                   std::stod(fields[column.at("receiver_y_m")]),
+                                                   std::stod(fields[column.at("receiver_z_m")])};
+            const double receiver_velocity_mps[3] = {std::stod(fields[column.at("receiver_vx_mps")]),
+                                                     std::stod(fields[column.at("receiver_vy_mps")]),
+                                                     std::stod(fields[column.at("receiver_vz_mps")])};
+            const double satellite_state[6] = {
+                std::stod(fields[column.at("satellite_x_m")]),    std::stod(fields[column.at("satellite_y_m")]),
+                std::stod(fields[column.at("satellite_z_m")]),    std::stod(fields[column.at("satellite_vx_mps")]),
+                std::stod(fields[column.at("satellite_vy_mps")]), std::stod(fields[column.at("satellite_vz_mps")])};
+            const double satellite_clock[2] = {std::stod(fields[column.at("satellite_clock_bias_m")]) / CLIGHT,
+                                               std::stod(fields[column.at("satellite_clock_drift_mps")]) / CLIGHT};
+            const double wavelength_m = std::stod(fields[column.at("wavelength_m")]);
+            const double code_bias_m = std::stod(fields[column.at("code_bias_m")]);
+
+            double code_residual_m = 0.0;
+            const int code_status = rtklib_rescode_state_ext(
+                &observation, &nav, &has_residual_options, receiver_position_m, 0.0, 0.0, satellite_state,
+                satellite_clock, 0, code_bias_m, wavelength_m, &code_residual_m, nullptr);
+            ASSERT_EQ(code_status, 1) << "JRC HAS E6 code residual failed at sow=" << fields[column.at("sow_sec")];
+            ++signal_stats.code_residuals;
+            signal_stats.max_abs_code_m = (std::max)(signal_stats.max_abs_code_m, std::fabs(code_residual_m));
+
+            double doppler_residual_mps = 0.0;
+            const int doppler_status = rtklib_resdop_state_ext(
+                &observation, &has_residual_options, receiver_position_m, receiver_velocity_mps, 0.0, satellite_state,
+                satellite_clock, 0, wavelength_m, &doppler_residual_mps, nullptr);
+            ASSERT_EQ(doppler_status, 1) << "JRC HAS E6 Doppler residual failed at sow="
+                                         << fields[column.at("sow_sec")];
+            ++signal_stats.doppler_residuals;
+            signal_stats.max_abs_doppler_mps =
+                (std::max)(signal_stats.max_abs_doppler_mps, std::fabs(doppler_residual_mps));
+            ++has_e6_rows;
+        }
+        ASSERT_GT(has_e6_rows, 0U) << "official JRC HAS fixture must exercise Galileo E6 residuals";
+        std::fprintf(
+            stderr,
+            "GALILEO_HAS_E6_COVERAGE rows=%llu max_abs_code=%.9f max_abs_doppler=%.9f source=JRC_HAS_2026001_E02\n",
+            static_cast<unsigned long long>(has_e6_rows), stats["Galileo E6"].max_abs_code_m,
+            stats["Galileo E6"].max_abs_doppler_mps);
+    }
+
     std::size_t definition_count = 0;
     const gnss_sim::SignalDefinition* definitions = gnss_sim::signal_definitions(&definition_count);
     ASSERT_NE(definitions, nullptr);
@@ -671,8 +805,10 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
                      signal_name.c_str(), static_cast<unsigned long long>(signal_stats.code_residuals),
                      static_cast<unsigned long long>(signal_stats.code_unavailable), signal_stats.max_abs_code_m);
         if (signal_name == "Galileo E6") {
-            EXPECT_EQ(signal_stats.code_residuals, 0U) << "E6 must remain unavailable until HAS code bias is modeled";
-            EXPECT_GT(signal_stats.code_unavailable, 0U);
+            EXPECT_GT(signal_stats.code_residuals, 0U)
+                << "official JRC HAS products must exercise Galileo E6 code residuals";
+            EXPECT_GT(signal_stats.code_unavailable, 0U)
+                << "the compact BRD400 fixture must still expose missing HAS explicitly";
         } else if (signal_name == "GPS L1C") {
             EXPECT_GT(signal_stats.code_residuals, 0U)
                 << "provenance-fixed real G04 CNV2 must exercise L1C diagnostic code residual";
@@ -684,8 +820,8 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
         }
     }
     std::fprintf(stderr, "CODE_COVERAGE_UNION covered=%zu total=21\n", code_covered_signal_count);
-    EXPECT_EQ(code_covered_signal_count, 20U)
-        << "only Galileo E6/HAS may remain code-unavailable after real GPS CNV2 validation";
+    EXPECT_EQ(code_covered_signal_count, 21U)
+        << "official JRC HAS E6 companion must complete all 21 V1 code-residual paths";
 
     free_nav(&nav);
     std::filesystem::remove_all(directory, filesystem_error);

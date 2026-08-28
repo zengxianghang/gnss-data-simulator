@@ -34,7 +34,7 @@ constexpr ExpectedSignal kExpectedSignals[] = {
     {gnss_sim::SignalId::kGalileoE1, gnss_sim::GnssConstellation::kGalileo, "1C", 2},
     {gnss_sim::SignalId::kGalileoE5A, gnss_sim::GnssConstellation::kGalileo, "5Q", 12},
     {gnss_sim::SignalId::kGalileoE5B, gnss_sim::GnssConstellation::kGalileo, "7Q", 17},
-    {gnss_sim::SignalId::kGalileoE6, gnss_sim::GnssConstellation::kGalileo, "6B", 6},
+    {gnss_sim::SignalId::kGalileoE6, gnss_sim::GnssConstellation::kGalileo, "6C", 7},
     {gnss_sim::SignalId::kBeidouB1I, gnss_sim::GnssConstellation::kBeidou, "2I", 0},
     {gnss_sim::SignalId::kBeidouB3I, gnss_sim::GnssConstellation::kBeidou, "6I", 2},
     {gnss_sim::SignalId::kBeidouB1C, gnss_sim::GnssConstellation::kBeidou, "1P", 7},
@@ -83,6 +83,15 @@ TEST(SignalDefinitions, FrozenMappingsMatchExpectedValuesAndRoundTrip) {
         EXPECT_GT(rtklib_code, 0);
         EXPECT_GT(frequency_index, 0);
     }
+}
+
+TEST(SignalDefinitions, GalileoE6UsesHasCodeBiasObservable) {
+    const auto* e6 = gnss_sim::find_signal_definition(gnss_sim::SignalId::kGalileoE6);
+    ASSERT_NE(e6, nullptr);
+    EXPECT_STREQ(e6->rinex_signal_code, "6C");
+    EXPECT_EQ(e6->novatel_oem7_signal_type, 7);
+    EXPECT_EQ(gnss_sim::find_signal_definition_by_rinex(gnss_sim::GnssConstellation::kGalileo, "6B"), nullptr);
+    EXPECT_EQ(gnss_sim::find_signal_definition_by_oem7(gnss_sim::GnssConstellation::kGalileo, 6), nullptr);
 }
 
 TEST(SignalDefinitions, ModernBeidouCodesResolveThroughPinnedRtklib) {

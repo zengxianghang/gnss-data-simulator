@@ -58,9 +58,14 @@ probe = r'''TEST(V1Acceptance, RealDlrGpsModernCompanionsExposePinnedRtklibStatu
 
             bool all_bias_available = true;
             for (std::size_t signal_index = 0; signal_index < signal_count; ++signal_index) {
+                int observation_code = 0;
                 int frequency_index = 0;
-                const unsigned char code = obs2code_ext(signals[signal_index].rinex_code, &frequency_index);
-                ASSERT_NE(code, CODE_NONE) << signals[signal_index].name;
+                ASSERT_TRUE(gnss_sim::rtklib_observation_code(signals[signal_index].rinex_code, &observation_code,
+                                                              &frequency_index))
+                    << signals[signal_index].name;
+                ASSERT_GT(observation_code, 0) << signals[signal_index].name;
+                ASSERT_LE(observation_code, 255) << signals[signal_index].name;
+                const unsigned char code = static_cast<unsigned char>(observation_code);
                 eph_t selected_eph{};
                 geph_t unused_geph{};
                 rtklib_signal_bias_info_ext_t eph_info{};

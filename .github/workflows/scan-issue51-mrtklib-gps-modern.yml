@@ -22,21 +22,21 @@ jobs:
           set -euo pipefail
           found=0
           for spec in \
-            2022:001 \
-            2023:001 \
-            2024:001 \
+            2025:003 \
             2025:075 \
-            2025:078 \
+            2025:180 \
+            2026:001 \
             2026:068 \
-            2026:180
+            2026:180 \
+            2026:238
           do
             year="${spec%%:*}"
             doy="${spec##*:}"
             file="BRD400DLR_S_${year}${doy}0000_01D_MN.rnx.gz"
             url="https://igs.bkg.bund.de/root_ftp/IGS/BRDC/${year}/${doy}/${file}"
             echo "SCAN ${url}"
-            if ! curl -fsSL --retry 2 --retry-delay 1 "${url}" -o "/tmp/${file}"; then
-              echo "DOWNLOAD_MISSING year=${year} doy=${doy}"
+            if ! curl -fsSL --connect-timeout 5 --max-time 20 --retry 1 "${url}" -o "/tmp/${file}"; then
+              echo "DOWNLOAD_MISSING_OR_TIMEOUT year=${year} doy=${doy}"
               continue
             fi
             gunzip -c "/tmp/${file}" > "/tmp/${file%.gz}"
@@ -52,8 +52,12 @@ jobs:
           for i, line in enumerate(lines):
               if line.startswith('> EPH G') and line.rstrip().endswith(' CNV2'):
                   print('GPS_CNV2_BLOCK_BEGIN')
-                  for row in lines[i:i+11]:
-                      print(row)
+                  j = i
+                  while j < len(lines):
+                      if j > i and lines[j].startswith('>'):
+                          break
+                      print(lines[j])
+                      j += 1
                   print('GPS_CNV2_BLOCK_END')
                   break
           PY

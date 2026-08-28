@@ -6,7 +6,6 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
-#include <iomanip>
 #include <iostream>
 #include <iterator>
 #include <sstream>
@@ -30,7 +29,7 @@ gnss_sim::SimConfig config() {
     value.atmosphere_mode = gnss_sim::AtmosphereMode::BROADCAST;
     value.sampling_rate_hz = 1;
     value.duration_ns = 60LL * gnss_sim::NANOSECONDS_PER_SECOND;
-    value.elevation_mask_deg = 0.0;
+    value.elevation_mask_deg = 3.0;
     value.receiver = {20.0, 120.0, 100.0};
     value.measurement_noise_enabled = false;
     value.multipath_enabled = false;
@@ -79,19 +78,18 @@ TEST(RangeaRoundtripIntegration, RealWhuRinex4SerializedRangeaPositionsWithinHal
     gnss_sim::RangeaRoundtripSummary roundtrip{};
     const std::string log_path = (directory / "simulated.log").string();
     const std::string nav_path = brd4_nav_path();
-    ASSERT_TRUE(gnss_sim::validate_rangea_roundtrip_file(log_path.c_str(), nav_path.c_str(), 20.0, 120.0, 100.0, 0.0,
+    ASSERT_TRUE(gnss_sim::validate_rangea_roundtrip_file(log_path.c_str(), nav_path.c_str(), 20.0, 120.0, 100.0, 3.0,
                                                          true, &roundtrip, &error_message))
         << error_message;
-    std::cout << std::fixed << std::setprecision(9)
-              << "rangea_roundtrip_max_3d_error_m=" << roundtrip.max_position_error_m << '\n'
-              << "rangea_roundtrip_max_error_gpst=" << roundtrip.max_error_gps_week << '/'
-              << roundtrip.max_error_sow_sec << '\n'
-              << "rangea_roundtrip_valid_position_epochs=" << roundtrip.valid_position_epochs << '\n';
     EXPECT_EQ(roundtrip.range_epochs, simulator_summary.range_messages);
     EXPECT_GT(roundtrip.parsed_observations, 0U);
     EXPECT_GT(roundtrip.selected_position_observations, 0U);
     EXPECT_EQ(roundtrip.valid_position_epochs, simulator_summary.valid_position_epochs)
         << "serialized RANGEA and the maintained in-memory SPP path must agree on position availability";
+    std::cout << "rangea_roundtrip_max_3d_error_m=" << roundtrip.max_position_error_m << '\n';
+    std::cout << "rangea_roundtrip_max_error_gpst=" << roundtrip.max_error_gps_week << '/'
+              << roundtrip.max_error_sow_sec << '\n';
+    std::cout << "rangea_roundtrip_valid_position_epochs=" << roundtrip.valid_position_epochs << '\n';
     EXPECT_LT(roundtrip.max_position_error_m, 0.5)
         << "serialized RANGEA must retain enough precision and mapping fidelity for RTKLIB SPP";
 
@@ -104,7 +102,7 @@ TEST(RangeaRoundtripIntegration, MalformedSerializedRangeaFailsExplicitly) {
     gnss_sim::RangeaRoundtripSummary summary{};
     std::string error_message;
     const std::string nav_path = brd4_nav_path();
-    EXPECT_FALSE(gnss_sim::validate_rangea_roundtrip_stream(&malformed, nav_path.c_str(), 20.0, 120.0, 100.0, 0.0, true,
+    EXPECT_FALSE(gnss_sim::validate_rangea_roundtrip_stream(&malformed, nav_path.c_str(), 20.0, 120.0, 100.0, 3.0, true,
                                                             &summary, &error_message));
     EXPECT_FALSE(error_message.empty());
 }
@@ -124,10 +122,10 @@ TEST(RangeaRoundtripIntegration, SameInputProducesIdenticalRoundtripResult) {
     const std::string second_log = (second_directory / "simulated.log").string();
     gnss_sim::RangeaRoundtripSummary first_roundtrip{};
     gnss_sim::RangeaRoundtripSummary second_roundtrip{};
-    ASSERT_TRUE(gnss_sim::validate_rangea_roundtrip_file(first_log.c_str(), nav_path.c_str(), 20.0, 120.0, 100.0, 0.0,
+    ASSERT_TRUE(gnss_sim::validate_rangea_roundtrip_file(first_log.c_str(), nav_path.c_str(), 20.0, 120.0, 100.0, 3.0,
                                                          true, &first_roundtrip, &error_message))
         << error_message;
-    ASSERT_TRUE(gnss_sim::validate_rangea_roundtrip_file(second_log.c_str(), nav_path.c_str(), 20.0, 120.0, 100.0, 0.0,
+    ASSERT_TRUE(gnss_sim::validate_rangea_roundtrip_file(second_log.c_str(), nav_path.c_str(), 20.0, 120.0, 100.0, 3.0,
                                                          true, &second_roundtrip, &error_message))
         << error_message;
 

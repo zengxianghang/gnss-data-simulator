@@ -34,19 +34,23 @@ For every RANGEA epoch, `rtklib_solve_raw_single_position()` first builds an RTK
 
 This is the HOT/KS availability convention already used when the simulator initializes receiver navigation from real RINEX. It makes the black-box gate safe across navigation handovers while retaining real RINEX values unchanged.
 
+A raw RANGE observation can legitimately be valid before the receiver has acquired the corresponding broadcast ephemeris. Such an observation is not sent to SPP for that epoch. This is distinguished from a mapping/provenance error: if the receiver snapshot lacks the family but the complete real RINEX contains a compatible record, the observation is classified as receiver-NAV-unavailable; if even the complete real RINEX cannot provide the serialized satellite/signal/message-family combination, validation fails explicitly.
+
 ## Raw RTKLIB positioning boundary
 
 The round-trip evaluator deliberately does not reconstruct or reuse simulator-owned `code_bias_m`.
 
 The raw adapter is intentionally thin. It does not implement a second SPP solver and does not call `pntpos()` directly. For each selected serialized observation it:
 
-1. requires a signal/message-family-compatible ephemeris and broadcast code-bias definition in the receiver-available NAV snapshot;
-2. fails the validation immediately if that match is unavailable instead of silently dropping the observation;
-3. obtains RTKLIB's broadcast code bias for that signal/family;
-4. passes the serialized pseudorange plus that matching bias metadata into the maintained `rtklib_solve_single_position()` adapter so its preprocessing preserves the serialized raw pseudorange unchanged;
-5. lets RTKLIB `pntpos()` apply the final TGD/BGD/ISC/DCB convention.
+1. validates the satellite, observation code, message-family mapping, pseudorange, and CN0;
+2. builds the receiver-available NAV snapshot for the RANGEA epoch;
+3. checks whether the receiver currently owns a compatible ephemeris/code-bias definition;
+4. skips only the legitimate receiver-NAV-unavailable case described above, while a combination unsupported by the complete real RINEX is a hard failure;
+5. obtains RTKLIB's broadcast code bias for each observation that can actually enter SPP;
+6. passes the serialized pseudorange plus that matching bias metadata into the maintained `rtklib_solve_single_position()` adapter so its preprocessing preserves the serialized raw pseudorange unchanged;
+7. lets RTKLIB `pntpos()` apply the final TGD/BGD/ISC/DCB convention.
 
-This reuses the production SPP adapter for solution options, ephemeris staging, `pntpos()` invocation, solution conversion, and diagnostics. The raw adapter only owns serialization-boundary validation and raw-pseudorange reconciliation.
+This reuses the production SPP adapter for solution options, ephemeris staging, `pntpos()` invocation, solution conversion, and diagnostics. The raw adapter only owns serialization-boundary validation, receiver-NAV availability, and raw-pseudorange reconciliation.
 
 ## Compact CI gate
 

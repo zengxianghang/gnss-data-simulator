@@ -7,6 +7,10 @@ on:
       - issue-51-all-signal-residuals
     paths:
       - .github/workflows/issue51-real-whu-10min.yml
+      - CMakeLists.txt
+      - third_party/RTKLIB
+      - tools/residual_validator/**
+      - src/**
 
 permissions:
   contents: read

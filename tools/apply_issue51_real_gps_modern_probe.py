@@ -3,16 +3,17 @@ from pathlib import Path
 path = Path("tests/integration/test_all_signal_residuals.cpp")
 text = path.read_text()
 
-old = '''#include <rtklib.h>
+if "#include <rtklib_signal_bias_ext.h>" not in text:
+    old = '''#include <rtklib.h>
 #include <rtklib_residual_ext.h>
 }'''
-new = '''#include <rtklib.h>
+    new = '''#include <rtklib.h>
 #include <rtklib_residual_ext.h>
 #include <rtklib_signal_bias_ext.h>
 }'''
-if text.count(old) != 1:
-    raise RuntimeError("RTKLIB include anchor mismatch")
-text = text.replace(old, new, 1)
+    if text.count(old) != 1:
+        raise RuntimeError("RTKLIB include anchor mismatch")
+    text = text.replace(old, new, 1)
 
 marker = '''TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) {'''
 if text.count(marker) != 1:

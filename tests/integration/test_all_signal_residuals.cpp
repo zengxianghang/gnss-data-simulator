@@ -20,6 +20,7 @@ extern "C" {
 #include <iomanip>
 #include <limits>
 #include <map>
+#include <memory>
 #include <set>
 #include <sstream>
 #include <string>
@@ -543,8 +544,8 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
     // diagnostic residual validation may ignore health while preserving the
     // real CNAV-2 orbit/clock and L1C ISC/code-bias model.
     {
-        nav_t cnv2_nav{};
-        ASSERT_TRUE(load_nav(gps_cnv2_nav_path(), &cnv2_nav));
+        auto cnv2_nav = std::make_unique<nav_t>();
+        ASSERT_TRUE(load_nav(gps_cnv2_nav_path(), cnv2_nav.get()));
 
         gnss_sim::SimConfig config = base_config;
         config.atmosphere_mode = gnss_sim::AtmosphereMode::NONE;
@@ -623,13 +624,13 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
             double code_residual_m = 0.0;
             rtklib_signal_bias_info_ext_t bias_info{};
             const int strict_status =
-                rtklib_rescode_signal_ext(&observation, &cnv2_nav, &cnv2_residual_options, receiver_position_m, 0.0,
-                                          0.0, NAV_CNV2, wavelength_m, &code_residual_m, nullptr, &bias_info);
+                rtklib_rescode_signal_ext(&observation, cnv2_nav.get(), &cnv2_residual_options, receiver_position_m,
+                                          0.0, 0.0, NAV_CNV2, wavelength_m, &code_residual_m, nullptr, &bias_info);
             ASSERT_EQ(strict_status, 0) << "strict L1C residual must preserve CNV2 broadcast-health exclusion";
 
             const int diagnostic_status = rtklib_rescode_signal_diagnostic_ext(
-                &observation, &cnv2_nav, &cnv2_residual_options, receiver_position_m, 0.0, 0.0, NAV_CNV2, wavelength_m,
-                &code_residual_m, nullptr, &bias_info);
+                &observation, cnv2_nav.get(), &cnv2_residual_options, receiver_position_m, 0.0, 0.0, NAV_CNV2,
+                wavelength_m, &code_residual_m, nullptr, &bias_info);
             ASSERT_EQ(diagnostic_status, 1)
                 << "real G04 CNV2 diagnostic L1C code residual failed at sow=" << fields[column.at("sow_sec")];
             EXPECT_EQ(bias_info.message_type, NAV_CNV2);
@@ -641,7 +642,7 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
         std::fprintf(stderr,
                      "GPS_CNV2_L1C_COVERAGE diagnostic_rows=%llu max_abs_code=%.9f source=BRD400DLR_2022278_G04\n",
                      static_cast<unsigned long long>(l1c_diagnostic_rows), stats["GPS L1C"].max_abs_code_m);
-        free_nav(&cnv2_nav);
+        free_nav(cnv2_nav.get());
     }
 
     std::size_t definition_count = 0;

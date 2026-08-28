@@ -34,7 +34,11 @@ block = r'''    // Real GPS CNAV-2 companion, provenance-fixed from Orekit commi
 
         gnss_sim::SimConfig config = base_config;
         config.atmosphere_mode = gnss_sim::AtmosphereMode::NONE;
-        config.receiver = {7.04, -36.05, 100.0};
+        // RINEX4 CNV2 carries a distinct orbital toes field.  For this record
+        // eph.toe resolves to 275400 s, while eph.toes is 241200 s and is the
+        // value used by RTKLIB's Earth-rotation term.  The corresponding G04
+        // sub-satellite longitude is about 106.84 E at this epoch.
+        config.receiver = {7.04, 106.84, 100.0};
         config.duration_ns = 60LL * gnss_sim::NANOSECONDS_PER_SECOND;
         gnss_sim::SimTime cnv2_start{};
         ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2230, 275400.0, &cnv2_start));
@@ -91,7 +95,7 @@ block = r'''    // Real GPS CNAV-2 companion, provenance-fixed from Orekit commi
             obsd_t observation{};
             observation.time = gpst2time(std::stoi(fields[column.at("gps_week")]),
                                          std::stod(fields[column.at("sow_sec")]));
-            observation.sat = static_cast<unsigned char>(std::stoi(fields[column.at("satellite_number")]));
+            observation.sat = static_cast<unsigned char>(std::stoi(fields[column.at("satellite_number") ]));
             observation.rcv = 1;
             observation.code[0] = static_cast<unsigned char>(observation_code);
             observation.SNR[0] = static_cast<unsigned char>(

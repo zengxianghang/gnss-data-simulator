@@ -35,8 +35,8 @@ TEST(GalileoHasAdapter, LoadsOfficialJrcE6ProductsAndReturnsCoherentE02Correctio
     const double sow_sec = time2gpst(time, &gps_week);
 
     gnss_sim::GalileoHasE6Correction correction{};
-    ASSERT_TRUE(gnss_sim::galileo_has_e6_correction(store, gps_week, sow_sec, satellite_number, &correction,
-                                                    &error_message))
+    ASSERT_TRUE(
+        gnss_sim::galileo_has_e6_correction(store, gps_week, sow_sec, satellite_number, &correction, &error_message))
         << error_message;
 
     double position_norm_sq = 0.0;
@@ -44,10 +44,10 @@ TEST(GalileoHasAdapter, LoadsOfficialJrcE6ProductsAndReturnsCoherentE02Correctio
     for (int index = 0; index < 3; ++index) {
         EXPECT_TRUE(std::isfinite(correction.satellite_state.position_ecef_m[index]));
         EXPECT_TRUE(std::isfinite(correction.satellite_state.velocity_ecef_mps[index]));
-        position_norm_sq += correction.satellite_state.position_ecef_m[index] *
-                            correction.satellite_state.position_ecef_m[index];
-        velocity_norm_sq += correction.satellite_state.velocity_ecef_mps[index] *
-                            correction.satellite_state.velocity_ecef_mps[index];
+        position_norm_sq +=
+            correction.satellite_state.position_ecef_m[index] * correction.satellite_state.position_ecef_m[index];
+        velocity_norm_sq +=
+            correction.satellite_state.velocity_ecef_mps[index] * correction.satellite_state.velocity_ecef_mps[index];
     }
     EXPECT_GT(std::sqrt(position_norm_sq), 2.0e7);
     EXPECT_LT(std::sqrt(position_norm_sq), 3.5e7);

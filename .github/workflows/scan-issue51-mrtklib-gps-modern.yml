@@ -1,4 +1,4 @@
-name: Scan real DLR GPS modern health
+name: Scan real DLR GPS CNV2 candidates
 
 on:
   push:
@@ -17,60 +17,48 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: issue-51-all-signal-residuals
-          submodules: recursive
-      - name: Pin RTKLIB and download provenance-fixed DLR day
+      - name: Scan provenance-fixed DLR daily files for GPS CNV2
         run: |
           set -euo pipefail
-          git -C third_party/RTKLIB fetch origin issue-6-all-signal-residuals-bds-tgd
-          git -C third_party/RTKLIB checkout 894417e20a8c1b7178e08bd410840eeb4f1ff779
-          curl -fsSL --retry 3 --retry-delay 1 \
-            'https://raw.githubusercontent.com/h-shiono/MRTKLIB/8781ebf1448251544be7c7273a06176641510c24/tests/data/rinex4/BRD400DLR_S_20260680000_01D_MN.rnx.gz' \
-            -o /tmp/BRD400DLR_S_20260680000_01D_MN.rnx.gz
-          gunzip -c /tmp/BRD400DLR_S_20260680000_01D_MN.rnx.gz > /tmp/BRD400DLR_S_20260680000_01D_MN.rnx
-          echo "RAW_CNAV=$(grep -Ec '^> EPH G[0-9][0-9] CNAV' /tmp/BRD400DLR_S_20260680000_01D_MN.rnx || true)"
-          echo "RAW_CNV2=$(grep -Ec '^> EPH G[0-9][0-9] CNV2' /tmp/BRD400DLR_S_20260680000_01D_MN.rnx || true)"
-          grep -n -m 3 -E '^> EPH G[0-9][0-9] CNV2' /tmp/BRD400DLR_S_20260680000_01D_MN.rnx || true
-      - name: Compile pinned RTKLIB health scanner
-        run: |
-          cat >/tmp/scan_gps_modern.c <<'EOF'
-          #include "rtklib.h"
-          #include <stdio.h>
-          #include <string.h>
-
-          int main(void) {
-              obs_t obs={0}; nav_t nav={0}; sta_t sta={0};
-              const char *path="/tmp/BRD400DLR_S_20260680000_01D_MN.rnx";
-              int cnav_total=0,cnv2_total=0;
-              int cnav_hist[16]={0},cnv2_hist[16]={0};
-              if (!readrnx(path,1,"",&obs,&nav,&sta)) {
-                  fprintf(stderr,"readrnx failed\n");
-                  return 2;
-              }
-              freeobs(&obs);
-              uniqnav(&nav);
-              for (int i=0;i<nav.n;i++) {
-                  eph_t *e=&nav.eph[i];
-                  int prn=0,sys=satsys(e->sat,&prn);
-                  if (sys!=SYS_GPS) continue;
-                  if (e->hdr.msg_type==NAV_CNAV) {
-                      cnav_total++;
-                      if (e->svh>=0 && e->svh<16) cnav_hist[e->svh]++;
-                  } else if (e->hdr.msg_type==NAV_CNV2) {
-                      cnv2_total++;
-                      if (e->svh>=0 && e->svh<16) cnv2_hist[e->svh]++;
-                  }
-              }
-              printf("PARSED_GPS_MODERN cnav=%d cnv2=%d\n",cnav_total,cnv2_total);
-              for (int i=0;i<16;i++) if (cnav_hist[i]) printf("CNAV_SVH value=%d count=%d\n",i,cnav_hist[i]);
-              for (int i=0;i<16;i++) if (cnv2_hist[i]) printf("CNV2_SVH value=%d count=%d\n",i,cnv2_hist[i]);
-              freenav(&nav,0xFF);
-              return 0;
-          }
-          EOF
-          cc -O2 -std=c99 -ffunction-sections -fdata-sections \
-            -Ithird_party/RTKLIB/src -DENAGLO -DENAQZS -DENAGAL -DENACMP -DNFREQ=3 \
-            /tmp/scan_gps_modern.c src/gnss/rtklib_rinex_obs_ext.c \
-            third_party/RTKLIB/src/rtklib_obs_ext.c third_party/RTKLIB/src/rtkcmn.c \
-            -Wl,--gc-sections -lm -lpthread -o /tmp/scan_gps_modern
-      - name: Compare parser output with raw RINEX records
-        run: /tmp/scan_gps_modern
+          found=0
+          for spec in \
+            2022:001 \
+            2023:001 \
+            2024:001 \
+            2025:075 \
+            2025:078 \
+            2026:068 \
+            2026:180
+          do
+            year="${spec%%:*}"
+            doy="${spec##*:}"
+            file="BRD400DLR_S_${year}${doy}0000_01D_MN.rnx.gz"
+            url="https://igs.bkg.bund.de/root_ftp/IGS/BRDC/${year}/${doy}/${file}"
+            echo "SCAN ${url}"
+            if ! curl -fsSL --retry 2 --retry-delay 1 "${url}" -o "/tmp/${file}"; then
+              echo "DOWNLOAD_MISSING year=${year} doy=${doy}"
+              continue
+            fi
+            gunzip -c "/tmp/${file}" > "/tmp/${file%.gz}"
+            count="$(grep -Ec '^> EPH G[0-9][0-9] CNV2' "/tmp/${file%.gz}" || true)"
+            cnav="$(grep -Ec '^> EPH G[0-9][0-9] CNAV' "/tmp/${file%.gz}" || true)"
+            echo "GPS_MODERN_RAW year=${year} doy=${doy} cnav=${cnav} cnv2=${count}"
+            if [ "${count}" -gt 0 ]; then
+              echo "GPS_CNV2_SOURCE year=${year} doy=${doy} url=${url}"
+              python - "/tmp/${file%.gz}" <<'PY'
+          import sys
+          from pathlib import Path
+          lines = Path(sys.argv[1]).read_text().splitlines()
+          for i, line in enumerate(lines):
+              if line.startswith('> EPH G') and line.rstrip().endswith(' CNV2'):
+                  print('GPS_CNV2_BLOCK_BEGIN')
+                  for row in lines[i:i+11]:
+                      print(row)
+                  print('GPS_CNV2_BLOCK_END')
+                  break
+          PY
+              found=1
+              break
+            fi
+          done
+          test "${found}" -eq 1

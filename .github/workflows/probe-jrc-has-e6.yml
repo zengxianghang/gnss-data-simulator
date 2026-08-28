@@ -1,0 +1,56 @@
+name: Probe official JRC HAS E6 products
+
+on:
+  push:
+    branches: [issue-51-all-signal-residuals]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe JRC day 2026-001 products
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/GALILEO-HAS'
+          mkdir -p /tmp/jrc_has
+
+          echo '=== PRODUCTS DIRECTORY ==='
+          curl -fsSL --retry 3 "$base/PRODUCTS/daily/2026/001/" | sed -n '1,160p'
+
+          curl -fsSL --retry 3 "$base/PRODUCTS/daily/2026/001/SSRC00JRC0_20260010000_01D_50S_BIA.BIA.gz" -o /tmp/jrc_has/has.bia.gz
+          curl -fsSL --retry 3 "$base/PRODUCTS/daily/2026/001/SSRC00JRC0_20260010000_01D_10S_CLK.CLK.gz" -o /tmp/jrc_has/has.clk.gz
+          curl -fsSL --retry 3 "$base/PRODUCTS/daily/2026/001/SSRC00JRC0_20260010000_01D_50S_ORB.SP3.gz" -o /tmp/jrc_has/has.sp3.gz
+          gzip -dc /tmp/jrc_has/has.bia.gz > /tmp/jrc_has/has.bia
+          gzip -dc /tmp/jrc_has/has.clk.gz > /tmp/jrc_has/has.clk
+          gzip -dc /tmp/jrc_has/has.sp3.gz > /tmp/jrc_has/has.sp3
+
+          echo '=== BIA HEADER ==='
+          head -80 /tmp/jrc_has/has.bia
+          echo '=== GALILEO E6 BIA FIRST 40 ==='
+          grep -E '(^|[[:space:]])E[0-9][0-9]([[:space:]]|$)' /tmp/jrc_has/has.bia | grep -E 'C6| 6C|E6' | head -40 || true
+          echo '=== BIA SIGNAL TOKENS ==='
+          grep -E '(^|[[:space:]])E[0-9][0-9]([[:space:]]|$)' /tmp/jrc_has/has.bia | grep -oE 'C[0-9][A-Z]' | sort -u || true
+
+          echo '=== CLK FIRST GALILEO EPOCH ==='
+          grep -m 20 -E '^AS E[0-9][0-9]' /tmp/jrc_has/has.clk || true
+          echo '=== SP3 FIRST EPOCH/GALILEO ==='
+          awk 'BEGIN{epoch=0} /^\*/ {epoch++; if(epoch<=2) print} /^PE[0-9][0-9]/ {if(epoch<=2) print}' /tmp/jrc_has/has.sp3 | head -80
+
+          echo '=== RAW DIRECTORY ==='
+          curl -fsSL --retry 3 "$base/RAW/2026/001/" | sed -n '1,200p' || true
+          for candidate in \
+            'SSRC00JRC0_S_20260010000_01D_MC.ssr' \
+            'SSRC00JRC0_S_20260010000_01D_MC.ssr.gz'; do
+            if curl -fsSL --retry 2 "$base/RAW/2026/001/$candidate" -o "/tmp/jrc_has/$candidate"; then
+              echo "=== RAW SSR $candidate ==="
+              case "$candidate" in
+                *.gz) gzip -dc "/tmp/jrc_has/$candidate" | grep -A45 -m 2 'CODE_BIAS' || true ;;
+                *) grep -A45 -m 2 'CODE_BIAS' "/tmp/jrc_has/$candidate" || true ;;
+              esac
+            fi
+          done

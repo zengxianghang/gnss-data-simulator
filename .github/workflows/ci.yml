@@ -29,6 +29,14 @@ jobs:
             exit 1
           fi
 
+  tooling-self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Extended validation harness self-test
+        run: python3 tools/extended_validation/run_extended.py --self-test
+
   build-test:
     strategy:
       fail-fast: false

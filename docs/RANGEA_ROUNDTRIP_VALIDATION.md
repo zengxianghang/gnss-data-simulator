@@ -85,7 +85,7 @@ The scheduled/manual gate:
 - requires at least four selected serialized observations per valid position epoch in aggregate;
 - requires maximum 3D position error `< 0.5 m`.
 
-A separate diagnostic run deliberately lowered the positioning mask to `0 deg`; that run measured `0.138821 m` maximum 3D error at GPST `2347/437021.000` and exposed the near-horizon geometry/atmosphere consistency problem described below. The normal `3 deg` A/B solve on the same generated data measured `0.000669 m` maximum 3D error.
+A separate diagnostic run deliberately lowered the positioning mask to `0 deg`; that run measured `0.138821 m` maximum 3D error at GPST `2347/437021.000` and exposed the near-horizon geometry/atmosphere consistency problem described below. The `3 deg` A/B solve on the same generated data measured `0.000669 m` maximum 3D error.
 
 ### Confirmed cause of the 0-deg error spike
 
@@ -114,6 +114,8 @@ Elevation-mask A/B validation confirms causality:
 | 10.0 deg | 0.000867 m |
 
 Therefore the 13.9 cm value is a pathological near-horizon atmosphere/geometry-consistency artifact exposed by the diagnostic `0 deg` mask. At the project's normal `3 deg` mask, the same full-day WHU 10 minute RANGEA round-trip is sub-millimetre in the A/B solve (`0.000669 m`).
+
+The validation policy change to `3 deg` does not fix or hide the model inconsistency. The near-horizon geometry/atmosphere consistency defect remains a separate implementation issue to fix and should retain dedicated low-elevation regression coverage.
 
 The full-day source is never modified and no synthetic ephemeris fallback exists.
 

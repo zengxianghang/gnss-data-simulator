@@ -1,0 +1,37 @@
+name: Temporary format residual validator
+
+on:
+  push:
+    branches:
+      - issue-51-all-signal-residuals
+
+permissions:
+  contents: write
+
+jobs:
+  format-and-remove-self:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: issue-51-all-signal-residuals
+          fetch-depth: 0
+
+      - name: Apply repository clang-format and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find include src tests tools -type f \( -name '*.h' -o -name '*.c' -o -name '*.cpp' \) | sort)
+          clang-format -i "${files[@]}"
+          rm .github/workflows/temporary-format-residual-validator.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No formatting changes to commit"
+            exit 0
+          fi
+          git commit -m "style: format residual validator"
+          git push origin HEAD:issue-51-all-signal-residuals

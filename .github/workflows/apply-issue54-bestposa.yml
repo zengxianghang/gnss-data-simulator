@@ -1,0 +1,54 @@
+name: Apply issue 54 BESTPOSA
+
+on:
+  push:
+    branches: [issue-54-bestposa-truth]
+    paths:
+      - tools/apply_issue54_bestposa_patch.py
+      - .github/workflows/apply-issue54-bestposa.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch with submodules
+        uses: actions/checkout@v4
+        with:
+          ref: issue-54-bestposa-truth
+          submodules: recursive
+          fetch-depth: 0
+      - name: Apply guarded patch
+        run: python3 tools/apply_issue54_bestposa_patch.py
+      - name: Format and diff-check
+        shell: bash
+        run: |
+          clang-format -i \
+            include/gnss_sim/simulator.h \
+            src/core/simulator.cpp \
+            src/output/novatel_solution_writer.h \
+            src/output/novatel_solution_writer.cpp \
+            src/output/truth_writer.cpp \
+            tests/unit/test_output_writers.cpp \
+            tests/integration/test_scenarios.cpp \
+            tests/integration/test_truth_outputs.cpp
+          git diff --check
+      - name: Configure
+        run: cmake -S . -B build -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test full suite
+        run: ctest --test-dir build --output-on-failure
+      - name: Commit formal implementation
+        shell: bash
+        run: |
+          rm tools/apply_issue54_bestposa_patch.py
+          rm .github/workflows/apply-issue54-bestposa.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Add BESTPOSA truth output"
+          git push origin HEAD:issue-54-bestposa-truth

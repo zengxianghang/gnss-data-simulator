@@ -153,6 +153,25 @@ add_executable(build-cn0-model
 target_link_libraries(build-cn0-model PRIVATE cn0_model_builder_core)
 gnss_sim_set_project_warnings(build-cn0-model)
 
+add_library(residual_validator_core STATIC
+    tools/residual_validator/residual_validator.cpp
+)
+target_include_directories(residual_validator_core
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/tools/residual_validator"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_link_libraries(residual_validator_core
+    PUBLIC gnss_sim::core
+    PRIVATE gnss_sim::rtklib
+)
+gnss_sim_set_project_warnings(residual_validator_core)
+
+add_executable(validate-residuals
+    tools/residual_validator/main.cpp
+)
+target_link_libraries(validate-residuals PRIVATE residual_validator_core)
+gnss_sim_set_project_warnings(validate-residuals)
+
 if(BUILD_TESTING)
     include(FetchContent)
 
@@ -215,6 +234,7 @@ if(BUILD_TESTING)
     target_link_libraries(gnss_sim_integration_tests PRIVATE
         gnss_sim::core
         gnss_sim::rtklib
+        residual_validator_core
         GTest::gtest_main
     )
     gnss_sim_set_project_warnings(gnss_sim_integration_tests)

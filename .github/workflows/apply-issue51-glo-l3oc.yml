@@ -20,6 +20,7 @@ on:
       - tools/apply_issue51_signal_health_status.py
       - tools/apply_issue51_raw_measurement_health_separation.py
       - tools/apply_issue51_diagnostic_residual.py
+      - tools/apply_issue51_range_union_acceptance.py
       - tools/apply_issue51_real_gps_modern_probe.py
       - .github/workflows/apply-issue51-glo-l3oc.yml
 
@@ -53,9 +54,11 @@ jobs:
           text = path.read_text()
           old = 'set(GNSS_SIM_RTKLIB_COMMIT "8d252915f589e570e69db7f01f27cda276a08f02" CACHE STRING'
           new = 'set(GNSS_SIM_RTKLIB_COMMIT "8d515582713e9c9618450c56721bb3ef1037144e" CACHE STRING'
-          if text.count(old) != 1:
-              raise RuntimeError(f'CMake RTKLIB pin anchor count={text.count(old)}')
-          path.write_text(text.replace(old, new, 1))
+          if text.count(old) == 1:
+              text = text.replace(old, new, 1)
+              path.write_text(text)
+          elif text.count(new) != 1:
+              raise RuntimeError(f'CMake RTKLIB pin is neither old nor validated: old={text.count(old)} new={text.count(new)}')
           PY
           test "$(git -C third_party/RTKLIB rev-parse HEAD)" = "8d515582713e9c9618450c56721bb3ef1037144e"
 
@@ -77,6 +80,7 @@ jobs:
           tools/apply_issue51_signal_health_status.py
           tools/apply_issue51_raw_measurement_health_separation.py
           tools/apply_issue51_diagnostic_residual.py
+          tools/apply_issue51_range_union_acceptance.py
           tools/apply_issue51_real_gps_modern_probe.py
 
       - name: Apply permanent guarded implementation
@@ -97,6 +101,7 @@ jobs:
           python tools/apply_issue51_signal_health_status.py
           python tools/apply_issue51_raw_measurement_health_separation.py
           python tools/apply_issue51_diagnostic_residual.py
+          python tools/apply_issue51_range_union_acceptance.py
 
       - name: Format modified C and C++ sources
         run: >-
@@ -118,6 +123,7 @@ jobs:
           tests/unit/test_solution_engine.cpp
           tests/unit/test_rtklib_adapter.cpp
           tests/integration/test_all_signal_residuals.cpp
+          tests/integration/test_v1_acceptance.cpp
 
       - name: Check materialized patch whitespace
         run: git diff --check

@@ -16,6 +16,7 @@ on:
       - tools/apply_issue51_spp_family_nav.py
       - tools/apply_issue51_multisite_coverage.py
       - tools/apply_issue51_gps_cnav_window.py
+      - tools/apply_issue51_snapshot_family.py
       - .github/workflows/apply-issue51-glo-l3oc.yml
 
 permissions:
@@ -50,6 +51,7 @@ jobs:
           tools/apply_issue51_spp_family_nav.py
           tools/apply_issue51_multisite_coverage.py
           tools/apply_issue51_gps_cnav_window.py
+          tools/apply_issue51_snapshot_family.py
 
       - name: Apply guarded implementation and multi-site validation
         run: |
@@ -63,6 +65,7 @@ jobs:
           python tools/apply_issue51_requested_family_validation.py
           python tools/apply_issue51_multisite_coverage.py
           python tools/apply_issue51_gps_cnav_window.py
+          python tools/apply_issue51_snapshot_family.py
 
       - name: Format modified C and C++ sources
         run: >-
@@ -82,6 +85,7 @@ jobs:
           src/gnss/rtklib_adapter.cpp
           tests/unit/test_measurement_model.cpp
           tests/unit/test_solution_engine.cpp
+          tests/unit/test_rtklib_adapter.cpp
           tests/integration/test_all_signal_residuals.cpp
 
       - name: Check patch whitespace

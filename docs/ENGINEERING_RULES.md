@@ -14,6 +14,9 @@ This document defines the required repository layout, source-file naming, C/C++ 
 - JSON configuration parsing uses the pinned cJSON dependency through `sim_config`; cJSON types must not leak outside that module boundary.
 - Project code must compile cleanly on both Windows and Linux. Platform-specific code must be isolated behind a narrow adapter and must not leak into the GNSS physics/model layers.
 - Production code must not require a network connection at runtime. Downloading IGS data is a separate tooling concern.
+- Broadcast navigation truth must originate from actual RINEX NAV data. Production code, tests, fixtures, CI helpers, and validation tools must not manufacture ephemeris by changing Toe/Toc, orbit, clock, health, TGD/BGD/ISC, or related navigation fields from another record.
+- If a required simulation or validation interval is not covered by the available RINEX NAV input, obtain a real file with sufficient coverage from WHU/IGS or another documented authoritative GNSS data center. Missing coverage must never be filled with synthetic ephemeris.
+- Downloading, decompressing, copying, concatenating, filtering, or time-windowing real RINEX NAV records is allowed only when the retained navigation values are preserved unchanged and source provenance is recorded.
 
 ## 2. Frozen repository layout
 
@@ -224,7 +227,7 @@ Do not use generic names such as `time`, `range`, `speed`, or `freq` in physics 
 ### 4.6 Error handling
 
 - Invalid configuration: fail before simulation starts with a clear message.
-- Missing required RINEX coverage: fail before simulation starts.
+- Missing required RINEX coverage: fail before simulation starts. Tooling/validation may first obtain a real RINEX NAV file from an authoritative source, but must not synthesize missing navigation coverage.
 - Internal impossible state or violated invariant: fail loudly; do not silently continue and emit plausible-looking data.
 - Expected receiver state such as `INSUFFICIENT_OBS/NONE` is simulation output, not an application error.
 - Output-write failure is fatal for the run.
@@ -329,7 +332,8 @@ It is intended for:
 - deterministic rerun checks;
 - long-duration streaming/memory tests;
 - default 8-hour run;
-- selected 50 Hz runs.
+- selected 50 Hz runs;
+- downloading a pinned real RINEX NAV from an authoritative GNSS data center when the committed fixtures do not cover the requested long-duration interval, with hash verification before use.
 
 Do not make ordinary documentation-only changes consume an 8-hour simulation test.
 
@@ -408,9 +412,11 @@ Normal CI uses short fixtures/durations. Long-duration versions of these tests b
 - Keep only minimal necessary test data in Git.
 - Do not commit multi-GB IGS archives.
 - Every fixture should document its origin and any transformation applied.
-- Prefer synthetic minimal RINEX fixtures for parser boundary tests if they faithfully exercise the target format.
-- Real IGS snippets may be used when needed for reference/compatibility testing and redistribution is appropriate.
-- CI tests must not download test data from the internet during the test itself.
+- Navigation fixtures must come from real RINEX NAV sources. A test or fixture generator must not create new ephemeris by changing Toe/Toc, orbit, clock, health, TGD/BGD/ISC, or other navigation fields.
+- It is acceptable to extract an unchanged subset of real RINEX NAV records for small deterministic tests; retained navigation values must remain field-for-field equivalent to the source.
+- If a long-duration test needs more coverage than committed fixtures provide, download the corresponding real RINEX NAV from WHU/IGS or another documented authoritative source and verify the pinned source hash before use.
+- Synthetic fixtures may still be used for non-navigation parser/error-boundary inputs only when they contain no fabricated ephemeris/navigation truth.
+- Normal PR CI tests must not download test data from the internet during the test itself. Extended validation may perform an explicit pre-validation download of pinned real RINEX data and must fail if download or hash verification fails.
 
 ## 10. Pull request and commit rules
 
@@ -443,6 +449,7 @@ Before merge, verify:
 - units are explicit;
 - no full-run unbounded memory accumulation was introduced;
 - output writers only serialize;
+- no code/test/CI path fabricates or rewrites navigation truth; retained ephemeris records are traceable to real RINEX NAV sources;
 - tests cover the new behavior;
 - Windows and Linux builds remain green;
 - long tests have not leaked into normal PR CI.

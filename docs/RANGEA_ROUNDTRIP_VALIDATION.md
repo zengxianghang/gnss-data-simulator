@@ -54,6 +54,7 @@ This reuses the production SPP adapter for solution options, ephemeris staging, 
 - fixed receiver truth: 20 deg N, 120 deg E, 100 m;
 - 1 Hz;
 - 60 s;
+- project-default `3 deg` elevation mask;
 - zero measurement noise;
 - zero multipath;
 - broadcast ionosphere/troposphere enabled;
@@ -62,7 +63,7 @@ This reuses the production SPP adapter for solution options, ephemeris staging, 
 - reconstructed valid-position epoch count must equal the simulator's maintained in-memory SPP valid-position count;
 - maximum valid 3D position error must be `< 0.5 m`.
 
-The successful compact baseline measured a maximum 3D error of `0.000817122 m` at GPST `2347/436501.000`.
+The exact maximum 3D error and its GPST are printed by Ubuntu CI on every successful compact run.
 
 Two additional gates require malformed serialized RANGEA to fail explicitly and same-input/same-seed runs to produce byte-identical logs plus identical round-trip positioning summaries.
 
@@ -74,6 +75,7 @@ The scheduled/manual gate:
 
 - downloads the exact pinned WHU RINEX NAV and verifies both compressed and uncompressed SHA256 values;
 - runs a 10 minute KS simulation at 1 Hz starting at GPST week 2347 / SOW 436500;
+- uses the project-default `3 deg` elevation mask;
 - uses zero measurement noise and zero multipath;
 - enables broadcast ionosphere/troposphere;
 - parses only the generated `simulated.log` RANGEA records;
@@ -83,7 +85,7 @@ The scheduled/manual gate:
 - requires at least four selected serialized observations per valid position epoch in aggregate;
 - requires maximum 3D position error `< 0.5 m`.
 
-With an intentionally pathological `0 deg` positioning mask, the 10 minute run measured `0.138821 m` maximum 3D error at GPST `2347/437021.000`.
+A separate diagnostic run deliberately lowered the positioning mask to `0 deg`; that run measured `0.138821 m` maximum 3D error at GPST `2347/437021.000` and exposed the near-horizon geometry/atmosphere consistency problem described below. The normal `3 deg` A/B solve on the same generated data measured `0.000669 m` maximum 3D error.
 
 ### Confirmed cause of the 0-deg error spike
 
@@ -111,7 +113,7 @@ Elevation-mask A/B validation confirms causality:
 | 5.0 deg | 0.000722 m |
 | 10.0 deg | 0.000867 m |
 
-Therefore the 13.9 cm value is a pathological near-horizon atmosphere/geometry-consistency artifact exposed by the diagnostic `0 deg` mask. At the project's normal `3 deg` mask, the same full-day WHU 10 minute RANGEA round-trip remains sub-millimetre (`0.000669 m`).
+Therefore the 13.9 cm value is a pathological near-horizon atmosphere/geometry-consistency artifact exposed by the diagnostic `0 deg` mask. At the project's normal `3 deg` mask, the same full-day WHU 10 minute RANGEA round-trip is sub-millimetre in the A/B solve (`0.000669 m`).
 
 The full-day source is never modified and no synthetic ephemeris fallback exists.
 

@@ -86,9 +86,8 @@ TEST(ZeroNoiseMeasurement, NearHorizonRealWhuRecomputesAtmosphereFromFinalSignal
         gnss_sim::SignalTracker tracker = tracking_tracker(signal_id, receive_time);
         gnss_sim::CarrierAmbiguityState ambiguity{};
         gnss_sim::MeasurementObservation observation{};
-        ASSERT_TRUE(gnss_sim::generate_zero_noise_measurement(nav.store, geometry, receiver, tracker,
-                                                              generic_atmosphere, &ambiguity, &observation,
-                                                              &error_message))
+        ASSERT_TRUE(gnss_sim::generate_zero_noise_measurement(
+            nav.store, geometry, receiver, tracker, generic_atmosphere, &ambiguity, &observation, &error_message))
             << error_message;
 
         gnss_sim::AtmosphereCorrection expected_atmosphere{};
@@ -102,8 +101,8 @@ TEST(ZeroNoiseMeasurement, NearHorizonRealWhuRecomputesAtmosphereFromFinalSignal
         EXPECT_LT(geometry.elevation_rad * kRadiansToDegrees, 0.02);
         EXPECT_NEAR(observation.geometric_range_m, geometry.geometric_range_m, 1.0e-9);
         EXPECT_NEAR(observation.range_rate_mps, geometry.range_rate_mps, 1.0e-12);
-        EXPECT_NEAR(observation.satellite_clock_bias_m,
-                    kSpeedOfLightMps * geometry.satellite_state.clock_bias_sec, 1.0e-9);
+        EXPECT_NEAR(observation.satellite_clock_bias_m, kSpeedOfLightMps * geometry.satellite_state.clock_bias_sec,
+                    1.0e-9);
         EXPECT_NEAR(observation.satellite_clock_drift_mps,
                     kSpeedOfLightMps * geometry.satellite_state.clock_drift_sec_per_sec, 1.0e-9);
         EXPECT_NEAR(observation.ionosphere_code_delay_m, expected_atmosphere.ionosphere_code_delay_m, 1.0e-9);
@@ -115,10 +114,10 @@ TEST(ZeroNoiseMeasurement, NearHorizonRealWhuRecomputesAtmosphereFromFinalSignal
         // still exercises that regression instead of becoming a no-op.
         EXPECT_GT(std::fabs(expected_atmosphere.troposphere_delay_m - generic_atmosphere.troposphere_delay_m), 0.1);
 
-        const double expected_pseudorange_m =
-            geometry.geometric_range_m - kSpeedOfLightMps * geometry.satellite_state.clock_bias_sec +
-            observation.code_bias_m + expected_atmosphere.ionosphere_code_delay_m +
-            expected_atmosphere.troposphere_delay_m;
+        const double expected_pseudorange_m = geometry.geometric_range_m -
+                                              kSpeedOfLightMps * geometry.satellite_state.clock_bias_sec +
+                                              observation.code_bias_m + expected_atmosphere.ionosphere_code_delay_m +
+                                              expected_atmosphere.troposphere_delay_m;
         EXPECT_NEAR(observation.pseudorange_m, expected_pseudorange_m, 1.0e-6);
     }
 }

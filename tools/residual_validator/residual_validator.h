@@ -36,9 +36,15 @@ struct SummaryRow {
     double code_rms_m = 0.0;
     double code_p95_abs_m = 0.0;
     double code_max_abs_m = 0.0;
+    int code_max_gps_week = -1;
+    double code_max_sow_sec = 0.0;
+    double code_max_elevation_deg = 0.0;
     double doppler_rms_mps = 0.0;
     double doppler_p95_abs_mps = 0.0;
     double doppler_max_abs_mps = 0.0;
+    int doppler_max_gps_week = -1;
+    double doppler_max_sow_sec = 0.0;
+    double doppler_max_elevation_deg = 0.0;
 };
 
 struct ValidationReport {

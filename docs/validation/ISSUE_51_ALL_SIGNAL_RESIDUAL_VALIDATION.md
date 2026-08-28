@@ -22,6 +22,8 @@ A signal-specific NAV family missing at an epoch is a per-signal availability co
 
 `validate-residuals` and `residual_validator_core` are the maintained residual evaluation path for compact CI, the full WHU 10-minute case, and the later 8-hour KS case. The validator streams `observation_truth.csv`, calls the RTKLIB-owned residual APIs, and reports signal, signal+family, and signal+family+satellite statistics including count, RMS, P95, and maximum absolute residual.
 
+The compact all-signal acceptance no longer contains its own direct `rtklib_rescode_*` / `rtklib_resdop_*` equations. `tests/integration/test_all_signal_residuals.cpp` now only constructs the coverage fixtures/scenarios, runs `residual_validator_core`, merges the per-signal evidence across the coverage union, and applies the 21/21 thresholds. The compact G3 synthetic L3OC overlay remains test-only for G3 code-bias coverage and must never be used by real WHU validation.
+
 The validator deliberately preserves the raw truth pseudorange in `obs->P[0]` even when `pseudorange_valid=0`. RTKLIB's Doppler residual path uses that raw pseudorange only to reconstruct signal transmit time. `pseudorange_valid` still exclusively controls whether a code residual is evaluated, so this does not promote an invalid code measurement to valid. This distinction is required for signals such as GPS L1C whose code-bias NAV family can be unavailable while Doppler remains physically valid.
 
 Doppler validation with `required_message_mask=0` must use the nearest generic broadcast satellite state, because Doppler itself consumes no observable-specific code bias. Shared-validator parity exposed that RTKLIB PR #7 previously documented this behavior but still routed zero-mask requests through the signal-compatible ephemeris selector, which failed for GLONASS G3 when no L3OC record existed even though a generic GLONASS broadcast state was available. RTKLIB head `a5bc61990133830704f5040b7b9983b9b1e02681` fixes the contract by routing zero-mask Doppler state selection through `satposs()`; nonzero message masks remain signal/family constrained.
@@ -66,26 +68,26 @@ Bias ephemeris selection is observation-epoch and message-family aware; it must 
 
 ## Corrected compact acceptance evidence
 
-The simulator currently pins RTKLIB Draft PR #7 head `a5bc61990133830704f5040b7b9983b9b1e02681` while shared-validator parity is under review.
+The simulator currently pins RTKLIB Draft PR #7 head `a5bc61990133830704f5040b7b9983b9b1e02681`.
 
-CI run `33149275174` (run #362) on simulator head `5ecbbdd31cf5e3257f53feb2ba421b7f2f2f120a` passed after the Galileo E6-C mapping correction:
+CI run `33151383933` (run #374) established shared-validator parity before the old duplicate acceptance equations were removed:
 
 - clang-format: PASS;
-- Ubuntu/GCC build + full CTest: PASS, 153/153 tests;
+- Ubuntu/GCC build + full CTest: PASS, 155/155 tests;
 - Windows/MSVC build + full CTest: PASS;
-- `SignalDefinitions.GalileoE6UsesHasCodeBiasObservable`: PASS;
+- `ResidualValidatorIntegration.CompactBroadcastTruthUsesSharedRtklibEvaluator`: PASS;
+- `ResidualValidatorIntegration.GalileoHasE6UsesSharedExplicitStateEvaluator`: PASS;
 - `V1Acceptance.EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks`: PASS.
 
-That acceptance test requires nonzero code and Doppler residual counts for each of all 21 frozen signals and applies the strict `< 0.02 m` / `< 0.002 m/s` maxima. Compact residual coverage is therefore **21/21 code and 21/21 Doppler** after correcting E6 to C6C/type 7. No residual threshold was widened to obtain this result.
+The rewrite at simulator commit `04d9ae69b5341571c1f84078744faeb85a3f80c5` then removed the direct residual equations from the all-signal acceptance. Ubuntu CI run #375 passed its full test job on that rewritten test; the only failing job in that run was formatting, which was subsequently applied without changing logic.
 
-The reusable validator is being parity-checked against that compact oracle before the duplicate residual logic in the old integration test is removed. Parity testing has already found and corrected two implementation gaps without changing thresholds: preserving raw pseudorange for Doppler transmit-time reconstruction when code validity is false, and honoring RTKLIB's generic zero-message-mask Doppler-state contract.
+Shared-validator parity found and corrected two implementation gaps without changing thresholds: preserving raw pseudorange for Doppler transmit-time reconstruction when code validity is false, and honoring RTKLIB's generic zero-message-mask Doppler-state contract. The acceptance limits remain code `< 0.02 m` and Doppler `< 0.002 m/s`.
 
 ## Remaining real-data gates
 
 Issue #51 remains open until the external validation chain is complete:
 
-1. complete compact parity using the shared `residual_validator_core` and remove duplicate residual equations from the old integration test;
-2. rerun the full WHU `BRD400DLR_S_20250030000_01D_MN.rnx.gz` 10-minute KS case with broadcast atmosphere and retain per-signal/per-family residual evidence for the broadcast-supported paths;
-3. retain the official JRC HAS E6-C precise-state/C6C-OSB segment as the coherent real-data E6-C code gate rather than mixing a 2025 broadcast state with an unrelated HAS bias;
-4. apply the same finalized validator to the retained/generated 8-hour KS dataset;
-5. review and merge RTKLIB PR #7, then advance the simulator submodule/pin from the draft dependency SHA to the reviewed RTKLIB merge commit and rerun the final regression gate.
+1. rerun the full WHU `BRD400DLR_S_20250030000_01D_MN.rnx.gz` 10-minute KS case with broadcast atmosphere and retain per-signal/per-family residual evidence for the broadcast-supported paths;
+2. retain the official JRC HAS E6-C precise-state/C6C-OSB segment as the coherent real-data E6-C code gate rather than mixing a 2025 broadcast state with an unrelated HAS bias;
+3. apply the same finalized validator to the retained/generated 8-hour KS dataset;
+4. review and merge RTKLIB PR #7, then advance the simulator submodule/pin from the draft dependency SHA to the reviewed RTKLIB merge commit and rerun the final regression gate.

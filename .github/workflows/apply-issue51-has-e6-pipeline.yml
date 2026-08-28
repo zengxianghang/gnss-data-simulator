@@ -7,10 +7,10 @@ on:
       - .github/workflows/apply-issue51-has-e6-pipeline.yml
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  windows-guard:
+  windows-stage-trace:
     runs-on: windows-latest
     steps:
       - name: Checkout Draft branch with dependencies
@@ -19,73 +19,89 @@ jobs:
           ref: issue-51-all-signal-residuals
           submodules: recursive
 
-      - name: Apply narrow HAS store guard patch
+      - name: Add temporary stage markers
         shell: python
         run: |
           from pathlib import Path
-          path = Path('src/core/simulator.cpp')
-          text = path.read_text()
-          text = text.replace('#include <memory>\n', '')
-          anchor = '''struct RuntimeState {
-              NavigationState* navigation;
-              const GalileoHasStore* galileo_has;
-              ReceiverTruth receiver;
-              DeterministicRng rng;
-              Cn0Model cn0_model;
-              SignalTrackingModelConfig tracking_config;
-              SolutionEngineState solution_state;
-              StartupMode startup_mode;
-              SimTime startup_search_ready_time;
-              std::vector<SatelliteRuntime> satellites;
-              std::vector<TruthScheduleEntry> truth_schedule;
-          };
-          '''
-          replacement = anchor + '''
-          struct GalileoHasStoreGuard {
-              GalileoHasStore* store = nullptr;
 
-              ~GalileoHasStoreGuard() {
-                  destroy_galileo_has_store(store);
-              }
-
-              GalileoHasStoreGuard(const GalileoHasStoreGuard&) = delete;
-              GalileoHasStoreGuard& operator=(const GalileoHasStoreGuard&) = delete;
-          };
+          test = Path('tests/integration/test_all_signal_residuals.cpp')
+          text = test.read_text()
+          anchor = '    prcopt_t residual_options = prcopt_default;\n'
+          text = text.replace(anchor, '    std::fprintf(stderr, "WIN_TRACE test_after_direct\\n");\n' + anchor, 1)
+          anchor = '        gnss_sim::SimulatorRunSummary run_summary{};\n        std::string error_message;\n'
+          text = text.replace(anchor, anchor + '        std::fprintf(stderr, "WIN_TRACE before_run site=%s\\n", site.name);\n', 1)
+          anchor = '        ASSERT_TRUE(gnss_sim::run_simulator(config, options, &run_summary, &error_message))\n'
+          text = text.replace(anchor, anchor + '            ', 1) if False else text
+          old = '''        ASSERT_TRUE(gnss_sim::run_simulator(config, options, &run_summary, &error_message))
+              << "site=" << site.name << " " << error_message;
           '''
-          if text.count(anchor) != 1:
-              raise SystemExit('RuntimeState anchor mismatch')
-          text = text.replace(anchor, replacement, 1)
-          old = '''    std::unique_ptr<GalileoHasStore, void (*)(GalileoHasStore*)> galileo_has_store(nullptr, destroy_galileo_has_store);
-              if (has_complete_galileo_has_paths(options)) {
-                  galileo_has_store.reset(create_galileo_has_store());
-                  if (galileo_has_store == nullptr ||
-                      !load_galileo_has_products(galileo_has_store.get(), options.galileo_has_sp3_path,
-                                                 options.galileo_has_clock_path, options.galileo_has_bias_path, error_message)) {
-                      if (galileo_has_store == nullptr) {
-                          set_error(error_message, "cannot allocate Galileo HAS product store");
-                      }
-                      return false;
-                  }
-                  runtime.galileo_has = galileo_has_store.get();
-              }
-          '''
-          new = '''    GalileoHasStoreGuard galileo_has_store{};
-              if (has_complete_galileo_has_paths(options)) {
-                  galileo_has_store.store = create_galileo_has_store();
-                  if (galileo_has_store.store == nullptr ||
-                      !load_galileo_has_products(galileo_has_store.store, options.galileo_has_sp3_path,
-                                                 options.galileo_has_clock_path, options.galileo_has_bias_path, error_message)) {
-                      if (galileo_has_store.store == nullptr) {
-                          set_error(error_message, "cannot allocate Galileo HAS product store");
-                      }
-                      return false;
-                  }
-                  runtime.galileo_has = galileo_has_store.store;
-              }
+          new = '''        ASSERT_TRUE(gnss_sim::run_simulator(config, options, &run_summary, &error_message))
+              << "site=" << site.name << " " << error_message;
+          std::fprintf(stderr, "WIN_TRACE after_run site=%s\\n", site.name);
           '''
           if text.count(old) != 1:
-              raise SystemExit('HAS unique_ptr block mismatch')
-          path.write_text(text.replace(old, new, 1))
+              raise SystemExit('site run anchor mismatch')
+          test.write_text(text.replace(old, new, 1))
+
+          sim = Path('src/core/simulator.cpp')
+          text = sim.read_text()
+          old = '''bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, SimulatorRunSummary* summary,
+                             std::string* error_message) {
+          '''
+          new = old + '    std::fprintf(stderr, "WIN_TRACE run_enter\\n");\n'
+          if text.count(old) != 1:
+              raise SystemExit('run_simulator anchor mismatch')
+          text = text.replace(old, new, 1)
+          old = '    SimulatorRunSummary result{};\n    RuntimeState runtime{};\n'
+          new = old + '    std::fprintf(stderr, "WIN_TRACE runtime_zeroed\\n");\n'
+          if text.count(old) != 1:
+              raise SystemExit('runtime anchor mismatch')
+          text = text.replace(old, new, 1)
+          old = '    runtime.navigation = create_navigation_state();\n'
+          new = '    std::fprintf(stderr, "WIN_TRACE before_create_nav\\n");\n' + old + '    std::fprintf(stderr, "WIN_TRACE after_create_nav\\n");\n'
+          text = text.replace(old, new, 1)
+          old = '''    bool ok =
+              load_truth_navigation(runtime.navigation, options.rinex_nav_path, error_message) &&
+              make_static_receiver_truth(config.receiver, &runtime.receiver, error_message) &&
+              build_truth_schedule(truth_navigation_store(runtime.navigation), &runtime.truth_schedule, error_message) &&
+              build_satellite_runtimes(runtime.truth_schedule, options.start_time, &runtime.satellites, error_message);
+          '''
+          new = '''    std::fprintf(stderr, "WIN_TRACE before_load_nav\\n");
+          bool ok = load_truth_navigation(runtime.navigation, options.rinex_nav_path, error_message);
+          std::fprintf(stderr, "WIN_TRACE after_load_nav ok=%d\\n", ok ? 1 : 0);
+          if (ok) {
+              ok = make_static_receiver_truth(config.receiver, &runtime.receiver, error_message);
+              std::fprintf(stderr, "WIN_TRACE after_receiver ok=%d\\n", ok ? 1 : 0);
+          }
+          if (ok) {
+              ok = build_truth_schedule(truth_navigation_store(runtime.navigation), &runtime.truth_schedule, error_message);
+              std::fprintf(stderr, "WIN_TRACE after_schedule ok=%d count=%zu\\n", ok ? 1 : 0, runtime.truth_schedule.size());
+          }
+          if (ok) {
+              ok = build_satellite_runtimes(runtime.truth_schedule, options.start_time, &runtime.satellites, error_message);
+              std::fprintf(stderr, "WIN_TRACE after_runtimes ok=%d count=%zu\\n", ok ? 1 : 0, runtime.satellites.size());
+          }
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('setup chain anchor mismatch')
+          text = text.replace(old, new, 1)
+          old = '        int tracked_satellites = 0;\n'
+          new = '        std::fprintf(stderr, "WIN_TRACE epoch=%llu before_measurements\\n", static_cast<unsigned long long>(epoch_index));\n' + old
+          text = text.replace(old, new, 1)
+          old = '''        if (!update_tracking_and_measurements(&runtime, config, scenario, &measurements, &tracked_satellites,
+                                                        truth_writer, error_message) ||
+              !process_receiver_nav(&runtime, config, current_time, &output, &result, error_message)) {
+          '''
+          new = '''        if (!update_tracking_and_measurements(&runtime, config, scenario, &measurements, &tracked_satellites,
+                                                        truth_writer, error_message) ||
+              !process_receiver_nav(&runtime, config, current_time, &output, &result, error_message)) {
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('measurement anchor mismatch')
+          text = text.replace(old, new, 1)
+          marker = '        if (static_cast<int>(measurements.size()) > result.max_observations_per_epoch) {\n'
+          text = text.replace(marker, '        std::fprintf(stderr, "WIN_TRACE epoch=%llu after_measurements count=%zu\\n", static_cast<unsigned long long>(epoch_index), measurements.size());\n' + marker, 1)
+          sim.write_text(text)
 
       - name: Configure
         run: cmake -S . -B build -DBUILD_TESTING=ON
@@ -95,13 +111,3 @@ jobs:
 
       - name: Run residual acceptance directly
         run: .\build\Release\gnss_sim_integration_tests.exe --gtest_filter=V1Acceptance.EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks
-
-      - name: Commit guard only after Windows acceptance passes
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/core/simulator.cpp
-          git diff --cached --check
-          git commit -m "Fix Windows HAS store lifetime isolation"
-          git push origin HEAD:issue-51-all-signal-residuals

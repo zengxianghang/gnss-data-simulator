@@ -21,6 +21,7 @@ on:
       - tools/apply_issue51_raw_measurement_health_separation.py
       - tools/apply_issue51_diagnostic_residual.py
       - tools/apply_issue51_l1c_diagnostic_doppler.py
+      - tools/apply_issue51_l2c_diagnostic_doppler.py
       - tools/apply_issue51_range_union_acceptance.py
       - tools/apply_issue51_real_gps_modern_probe.py
       - .github/workflows/apply-issue51-glo-l3oc.yml
@@ -82,6 +83,7 @@ jobs:
           tools/apply_issue51_raw_measurement_health_separation.py
           tools/apply_issue51_diagnostic_residual.py
           tools/apply_issue51_l1c_diagnostic_doppler.py
+          tools/apply_issue51_l2c_diagnostic_doppler.py
           tools/apply_issue51_range_union_acceptance.py
           tools/apply_issue51_real_gps_modern_probe.py
 
@@ -104,6 +106,7 @@ jobs:
           python tools/apply_issue51_raw_measurement_health_separation.py
           python tools/apply_issue51_diagnostic_residual.py
           python tools/apply_issue51_l1c_diagnostic_doppler.py
+          python tools/apply_issue51_l2c_diagnostic_doppler.py
           python tools/apply_issue51_range_union_acceptance.py
 
       - name: Format modified C and C++ sources

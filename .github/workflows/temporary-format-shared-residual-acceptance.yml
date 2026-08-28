@@ -1,0 +1,32 @@
+name: Temporary format shared residual acceptance
+
+on:
+  push:
+    branches:
+      - issue-51-all-signal-residuals
+
+permissions:
+  contents: write
+
+jobs:
+  format-and-remove-self:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: issue-51-all-signal-residuals
+          fetch-depth: 0
+
+      - name: Format rewritten acceptance and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang-format -i tests/integration/test_all_signal_residuals.cpp
+          rm .github/workflows/temporary-format-shared-residual-acceptance.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "style: format shared residual acceptance"
+          git push origin HEAD:issue-51-all-signal-residuals

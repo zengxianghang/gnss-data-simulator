@@ -21,7 +21,6 @@ struct SatelliteGeometry {
     double propagation_time_sec;
     double azimuth_rad;
     double elevation_rad;
-    double elevation_mask_deg;
     int iteration_count;
     bool healthy;
     bool above_elevation_mask;

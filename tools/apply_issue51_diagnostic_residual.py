@@ -46,8 +46,10 @@ new_code = '''            rtklib_signal_bias_info_ext_t bias_info{};
                 fields[column.at("code_bias_status")] == "UNAVAILABLE_FOR_MESSAGE_FAMILY";
             const bool gps_l1c_developmental = signal_name == "GPS L1C";
             const bool gps_l5_preoperational = signal_name == "GPS L5Q";
+            const bool pseudorange_valid = fields[column.at("pseudorange_valid")] == "1";
+            const bool doppler_valid = fields[column.at("doppler_valid")] == "1";
 
-            if (gps_l5_preoperational && !family_unavailable) {
+            if (gps_l5_preoperational && !family_unavailable && pseudorange_valid) {
                 // L5 CNAV is intentionally broadcast unhealthy while pre-operational.
                 // Raw RANGE validity is independent of that navigation-health flag,
                 // but strict RTKLIB residual use must still reject it.
@@ -60,7 +62,7 @@ new_code = '''            rtklib_signal_bias_info_ext_t bias_info{};
                                           << " sat=" << static_cast<int>(observation.sat);
                 ++signal_stats.code_residuals;
                 signal_stats.max_abs_code_m = (std::max)(signal_stats.max_abs_code_m, std::fabs(code_residual_m));
-            } else if (fields[column.at("pseudorange_valid")] == "1") {
+            } else if (pseudorange_valid) {
                 ASSERT_EQ(code_status, 1) << "site=" << site.name << " signal=" << signal_name
                                           << " sat=" << static_cast<int>(observation.sat);
                 ++signal_stats.code_residuals;
@@ -74,8 +76,8 @@ new_code = '''            rtklib_signal_bias_info_ext_t bias_info{};
                 }
             }
 
-            if (gps_l1c_developmental) {
-                // GPS L1C currently carries no CNAV-2 navigation data.  Code
+            if (gps_l1c_developmental && doppler_valid) {
+                // GPS L1C currently carries no CNAV-2 navigation data. Code
                 // bias therefore remains unavailable, but Doppler needs no
                 // signal-specific code bias and can be checked against the
                 // same-satellite generic broadcast orbit/clock state.
@@ -89,7 +91,7 @@ new_code = '''            rtklib_signal_bias_info_ext_t bias_info{};
                 ++signal_stats.doppler_residuals;
                 signal_stats.max_abs_doppler_mps =
                     (std::max)(signal_stats.max_abs_doppler_mps, std::fabs(doppler_residual_mps));
-            } else if (gps_l5_preoperational) {
+            } else if (gps_l5_preoperational && doppler_valid) {
                 double doppler_residual_mps = 0.0;
                 const int doppler_status = rtklib_resdop_signal_diagnostic_ext(
                     &observation, &nav, &residual_options, receiver_position_m, receiver_velocity_mps, 0.0, 0,
@@ -99,7 +101,7 @@ new_code = '''            rtklib_signal_bias_info_ext_t bias_info{};
                 ++signal_stats.doppler_residuals;
                 signal_stats.max_abs_doppler_mps =
                     (std::max)(signal_stats.max_abs_doppler_mps, std::fabs(doppler_residual_mps));
-            } else if (fields[column.at("doppler_valid")] == "1") {
+            } else if (doppler_valid) {
                 double doppler_residual_mps = 0.0;
                 const int doppler_status =
                     rtklib_resdop_signal_ext(&observation, &nav, &residual_options, receiver_position_m,

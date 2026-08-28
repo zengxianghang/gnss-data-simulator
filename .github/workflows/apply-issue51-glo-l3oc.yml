@@ -9,14 +9,12 @@ on:
       - tools/apply_issue51_glo_l3oc_patch.py
       - tools/apply_issue51_rtklib_link_fix.py
       - tools/apply_issue51_doppler_family_policy.py
-      - tools/apply_issue51_doppler_diagnostic.py
-      - tools/apply_issue51_nav_integrity_diagnostic.py
-      - tools/apply_issue51_modern_visibility_diagnostic.py
       - tools/apply_issue51_requested_family_validation.py
       - tools/apply_issue51_code_state_family.py
       - tools/apply_issue51_code_state_availability.py
       - tools/apply_issue51_solution_engine_signature.py
       - tools/apply_issue51_spp_family_nav.py
+      - tools/apply_issue51_multisite_coverage.py
       - .github/workflows/apply-issue51-glo-l3oc.yml
 
 permissions:
@@ -44,16 +42,14 @@ jobs:
           tools/apply_issue51_glo_l3oc_patch.py
           tools/apply_issue51_rtklib_link_fix.py
           tools/apply_issue51_doppler_family_policy.py
-          tools/apply_issue51_doppler_diagnostic.py
-          tools/apply_issue51_nav_integrity_diagnostic.py
-          tools/apply_issue51_modern_visibility_diagnostic.py
           tools/apply_issue51_requested_family_validation.py
           tools/apply_issue51_code_state_family.py
           tools/apply_issue51_code_state_availability.py
           tools/apply_issue51_solution_engine_signature.py
           tools/apply_issue51_spp_family_nav.py
+          tools/apply_issue51_multisite_coverage.py
 
-      - name: Apply guarded implementation changes and diagnostic
+      - name: Apply guarded implementation and multi-site validation
         run: |
           python tools/apply_issue51_glo_l3oc_patch.py
           python tools/apply_issue51_rtklib_link_fix.py
@@ -63,9 +59,7 @@ jobs:
           python tools/apply_issue51_solution_engine_signature.py
           python tools/apply_issue51_spp_family_nav.py
           python tools/apply_issue51_requested_family_validation.py
-          python tools/apply_issue51_doppler_diagnostic.py
-          python tools/apply_issue51_nav_integrity_diagnostic.py
-          python tools/apply_issue51_modern_visibility_diagnostic.py
+          python tools/apply_issue51_multisite_coverage.py
 
       - name: Format modified C and C++ sources
         run: >-
@@ -96,6 +90,51 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
+      - name: Discover real GPS CNV2 records in full-day BRD400DLR
+        run: |
+          set -euo pipefail
+          url='https://igs.bkg.bund.de/root_ftp/IGS/BRDC/2025/003/BRD400DLR_S_20250030000_01D_MN.rnx.gz'
+          echo "CNV2_SOURCE ${url}"
+          curl -fsSL --retry 3 --retry-delay 2 "${url}" -o /tmp/brd400dlr_2025003.rnx.gz
+          gzip -dc /tmp/brd400dlr_2025003.rnx.gz > /tmp/brd400dlr_2025003.rnx
+          python - <<'PY'
+          from datetime import datetime
+          from pathlib import Path
+
+          lines = Path('/tmp/brd400dlr_2025003.rnx').read_text(errors='strict').splitlines()
+          records = []
+          i = 0
+          while i < len(lines):
+              if not (lines[i].startswith('> EPH G') and 'CNV2' in lines[i]):
+                  i += 1
+                  continue
+              j = i + 1
+              while j < len(lines) and not lines[j].startswith('>'):
+                  j += 1
+              block = lines[i:j]
+              epoch = None
+              if len(block) >= 2:
+                  fields = block[1].split()
+                  try:
+                      epoch = datetime(int(fields[1]), int(fields[2]), int(fields[3]), int(fields[4]), int(fields[5]),
+                                       int(float(fields[6])))
+                  except (ValueError, IndexError):
+                      pass
+              records.append((epoch, block))
+              i = j
+
+          target = datetime(2025, 1, 3, 1, 15, 0)
+          print(f'CNV2_COUNT {len(records)}')
+          candidates = sorted(records, key=lambda item: abs((item[0] - target).total_seconds()) if item[0] else 1e99)
+          for rank, (epoch, block) in enumerate(candidates[:8], start=1):
+              age = abs((epoch - target).total_seconds()) if epoch else float('inf')
+              print(f'CNV2_CANDIDATE rank={rank} epoch={epoch} target_age_sec={age:.0f}')
+              print('\n'.join(block))
+              print('CNV2_CANDIDATE_END')
+          if not records:
+              raise SystemExit('no GPS CNV2 record found in full-day BRD400DLR')
+          PY
+
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
 
@@ -109,8 +148,9 @@ jobs:
           python tools/apply_issue51_solution_engine_signature.py
           python tools/apply_issue51_spp_family_nav.py
           python tools/apply_issue51_requested_family_validation.py
+          python tools/apply_issue51_multisite_coverage.py
           clang-format -i src/gnss/rtklib_solution_adapter.cpp src/solution/solution_engine.cpp tests/integration/test_all_signal_residuals.cpp tests/unit/test_solution_engine.cpp
-          rm -f tools/apply_issue51_glo_l3oc_patch.py tools/apply_issue51_rtklib_link_fix.py tools/apply_issue51_doppler_family_policy.py tools/apply_issue51_doppler_diagnostic.py tools/apply_issue51_nav_integrity_diagnostic.py tools/apply_issue51_modern_visibility_diagnostic.py tools/apply_issue51_requested_family_validation.py tools/apply_issue51_code_state_family.py tools/apply_issue51_code_state_availability.py tools/apply_issue51_solution_engine_signature.py tools/apply_issue51_spp_family_nav.py .github/workflows/apply-issue51-glo-l3oc.yml
+          rm -f tools/apply_issue51_glo_l3oc_patch.py tools/apply_issue51_rtklib_link_fix.py tools/apply_issue51_doppler_family_policy.py tools/apply_issue51_doppler_diagnostic.py tools/apply_issue51_nav_integrity_diagnostic.py tools/apply_issue51_modern_visibility_diagnostic.py tools/apply_issue51_requested_family_validation.py tools/apply_issue51_code_state_family.py tools/apply_issue51_code_state_availability.py tools/apply_issue51_solution_engine_signature.py tools/apply_issue51_spp_family_nav.py tools/apply_issue51_multisite_coverage.py .github/workflows/apply-issue51-glo-l3oc.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A

@@ -98,6 +98,22 @@ jobs:
           sp3_lines = lines_without_eol_padding('/tmp/jrc_has/has.sp3')
           first_epoch = next(i for i, line in enumerate(sp3_lines) if line.startswith('*'))
           sp3_out = list(sp3_lines[:first_epoch])
+          # RTKLIB readsp3h() consumes exactly 22 header lines and readsp3b()
+          # consumes ns P records after every epoch.  The source declares 57
+          # satellites, while this compact fixture retains only PE02.  Normalize
+          # the header to ns=1/E02 and 22 lines without changing any source
+          # epoch or PE02 numeric value.
+          if len(sp3_out) != 19:
+              raise RuntimeError(f'unexpected JRC SP3 header length: {len(sp3_out)}')
+          sp3_out[2] = '+    1   E02'
+          sp3_out.insert(6, '+')
+          sp3_out.extend([
+              '/* Compact fixture retains only E02 source epochs and PE02 numeric rows.',
+              '/* Satellite count normalized to one; trailing source padding removed.',
+          ])
+          if len(sp3_out) != 22:
+              raise RuntimeError(f'normalized SP3 header must contain 22 lines, got {len(sp3_out)}')
+
           kept = 0
           i = first_epoch
           while i < len(sp3_lines):

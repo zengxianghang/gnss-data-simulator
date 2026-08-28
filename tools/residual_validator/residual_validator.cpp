@@ -187,7 +187,8 @@ Accumulator& get_group(std::map<GroupKey, Accumulator>* groups, int scope_rank, 
     auto [iterator, inserted] = groups->try_emplace(key);
     if (inserted) {
         iterator->second.definition = definition;
-        iterator->second.scope = scope_rank == 0 ? "signal" : (scope_rank == 1 ? "signal_family" : "signal_family_satellite");
+        iterator->second.scope =
+            scope_rank == 0 ? "signal" : (scope_rank == 1 ? "signal_family" : "signal_family_satellite");
         iterator->second.family = family;
         iterator->second.satellite_number = satellite_number;
     }
@@ -297,13 +298,34 @@ bool validate_observation_truth(const ValidationOptions& options, ValidationRepo
     }
     const std::map<std::string, std::size_t> columns = header_columns(line);
     const char* required_columns[] = {
-        "gps_week",          "sow_sec",                   "signal_id",                 "signal_name",
-        "satellite_number",  "wavelength_m",              "receiver_x_m",              "receiver_y_m",
-        "receiver_z_m",      "receiver_vx_mps",           "receiver_vy_mps",           "receiver_vz_mps",
-        "cn0_dbhz",          "broadcast_message_family",  "code_bias_status",          "pseudorange_valid",
-        "doppler_valid",     "pseudorange_m",             "doppler_hz",                "satellite_x_m",
-        "satellite_y_m",     "satellite_z_m",             "satellite_vx_mps",          "satellite_vy_mps",
-        "satellite_vz_mps",  "satellite_clock_bias_m",    "satellite_clock_drift_mps", "code_bias_m",
+        "gps_week",
+        "sow_sec",
+        "signal_id",
+        "signal_name",
+        "satellite_number",
+        "wavelength_m",
+        "receiver_x_m",
+        "receiver_y_m",
+        "receiver_z_m",
+        "receiver_vx_mps",
+        "receiver_vy_mps",
+        "receiver_vz_mps",
+        "cn0_dbhz",
+        "broadcast_message_family",
+        "code_bias_status",
+        "pseudorange_valid",
+        "doppler_valid",
+        "pseudorange_m",
+        "doppler_hz",
+        "satellite_x_m",
+        "satellite_y_m",
+        "satellite_z_m",
+        "satellite_vx_mps",
+        "satellite_vy_mps",
+        "satellite_vz_mps",
+        "satellite_clock_bias_m",
+        "satellite_clock_drift_mps",
+        "code_bias_m",
     };
     for (const char* required : required_columns) {
         if (columns.count(required) != 1U) {
@@ -362,8 +384,8 @@ bool validate_observation_truth(const ValidationOptions& options, ValidationRepo
             observation.sat = static_cast<unsigned char>(satellite_number);
             observation.rcv = 1;
             observation.code[0] = static_cast<unsigned char>(observation_code);
-            observation.SNR[0] = static_cast<unsigned char>(std::clamp(
-                std::lround(std::stod(fields[columns.at("cn0_dbhz")]) * 4.0), 0L, 255L));
+            observation.SNR[0] = static_cast<unsigned char>(
+                std::clamp(std::lround(std::stod(fields[columns.at("cn0_dbhz")]) * 4.0), 0L, 255L));
             if (pseudorange_valid) {
                 observation.P[0] = std::stod(fields[columns.at("pseudorange_m")]);
             }
@@ -405,21 +427,22 @@ bool validate_observation_truth(const ValidationOptions& options, ValidationRepo
                                                       wavelength_m, &code_residual_m, nullptr);
                 } else {
                     const int message_type = required_rtklib_message_type(*definition);
-                    status = rtklib_rescode_signal_ext(&observation, nav.get(), &residual_options, receiver_position_m,
-                                                       0.0, 0.0, message_type, wavelength_m, &code_residual_m, nullptr,
-                                                       nullptr);
+                    status =
+                        rtklib_rescode_signal_ext(&observation, nav.get(), &residual_options, receiver_position_m, 0.0,
+                                                  0.0, message_type, wavelength_m, &code_residual_m, nullptr, nullptr);
                     if (status == 0 && options.allow_diagnostic_health && modern_gps_signal(definition->signal_id) &&
                         code_bias_status == "APPLIED") {
-                        status = rtklib_rescode_signal_diagnostic_ext(
-                            &observation, nav.get(), &residual_options, receiver_position_m, 0.0, 0.0, message_type,
-                            wavelength_m, &code_residual_m, nullptr, nullptr);
+                        status = rtklib_rescode_signal_diagnostic_ext(&observation, nav.get(), &residual_options,
+                                                                      receiver_position_m, 0.0, 0.0, message_type,
+                                                                      wavelength_m, &code_residual_m, nullptr, nullptr);
                         diagnostic_code = status == 1;
                     }
                 }
                 if (status != 1) {
                     nav_cleanup();
-                    set_error(error_message, row_context(line_number, *definition, satellite_number, gps_week, sow_sec) +
-                                                 ": RTKLIB code residual failed for a truth-valid pseudorange");
+                    set_error(error_message,
+                              row_context(line_number, *definition, satellite_number, gps_week, sow_sec) +
+                                  ": RTKLIB code residual failed for a truth-valid pseudorange");
                     return false;
                 }
                 code_residual_ptr = &code_residual_m;
@@ -435,9 +458,9 @@ bool validate_observation_truth(const ValidationOptions& options, ValidationRepo
                                                      receiver_velocity_mps, 0.0, satellite_state, satellite_clock, 0,
                                                      wavelength_m, &doppler_residual_mps, nullptr);
                 } else if (options.allow_diagnostic_health && modern_gps_signal(definition->signal_id)) {
-                    status = rtklib_resdop_signal_diagnostic_ext(
-                        &observation, nav.get(), &residual_options, receiver_position_m, receiver_velocity_mps, 0.0, 0,
-                        wavelength_m, &doppler_residual_mps, nullptr);
+                    status = rtklib_resdop_signal_diagnostic_ext(&observation, nav.get(), &residual_options,
+                                                                 receiver_position_m, receiver_velocity_mps, 0.0, 0,
+                                                                 wavelength_m, &doppler_residual_mps, nullptr);
                     diagnostic_doppler = status == 1;
                 } else {
                     status = rtklib_resdop_signal_ext(&observation, nav.get(), &residual_options, receiver_position_m,
@@ -446,8 +469,9 @@ bool validate_observation_truth(const ValidationOptions& options, ValidationRepo
                 }
                 if (status != 1) {
                     nav_cleanup();
-                    set_error(error_message, row_context(line_number, *definition, satellite_number, gps_week, sow_sec) +
-                                                 ": RTKLIB Doppler residual failed for a truth-valid Doppler");
+                    set_error(error_message,
+                              row_context(line_number, *definition, satellite_number, gps_week, sow_sec) +
+                                  ": RTKLIB Doppler residual failed for a truth-valid Doppler");
                     return false;
                 }
                 doppler_residual_ptr = &doppler_residual_mps;

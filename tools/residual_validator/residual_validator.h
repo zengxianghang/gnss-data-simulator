@@ -46,8 +46,7 @@ struct ValidationReport {
     std::vector<SummaryRow> rows;
 };
 
-bool validate_observation_truth(const ValidationOptions& options, ValidationReport* report,
-                                std::string* error_message);
+bool validate_observation_truth(const ValidationOptions& options, ValidationReport* report, std::string* error_message);
 bool write_summary_csv(const ValidationReport& report, const std::string& output_path, std::string* error_message);
 
 const SummaryRow* find_signal_summary(const ValidationReport& report, int signal_id);

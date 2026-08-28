@@ -128,7 +128,7 @@ int main(int argc, char** argv) {
                   << " doppler_max_mps=" << row.doppler_max_abs_mps << '\n';
     }
     std::cout << "Validated input rows: " << report.input_rows << ", signal summaries: " << signal_rows << '\n';
-    std::cout << "Limits: code < " << code_limit_m << " m, Doppler < " << doppler_limit_mps
-              << " m/s => " << (limits_pass ? "PASS" : "FAIL") << '\n';
+    std::cout << "Limits: code < " << code_limit_m << " m, Doppler < " << doppler_limit_mps << " m/s => "
+              << (limits_pass ? "PASS" : "FAIL") << '\n';
     return limits_pass ? 0 : 3;
 }

@@ -1,6 +1,6 @@
 name: Apply GLONASS L3OC simulator patch
 
-# Guarded compact residual validation against RTKLIB 8d252915 BDS CNAV time fix.
+# Guarded compact residual validation against RTKLIB 8d252915.
 on:
   push:
     branches:
@@ -18,7 +18,7 @@ on:
       - .github/workflows/apply-issue51-glo-l3oc.yml
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   apply-and-validate:
@@ -90,6 +90,14 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
+      - name: Test full suite
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Print GPS CNAV residual diagnostics
+        run: >-
+          ./build/gnss_sim_integration_tests
+          --gtest_filter=V1Acceptance.EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks
+
       - name: Discover real GPS CNV2 records in full-day BRD400DLR
         continue-on-error: true
         run: |
@@ -148,26 +156,7 @@ jobs:
               raise SystemExit('no GPS CNV2 record found in full-day BRD400DLR')
           PY
 
-      - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
-
-      - name: Commit validated implementation and remove diagnostics/scaffolding
+      - name: Diagnostic branch remains uncommitted
         run: |
-          git checkout -- tests/integration/test_all_signal_residuals.cpp
-          python tools/apply_issue51_glo_l3oc_patch.py
-          python tools/apply_issue51_doppler_family_policy.py
-          python tools/apply_issue51_code_state_family.py
-          python tools/apply_issue51_code_state_availability.py
-          python tools/apply_issue51_solution_engine_signature.py
-          python tools/apply_issue51_spp_family_nav.py
-          python tools/apply_issue51_requested_family_validation.py
-          python tools/apply_issue51_multisite_coverage.py
-          clang-format -i src/gnss/rtklib_solution_adapter.cpp src/solution/solution_engine.cpp tests/integration/test_all_signal_residuals.cpp tests/unit/test_solution_engine.cpp
-          rm -f tools/apply_issue51_glo_l3oc_patch.py tools/apply_issue51_rtklib_link_fix.py tools/apply_issue51_doppler_family_policy.py tools/apply_issue51_doppler_diagnostic.py tools/apply_issue51_nav_integrity_diagnostic.py tools/apply_issue51_modern_visibility_diagnostic.py tools/apply_issue51_requested_family_validation.py tools/apply_issue51_code_state_family.py tools/apply_issue51_code_state_availability.py tools/apply_issue51_solution_engine_signature.py tools/apply_issue51_spp_family_nav.py tools/apply_issue51_multisite_coverage.py .github/workflows/apply-issue51-glo-l3oc.yml
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git diff --cached --check
-          git diff --cached --exit-code && { echo 'No validated implementation changes to commit'; exit 1; } || true
-          git commit -m 'Add GLONASS L3OC simulator residual support'
-          git push origin HEAD:issue-51-all-signal-residuals
+          echo 'Guarded implementation validated in the worktree only.'
+          echo 'No source commit is made until GPS modern-family coverage is strict again.'

@@ -43,6 +43,7 @@ struct SimConfig {
     std::int64_t duration_ns;
     int sampling_rate_hz;
     double elevation_mask_deg;
+    double solution_elevation_mask_deg;
     bool output_eph;
     bool output_ion;
     bool measurement_noise_enabled;

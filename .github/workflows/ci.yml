@@ -59,4 +59,4 @@ jobs:
       - name: Report RANGEA round-trip positioning error
         if: runner.os == 'Linux'
         shell: bash
-        run: ./build/gnss_sim_integration_tests --gtest_filter=RangeaRoundtripIntegration.RealWhuRinex4SerializedRangeaPositionsWithinHalfMeter
+        run: ./build/gnss_sim_integration_tests --gtest_filter=RangeaRoundtripIntegration.LowElevationRangeIsRetainedWhileSppUsesFiveDegreeMask

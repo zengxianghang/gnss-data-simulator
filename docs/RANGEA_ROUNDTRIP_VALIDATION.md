@@ -16,6 +16,19 @@ The black-box gate instead executes:
 
 The RTKLIB observations used by this gate come only from parsed RANGEA text. The evaluator does not read `observation_truth.csv` and does not receive the simulator's in-memory `MeasurementObservation` objects.
 
+## Elevation-mask semantics
+
+The simulator keeps measurement visibility and navigation-solution filtering independent:
+
+- `elevation_mask_deg` controls simulated tracking/measurement availability and therefore which low-elevation observations can appear in RANGEA;
+- `solution_elevation_mask_deg` controls the RTKLIB position/velocity solution elevation cutoff;
+- `solution_elevation_mask_deg` defaults to **5 deg** when omitted, including for existing schema-version-1 configs;
+- lowering `elevation_mask_deg` does not lower the RTKLIB SPP cutoff unless `solution_elevation_mask_deg` is changed explicitly.
+
+This matches a normal receiver architecture: RANGE can retain measurements that the navigation engine elects not to use. Issue #62 validation deliberately uses `elevation_mask_deg = 0 deg` and `solution_elevation_mask_deg = 5 deg` to prove that observations below 5 deg remain serialized while normal SPP rejects them.
+
+The separate low-elevation atmosphere/geometry consistency defect is tracked by Issue #63. The 5 deg solution policy is not considered a physical-model fix for that defect.
+
 ## Independence rules
 
 - RANGEA framing and CRC are decoded independently; the parser does not call the RANGEA writer or its framing helper.
@@ -48,20 +61,22 @@ This reuses the production SPP adapter for solution options, ephemeris staging, 
 
 ## Compact CI gate
 
-`RangeaRoundtripIntegration.RealWhuRinex4SerializedRangeaPositionsWithinHalfMeter` uses the provenance-traceable WHU-derived `BRD400DLR` RINEX 4 acceptance fixture:
+`RangeaRoundtripIntegration.LowElevationRangeIsRetainedWhileSppUsesFiveDegreeMask` uses the provenance-traceable WHU-derived `BRD400DLR` RINEX 4 acceptance fixture:
 
 - KS scenario;
 - fixed receiver truth: 20 deg N, 120 deg E, 100 m;
 - 1 Hz;
 - 60 s;
-- project-default `3 deg` elevation mask;
+- measurement/tracking elevation mask: `0 deg`;
+- RTKLIB solution elevation mask: `5 deg`;
 - zero measurement noise;
 - zero multipath;
 - broadcast ionosphere/troposphere enabled;
-- serialized RANGEA parsed back from the normal `simulated.log`;
+- at least one valid pseudorange below 5 deg must remain in the generated observation/RANGE path;
+- serialized RANGEA is parsed back from the normal `simulated.log`;
 - RANGEA epoch count must equal the simulator's emitted RANGE count;
 - reconstructed valid-position epoch count must equal the simulator's maintained in-memory SPP valid-position count;
-- maximum valid 3D position error must be `< 0.5 m`.
+- maximum valid 3D position error must be `< 0.01 m`.
 
 The exact maximum 3D error and its GPST are printed by Ubuntu CI on every successful compact run.
 
@@ -75,7 +90,9 @@ The scheduled/manual gate:
 
 - downloads the exact pinned WHU RINEX NAV and verifies both compressed and uncompressed SHA256 values;
 - runs a 10 minute KS simulation at 1 Hz starting at GPST week 2347 / SOW 436500;
-- uses the project-default `3 deg` elevation mask;
+- uses a `0 deg` measurement/tracking mask so low-elevation RANGE observations are retained;
+- uses a `5 deg` RTKLIB SPP mask independently;
+- records both masks explicitly in `run_manifest.json` and verifies them in the gate;
 - uses zero measurement noise and zero multipath;
 - enables broadcast ionosphere/troposphere;
 - parses only the generated `simulated.log` RANGEA records;
@@ -83,15 +100,13 @@ The scheduled/manual gate:
 - requires RANGEA epoch count to equal the simulator `range_messages` count;
 - requires round-trip valid-position epoch count to equal the simulator maintained-SPP count;
 - requires at least four selected serialized observations per valid position epoch in aggregate;
-- requires maximum 3D position error `< 0.5 m`.
+- requires maximum 3D position error `< 0.01 m` with the 5 deg SPP mask.
 
-A separate diagnostic run deliberately lowered the positioning mask to `0 deg`; that run measured `0.138821 m` maximum 3D error at GPST `2347/437021.000` and exposed the near-horizon geometry/atmosphere consistency problem described below. The `3 deg` A/B solve on the same generated data measured `0.000669 m` maximum 3D error.
+### Confirmed cause of the old 0-deg SPP error spike
 
-### Confirmed cause of the 0-deg error spike
+Before the masks were separated, a diagnostic also used `0 deg` as the **positioning** mask. That produced a `0.138821 m` maximum 3D error at GPST `2347/437021.000`. The peak was not caused by RANGEA serialization; the same epoch already showed the spike in the simulator's in-memory SPP path.
 
-The `0.138821 m` peak is not caused by RANGEA serialization. RANGEA writes pseudorange to `0.001 m`, while the same epoch also shows an error spike before serialization in the simulator's in-memory SPP path.
-
-The peak is caused by accepting a satellite essentially on the geometric horizon together with a geometry-consistency weakness in the generated atmosphere terms:
+The root cause is a near-horizon atmosphere/geometry consistency weakness:
 
 - BeiDou satellite 144 is at about `0.010385 deg` elevation at GPST `2347/437021`.
 - The generated Saastamoinen troposphere delay for that observation is about `13241.954 m` because the mapping function is extremely sensitive near zero elevation.
@@ -100,11 +115,9 @@ The peak is caused by accepting a satellite essentially on the geometric horizon
 - The already-computed ionosphere/troposphere terms are retained instead of being recomputed from the final family-specific line of sight.
 - At normal elevations the geometric difference is negligible. Near zero elevation the troposphere mapping derivative is so large that the tiny line-of-sight difference becomes a many-metre pseudorange-model inconsistency.
 
-Independent residual validation confirms that the outlier is concentrated in near-horizon observations. BeiDou satellite 144 reaches code residuals of about `18.601 m` on B1I at `0.006757 deg` and `34.473 m` on B3I at `0.004943 deg`; ordinary-elevation observations remain around sub-millimetre to tens-of-micrometre residuals.
+Independent residual validation found about `18.601 m` B1I and `34.473 m` B3I maximum code residuals on that near-horizon satellite. An A/B position solve using the same generated data showed:
 
-Elevation-mask A/B validation confirms causality:
-
-| Positioning mask | Maximum 3D round-trip error |
+| RTKLIB positioning mask | Maximum 3D round-trip error |
 | ---: | ---: |
 | 0.0 deg | 0.138821 m |
 | 0.5 deg | 0.000559 m |
@@ -113,15 +126,13 @@ Elevation-mask A/B validation confirms causality:
 | 5.0 deg | 0.000722 m |
 | 10.0 deg | 0.000867 m |
 
-Therefore the 13.9 cm value is a pathological near-horizon atmosphere/geometry-consistency artifact exposed by the diagnostic `0 deg` mask. At the project's normal `3 deg` mask, the same full-day WHU 10 minute RANGEA round-trip is sub-millimetre in the A/B solve (`0.000669 m`).
-
-The validation policy change to `3 deg` does not fix or hide the model inconsistency. The near-horizon geometry/atmosphere consistency defect remains a separate implementation issue to fix and should retain dedicated low-elevation regression coverage.
+The normal 5 deg solution mask therefore prevents this pathological near-horizon observation from entering routine SPP, while the 0 deg measurement mask can still preserve it in RANGE for downstream analysis. Issue #63 remains responsible for making the generated physical model itself self-consistent at low elevation.
 
 The full-day source is never modified and no synthetic ephemeris fallback exists.
 
 ## Reusable validator
 
-The `validate-rangea-roundtrip` executable exposes the same streaming evaluator for retained logs:
+The `validate-rangea-roundtrip` executable exposes the same streaming evaluator for retained logs. Its `--elevation-mask` argument is a **solution** mask for the RTKLIB round-trip solve; it does not alter observations already present in a retained RANGE log:
 
 ```text
 validate-rangea-roundtrip \
@@ -130,7 +141,7 @@ validate-rangea-roundtrip \
   --truth-lat 20 \
   --truth-lon 120 \
   --truth-height 100 \
-  --elevation-mask 3 \
+  --elevation-mask 5 \
   --broadcast-atmosphere
 ```
 

@@ -81,7 +81,8 @@ jobs:
             "scenario": "KS",
             "duration_sec": 600,
             "sampling_rate_hz": 1,
-            "elevation_mask_deg": 3.0,
+            "elevation_mask_deg": 0.0,
+            "solution_elevation_mask_deg": 5.0,
             "output_eph": true,
             "output_ion": true,
             "measurement_noise_enabled": false,
@@ -124,7 +125,7 @@ jobs:
             --truth-lat 20 \
             --truth-lon 120 \
             --truth-height 100 \
-            --elevation-mask 3 \
+            --elevation-mask 5 \
             --broadcast-atmosphere \
             | tee extended-results/rangea_roundtrip_10m/roundtrip.txt
 
@@ -144,6 +145,7 @@ jobs:
 
           manifest = json.loads((root / "run_manifest.json").read_text())
           summary = manifest["run_summary"]
+          config = manifest["config"]
           expected_range = int(summary["range_messages"])
           expected_valid = int(summary["valid_position_epochs"])
           range_epochs = int(values["range_epochs"])
@@ -152,6 +154,12 @@ jobs:
           max_error = float(values["max_position_error_m"])
 
           failures = []
+          if float(config["elevation_mask_deg"]) != 0.0:
+              failures.append(f"measurement elevation mask expected 0 deg, got {config['elevation_mask_deg']}")
+          if float(config["solution_elevation_mask_deg"]) != 5.0:
+              failures.append(
+                  f"solution elevation mask expected 5 deg, got {config['solution_elevation_mask_deg']}"
+              )
           if expected_range != 600:
               failures.append(f"simulator range_messages expected 600, got {expected_range}")
           if range_epochs != expected_range:
@@ -164,10 +172,12 @@ jobs:
               failures.append(
                   f"selected observation coverage too small: selected={selected}, valid_epochs={valid_epochs}"
               )
-          if not max_error < 0.5:
-              failures.append(f"max_position_error_m {max_error} is not < 0.5 m")
+          if not max_error < 0.01:
+              failures.append(f"max_position_error_m {max_error} is not < 0.01 m with the 5 deg SPP mask")
 
           result = {
+              "measurement_elevation_mask_deg": float(config["elevation_mask_deg"]),
+              "solution_elevation_mask_deg": float(config["solution_elevation_mask_deg"]),
               "range_epochs": range_epochs,
               "valid_position_epochs": valid_epochs,
               "simulator_valid_position_epochs": expected_valid,
@@ -184,7 +194,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          echo "# RANGEA real-WHU 10 minute round-trip (3 deg mask)" >> "$GITHUB_STEP_SUMMARY"
+          echo "# RANGEA real-WHU 10 minute round-trip (0 deg measurements / 5 deg SPP)" >> "$GITHUB_STEP_SUMMARY"
           echo >> "$GITHUB_STEP_SUMMARY"
           if [[ -f extended-results/rangea_roundtrip_10m/roundtrip.txt ]]; then
             echo '```text' >> "$GITHUB_STEP_SUMMARY"

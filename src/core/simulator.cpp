@@ -1022,7 +1022,7 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         SolutionEpoch solution{};
         const MeasurementObservation* data = measurements.empty() ? nullptr : measurements.data();
         if (!solve_receiver_epoch(receiver_navigation_store(runtime.navigation), current_time, data,
-                                  static_cast<int>(measurements.size()), config.elevation_mask_deg,
+                                  static_cast<int>(measurements.size()), config.solution_elevation_mask_deg,
                                   config.atmosphere_mode, &runtime.solution_state, &solution, error_message) ||
             !truth_writer_write_solution(truth_writer, solution, tracked_satellites, error_message) ||
             !emit_epoch_logs(config, scenario, measurements, tracked_satellites, solution, runtime.receiver, &output,

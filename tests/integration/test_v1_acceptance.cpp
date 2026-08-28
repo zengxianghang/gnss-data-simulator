@@ -278,6 +278,9 @@ TEST(V1Acceptance, FrozenRatesRunThroughFullStreamingPipeline) {
 
 TEST(V1Acceptance, RealMixedNavProducesAllFiveV1ConstellationsAndValidSolution) {
     gnss_sim::SimConfig config = acceptance_config();
+    // This compact fixture validates five-system plumbing, not the production SPP cutoff.
+    // Real BRD400 and RANGEA acceptance exercise the 5 degree solution default.
+    config.solution_elevation_mask_deg = 0.0;
     config.sampling_rate_hz = 1;
     config.duration_ns = 60LL * gnss_sim::NANOSECONDS_PER_SECOND;
     config.receiver = {10.0, 80.0, 100.0};

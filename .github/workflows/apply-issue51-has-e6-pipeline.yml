@@ -23,6 +23,7 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+          import re
 
           path = Path('tests/integration/test_all_signal_residuals.cpp')
           text = path.read_text()
@@ -32,9 +33,9 @@ jobs:
           if body.count('nav_t nav{};') != 1:
               raise SystemExit('expected exactly one stack nav_t in residual acceptance')
           body = body.replace('nav_t nav{};', 'auto nav = std::make_unique<nav_t>();', 1)
-          body = body.replace('&nav', 'nav.get()')
-          body = body.replace('nav.n', 'nav->n')
-          body = body.replace('nav.eph', 'nav->eph')
+          body = re.sub(r'&nav\b', 'nav.get()', body)
+          body = re.sub(r'\bnav\.n\b', 'nav->n', body)
+          body = re.sub(r'\bnav\.eph\b', 'nav->eph', body)
           text = text[:start] + body + text[end:]
           path.write_text(text)
 

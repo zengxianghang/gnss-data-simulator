@@ -184,7 +184,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          echo "# RANGEA real-WHU 10 minute round-trip" >> "$GITHUB_STEP_SUMMARY"
+          echo "# RANGEA real-WHU 10 minute round-trip (3 deg mask)" >> "$GITHUB_STEP_SUMMARY"
           echo >> "$GITHUB_STEP_SUMMARY"
           if [[ -f extended-results/rangea_roundtrip_10m/roundtrip.txt ]]; then
             echo '```text' >> "$GITHUB_STEP_SUMMARY"

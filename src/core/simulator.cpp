@@ -14,6 +14,7 @@
 #include "model/measurement_model.h"
 #include "model/receiver_truth.h"
 #include "model/signal_tracking.h"
+#include "output/device_marker.h"
 #include "output/novatel_nav_writer.h"
 #include "output/novatel_range_writer.h"
 #include "output/novatel_solution_writer.h"
@@ -973,6 +974,11 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         }
         if (scenario.power_on_transition) {
             ++result.power_on_events;
+            if (config.scenario == ScenarioType::TTFF &&
+                !write_message(&output, simulator_device_marker(), error_message)) {
+                ok = false;
+                break;
+            }
             if (!receiver_power_on(&runtime, config, current_time, &output, &result, error_message)) {
                 ok = false;
                 break;

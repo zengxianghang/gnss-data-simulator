@@ -1,6 +1,7 @@
 #include "gnss/rtklib_adapter.h"
 #include "gnss_sim/sim_time.h"
 #include "model/measurement_model.h"
+#include "output/device_marker.h"
 #include "output/novatel_ascii.h"
 #include "output/novatel_range_writer.h"
 #include "output/novatel_solution_writer.h"
@@ -38,6 +39,10 @@ gnss_sim::MeasurementObservation observation(const char* satellite_id, gnss_sim:
     result.doppler_valid = true;
     result.adr_valid = true;
     return result;
+}
+
+TEST(SimulatorDeviceMarker, CanonicalMarkerIsByteStable) {
+    EXPECT_EQ(gnss_sim::simulator_device_marker(), "devicename=gnss-data-simulator\r\n");
 }
 
 TEST(NovatelAscii, OfficialBestPosCrcVectorMatchesOem7Documentation) {

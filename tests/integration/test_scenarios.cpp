@@ -1,6 +1,7 @@
 #include "gnss_sim/sim_config.h"
 #include "gnss_sim/sim_time.h"
 #include "gnss_sim/simulator.h"
+#include "output/device_marker.h"
 
 #include <cstdio>
 #include <fstream>
@@ -80,7 +81,9 @@ TEST(StreamingSimulator, KsProducesOneLogSetPerEpoch) {
     EXPECT_EQ(summary.psrpos_messages, 50U);
     EXPECT_EQ(summary.psrvel_messages, 50U);
     EXPECT_EQ(summary.bestpos_messages, 50U);
-    EXPECT_EQ(occurrence_count(read_file(test_output_path("ks")), "#BESTPOSA,"), 50U);
+    const std::string log = read_file(test_output_path("ks"));
+    EXPECT_EQ(occurrence_count(log, "#BESTPOSA,"), 50U);
+    EXPECT_EQ(occurrence_count(log, gnss_sim::simulator_device_marker()), 0U);
     EXPECT_EQ(summary.power_on_events, 1U);
     EXPECT_EQ(summary.power_off_events, 0U);
     EXPECT_GT(summary.max_observations_per_epoch, 0);
@@ -106,7 +109,9 @@ TEST(StreamingSimulator, ReaKeepsLogsRunningWithZeroRangeDuringSignalOff) {
     EXPECT_EQ(summary.psrpos_messages, 60U);
     EXPECT_EQ(summary.psrvel_messages, 60U);
     EXPECT_EQ(summary.bestpos_messages, 60U);
-    EXPECT_EQ(occurrence_count(read_file(test_output_path("rea")), "#BESTPOSA,"), 60U);
+    const std::string log = read_file(test_output_path("rea"));
+    EXPECT_EQ(occurrence_count(log, "#BESTPOSA,"), 60U);
+    EXPECT_EQ(occurrence_count(log, gnss_sim::simulator_device_marker()), 0U);
     EXPECT_EQ(summary.power_off_events, 0U);
     EXPECT_EQ(summary.signal_off_events, 2U);
     EXPECT_EQ(summary.signal_on_events, 2U);
@@ -131,9 +136,21 @@ void expect_ttff_log_suppression(gnss_sim::StartupMode mode, const char* name) {
     EXPECT_EQ(summary.psrpos_messages, 60U);
     EXPECT_EQ(summary.psrvel_messages, 60U);
     EXPECT_EQ(summary.bestpos_messages, 60U);
-    EXPECT_EQ(occurrence_count(read_file(test_output_path(name)), "#BESTPOSA,"), 60U);
+    const std::string log = read_file(test_output_path(name));
+    EXPECT_EQ(occurrence_count(log, "#BESTPOSA,"), 60U);
     EXPECT_EQ(summary.power_on_events, 2U);
     EXPECT_EQ(summary.power_off_events, 2U);
+    const std::string& marker = gnss_sim::simulator_device_marker();
+    EXPECT_EQ(occurrence_count(log, marker), summary.power_on_events);
+    std::size_t marker_position = 0;
+    for (std::uint64_t index = 0; index < summary.power_on_events; ++index) {
+        marker_position = log.find(marker, marker_position);
+        ASSERT_NE(marker_position, std::string::npos);
+        const std::size_t next_record = marker_position + marker.size();
+        ASSERT_LT(next_record, log.size());
+        EXPECT_EQ(log[next_record], '#');
+        marker_position = next_record;
+    }
     std::remove(test_output_path(name).c_str());
 }
 

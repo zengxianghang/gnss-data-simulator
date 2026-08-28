@@ -12,6 +12,7 @@
 #include <locale>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace gnss_sim {
@@ -273,14 +274,13 @@ bool parse_rangea_line(const std::string& raw_line, ParsedRangeEpoch* epoch, std
         double lock_time_sec = 0.0;
         unsigned int status = 0U;
         if (!parse_int(body[base], &range_prn) || !parse_int(body[base + 1U], &glofreq) ||
-            !parse_double(body[base + 2U], &pseudorange_m) ||
-            !parse_double(body[base + 3U], &pseudorange_sigma_m) || !parse_double(body[base + 4U], &adr_cycles) ||
-            !parse_double(body[base + 5U], &adr_sigma_cycles) || !parse_double(body[base + 6U], &doppler_hz) ||
-            !parse_double(body[base + 7U], &cn0_dbhz) || !parse_double(body[base + 8U], &lock_time_sec) ||
-            !parse_unsigned_hex(body[base + 9U], &status) || pseudorange_sigma_m < 0.0 || adr_sigma_cycles < 0.0 ||
-            cn0_dbhz < 0.0 || lock_time_sec < 0.0) {
-            set_error(error_message, "RANGEA observation contains malformed numeric fields at index " +
-                                         std::to_string(index));
+            !parse_double(body[base + 2U], &pseudorange_m) || !parse_double(body[base + 3U], &pseudorange_sigma_m) ||
+            !parse_double(body[base + 4U], &adr_cycles) || !parse_double(body[base + 5U], &adr_sigma_cycles) ||
+            !parse_double(body[base + 6U], &doppler_hz) || !parse_double(body[base + 7U], &cn0_dbhz) ||
+            !parse_double(body[base + 8U], &lock_time_sec) || !parse_unsigned_hex(body[base + 9U], &status) ||
+            pseudorange_sigma_m < 0.0 || adr_sigma_cycles < 0.0 || cn0_dbhz < 0.0 || lock_time_sec < 0.0) {
+            set_error(error_message,
+                      "RANGEA observation contains malformed numeric fields at index " + std::to_string(index));
             return false;
         }
         static_cast<void>(adr_cycles);
@@ -288,14 +288,14 @@ bool parse_rangea_line(const std::string& raw_line, ParsedRangeEpoch* epoch, std
         GnssConstellation constellation{};
         char satellite_prefix = '\0';
         if (!constellation_from_status(status, &constellation, &satellite_prefix)) {
-            set_error(error_message, "RANGEA observation has unsupported constellation bits at index " +
-                                         std::to_string(index));
+            set_error(error_message,
+                      "RANGEA observation has unsupported constellation bits at index " + std::to_string(index));
             return false;
         }
         if ((constellation == GnssConstellation::kGlonass && (glofreq < 0 || glofreq > 13)) ||
             (constellation != GnssConstellation::kGlonass && glofreq != 0)) {
-            set_error(error_message, "RANGEA observation has invalid GLONASS frequency field at index " +
-                                         std::to_string(index));
+            set_error(error_message,
+                      "RANGEA observation has invalid GLONASS frequency field at index " + std::to_string(index));
             return false;
         }
 
@@ -371,7 +371,8 @@ bool select_position_observations(const ParsedRangeEpoch& epoch, std::vector<Rtk
         int observation_code = 0;
         int frequency_index = 0;
         if (!signal_rtklib_observation_code(*source.definition, &observation_code, &frequency_index)) {
-            set_error(error_message, std::string("cannot map RANGEA signal to RTKLIB code: ") + source.definition->name);
+            set_error(error_message,
+                      std::string("cannot map RANGEA signal to RTKLIB code: ") + source.definition->name);
             return false;
         }
         static_cast<void>(frequency_index);

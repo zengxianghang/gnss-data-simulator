@@ -1,6 +1,5 @@
-name: Apply GLONASS L3OC simulator patch
+name: Materialize all-signal residual fixes
 
-# Guarded compact residual validation against RTKLIB 8d252915.
 on:
   push:
     branches:
@@ -17,14 +16,15 @@ on:
       - tools/apply_issue51_multisite_coverage.py
       - tools/apply_issue51_gps_cnav_window.py
       - tools/apply_issue51_snapshot_family.py
+      - tools/apply_issue51_signal_health.py
       - tools/apply_issue51_real_gps_modern_probe.py
       - .github/workflows/apply-issue51-glo-l3oc.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  apply-and-validate:
+  materialize-and-validate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Draft branch with dependencies
@@ -39,16 +39,22 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Download provenance-pinned real DLR GPS modern companions
+      - name: Pin clean RTKLIB Draft dependency
         run: |
           set -euo pipefail
-          curl -fsSL --retry 3 --retry-delay 1 \
-            'https://raw.githubusercontent.com/neilberkman/sidereon/267b28f69f7678921c11689531f8fa250e7cca78/crates/sidereon-core/tests/fixtures/nav/BRD400DLR_S_20261800000_01H_MN_trim.rnx' \
-            -o /tmp/issue51_brd400dlr_2026180_trim.rnx
-          curl -fsSL --retry 3 --retry-delay 1 \
-            'https://raw.githubusercontent.com/CS-SI/Orekit/c5b14ff008eb02482ad4e2a2347c97ce4800969c/src/test/resources/gnss/navigation/Example_GPS_Rinex400.n' \
-            -o /tmp/issue51_orekit_dlr_2022278_gps.rnx
-          wc -c /tmp/issue51_brd400dlr_2026180_trim.rnx /tmp/issue51_orekit_dlr_2022278_gps.rnx
+          git -C third_party/RTKLIB fetch origin issue-6-all-signal-residuals-bds-tgd
+          git -C third_party/RTKLIB checkout 894417e20a8c1b7178e08bd410840eeb4f1ff779
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('CMakeLists.txt')
+          text = path.read_text()
+          old = 'set(GNSS_SIM_RTKLIB_COMMIT "8d252915f589e570e69db7f01f27cda276a08f02" CACHE STRING'
+          new = 'set(GNSS_SIM_RTKLIB_COMMIT "894417e20a8c1b7178e08bd410840eeb4f1ff779" CACHE STRING'
+          if text.count(old) != 1:
+              raise RuntimeError(f'CMake RTKLIB pin anchor count={text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          test "$(git -C third_party/RTKLIB rev-parse HEAD)" = "894417e20a8c1b7178e08bd410840eeb4f1ff779"
 
       - name: Syntax-check guarded patch drivers
         run: >-
@@ -64,10 +70,12 @@ jobs:
           tools/apply_issue51_multisite_coverage.py
           tools/apply_issue51_gps_cnav_window.py
           tools/apply_issue51_snapshot_family.py
+          tools/apply_issue51_signal_health.py
           tools/apply_issue51_real_gps_modern_probe.py
 
-      - name: Apply guarded implementation and multi-site validation
+      - name: Apply permanent guarded implementation
         run: |
+          set -euo pipefail
           python tools/apply_issue51_glo_l3oc_patch.py
           python tools/apply_issue51_rtklib_link_fix.py
           python tools/apply_issue51_doppler_family_policy.py
@@ -79,7 +87,7 @@ jobs:
           python tools/apply_issue51_multisite_coverage.py
           python tools/apply_issue51_gps_cnav_window.py
           python tools/apply_issue51_snapshot_family.py
-          python tools/apply_issue51_real_gps_modern_probe.py
+          python tools/apply_issue51_signal_health.py
 
       - name: Format modified C and C++ sources
         run: >-
@@ -102,7 +110,7 @@ jobs:
           tests/unit/test_rtklib_adapter.cpp
           tests/integration/test_all_signal_residuals.cpp
 
-      - name: Check patch whitespace
+      - name: Check materialized patch whitespace
         run: git diff --check
 
       - name: Configure
@@ -114,17 +122,38 @@ jobs:
       - name: Test full suite
         run: ctest --test-dir build -C Release --output-on-failure
 
-      - name: Print real GPS modern companion probe
-        run: >-
-          ./build/gnss_sim_integration_tests
-          --gtest_filter=V1Acceptance.RealDlrGpsModernCompanionsExposePinnedRtklibStatus
-
-      - name: Print GPS CNAV residual diagnostics
+      - name: Print compact residual diagnostics
         run: >-
           ./build/gnss_sim_integration_tests
           --gtest_filter=V1Acceptance.EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks
 
-      - name: Diagnostic branch remains uncommitted
+      - name: Probe provenance-pinned real DLR GPS modern companions
         run: |
-          echo 'Guarded implementation validated in the worktree only.'
-          echo 'Real GPS modern companions are provenance-pinned diagnostics until strict residual legs pass.'
+          set -euo pipefail
+          cp tests/integration/test_all_signal_residuals.cpp /tmp/test_all_signal_residuals.materialized.cpp
+          curl -fsSL --retry 3 --retry-delay 1 \
+            'https://raw.githubusercontent.com/neilberkman/sidereon/267b28f69f7678921c11689531f8fa250e7cca78/crates/sidereon-core/tests/fixtures/nav/BRD400DLR_S_20261800000_01H_MN_trim.rnx' \
+            -o /tmp/issue51_brd400dlr_2026180_trim.rnx
+          curl -fsSL --retry 3 --retry-delay 1 \
+            'https://raw.githubusercontent.com/CS-SI/Orekit/c5b14ff008eb02482ad4e2a2347c97ce4800969c/src/test/resources/gnss/navigation/Example_GPS_Rinex400.n' \
+            -o /tmp/issue51_orekit_dlr_2022278_gps.rnx
+          python tools/apply_issue51_real_gps_modern_probe.py
+          clang-format -i tests/integration/test_all_signal_residuals.cpp
+          cmake --build build --config Release --parallel
+          ./build/gnss_sim_integration_tests \
+            --gtest_filter=V1Acceptance.RealDlrGpsModernCompanionsExposePinnedRtklibStatus
+          cp /tmp/test_all_signal_residuals.materialized.cpp tests/integration/test_all_signal_residuals.cpp
+          git diff --check
+
+      - name: Commit materialized implementation only after green validation
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add CMakeLists.txt third_party/RTKLIB src tests
+          if git diff --cached --quiet; then
+            echo 'No materialized changes to commit'
+            exit 1
+          fi
+          git commit -m 'Materialize all-signal residual validation fixes'
+          git push origin HEAD:issue-51-all-signal-residuals

@@ -18,6 +18,7 @@ on:
       - tools/apply_issue51_snapshot_family.py
       - tools/apply_issue51_signal_health.py
       - tools/apply_issue51_signal_health_status.py
+      - tools/apply_issue51_raw_measurement_health_separation.py
       - tools/apply_issue51_diagnostic_residual.py
       - tools/apply_issue51_real_gps_modern_probe.py
       - .github/workflows/apply-issue51-glo-l3oc.yml
@@ -74,6 +75,7 @@ jobs:
           tools/apply_issue51_snapshot_family.py
           tools/apply_issue51_signal_health.py
           tools/apply_issue51_signal_health_status.py
+          tools/apply_issue51_raw_measurement_health_separation.py
           tools/apply_issue51_diagnostic_residual.py
           tools/apply_issue51_real_gps_modern_probe.py
 
@@ -93,6 +95,7 @@ jobs:
           python tools/apply_issue51_snapshot_family.py
           python tools/apply_issue51_signal_health.py
           python tools/apply_issue51_signal_health_status.py
+          python tools/apply_issue51_raw_measurement_health_separation.py
           python tools/apply_issue51_diagnostic_residual.py
 
       - name: Format modified C and C++ sources

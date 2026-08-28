@@ -7,7 +7,6 @@ extern "C" {
 
 #include <cmath>
 #include <cstdio>
-#include <cstring>
 
 namespace gnss_sim {
 
@@ -100,22 +99,6 @@ bool validate_raw_observation(const RtklibRawCodeObservation& source, int index,
     return true;
 }
 
-void append_nav_unavailable_diagnostic(int count, RtklibPositionSolution* solution) {
-    if (solution == nullptr || count <= 0) {
-        return;
-    }
-    char suffix[48]{};
-    std::snprintf(suffix, sizeof(suffix), "nav_unavailable=%d", count);
-    if (solution->diagnostic[0] == '\0') {
-        std::snprintf(solution->diagnostic, sizeof(solution->diagnostic), "%s", suffix);
-        return;
-    }
-    const std::size_t used = std::strlen(solution->diagnostic);
-    if (used + 2U < sizeof(solution->diagnostic)) {
-        std::snprintf(solution->diagnostic + used, sizeof(solution->diagnostic) - used, "; %s", suffix);
-    }
-}
-
 } // namespace
 
 bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
@@ -129,26 +112,18 @@ bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gp
         return false;
     }
 
-    RtklibNavStore* receiver_snapshot = create_rtklib_nav_store();
-    if (receiver_snapshot == nullptr) {
-        set_error(error_message, "cannot allocate receiver-available NAV snapshot for raw RANGEA positioning");
-        return false;
-    }
-    if (!rtklib_copy_nav_snapshot(receiver_nav, gps_week, sow_sec, receiver_snapshot, error_message)) {
-        destroy_rtklib_nav_store(receiver_snapshot);
-        return false;
-    }
-
+    // The current black-box accuracy gate intentionally uses every ephemeris
+    // available in the real RINEX NAV input. Receiver acquisition/update order
+    // is out of scope until the serialized RANGEA positioning error is first
+    // characterized with unrestricted real broadcast navigation.
     const gtime_t epoch_time = gpst2time(gps_week, sow_sec);
     RtklibSolutionObservation converted[MAXOBS]{};
     bool seen_satellite[MAXSAT]{};
     int prepared_count = 0;
-    int nav_unavailable_count = 0;
     for (int index = 0; index < observation_count; ++index) {
         const RtklibRawCodeObservation& source = observations[index];
         int message_mask = 0;
         if (!validate_raw_observation(source, index, &message_mask, error_message)) {
-            destroy_rtklib_nav_store(receiver_snapshot);
             return false;
         }
         if (seen_satellite[source.satellite_number - 1]) {
@@ -158,36 +133,21 @@ bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gp
                               source.satellite_number);
                 *error_message = message;
             }
-            destroy_rtklib_nav_store(receiver_snapshot);
             return false;
         }
         seen_satellite[source.satellite_number - 1] = true;
 
-        double snapshot_bias_m = 0.0;
-        const int snapshot_status =
-            signal_bias_status(receiver_snapshot, epoch_time, source, message_mask, &snapshot_bias_m);
-        if (snapshot_status != 1) {
-            double truth_bias_m = 0.0;
-            const int truth_status = signal_bias_status(receiver_nav, epoch_time, source, message_mask, &truth_bias_m);
-            if (truth_status != 1) {
-                if (error_message != nullptr) {
-                    char message[224]{};
-                    std::snprintf(message, sizeof(message),
-                                  "raw RANGEA observation %d has no matching real-RINEX ephemeris/code bias: "
-                                  "sat=%d code=%d mask=%d snapshot_status=%d truth_status=%d",
-                                  index, source.satellite_number, source.observation_code, message_mask,
-                                  snapshot_status, truth_status);
-                    *error_message = message;
-                }
-                destroy_rtklib_nav_store(receiver_snapshot);
-                return false;
+        double rtklib_code_bias_m = 0.0;
+        const int bias_status = signal_bias_status(receiver_nav, epoch_time, source, message_mask, &rtklib_code_bias_m);
+        if (bias_status != 1 || !std::isfinite(rtklib_code_bias_m)) {
+            if (error_message != nullptr) {
+                char message[224]{};
+                std::snprintf(message, sizeof(message),
+                              "raw RANGEA observation %d has no matching real-RINEX ephemeris/code bias: "
+                              "sat=%d code=%d mask=%d status=%d",
+                              index, source.satellite_number, source.observation_code, message_mask, bias_status);
+                *error_message = message;
             }
-            ++nav_unavailable_count;
-            continue;
-        }
-        if (!std::isfinite(snapshot_bias_m)) {
-            set_error(error_message, "RTKLIB returned a non-finite code bias for raw RANGEA positioning");
-            destroy_rtklib_nav_store(receiver_snapshot);
             return false;
         }
 
@@ -198,26 +158,16 @@ bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gp
         converted_observation.pseudorange_m = source.pseudorange_m;
         // The maintained solution adapter computes:
         // solver_P = observation_P - code_bias_m + RTKLIB_code_bias.
-        // Supplying the same receiver-available RTKLIB bias here preserves the
-        // serialized raw pseudorange exactly before pntpos() applies its own
-        // code-bias correction.
-        converted_observation.code_bias_m = snapshot_bias_m;
+        // Supplying the same RTKLIB bias here preserves the serialized raw
+        // pseudorange exactly before pntpos() applies its own code-bias correction.
+        converted_observation.code_bias_m = rtklib_code_bias_m;
         converted_observation.cn0_dbhz = source.cn0_dbhz;
         converted_observation.pseudorange_valid = true;
         converted[prepared_count++] = converted_observation;
     }
 
-    RtklibPositionSolution raw_solution{};
-    const bool solved =
-        rtklib_solve_single_position(receiver_snapshot, gps_week, sow_sec, converted, prepared_count,
-                                     elevation_mask_deg, broadcast_atmosphere, &raw_solution, error_message);
-    destroy_rtklib_nav_store(receiver_snapshot);
-    if (!solved) {
-        return false;
-    }
-    append_nav_unavailable_diagnostic(nav_unavailable_count, &raw_solution);
-    *solution = raw_solution;
-    return true;
+    return rtklib_solve_single_position(receiver_nav, gps_week, sow_sec, converted, prepared_count, elevation_mask_deg,
+                                        broadcast_atmosphere, solution, error_message);
 }
 
 } // namespace gnss_sim

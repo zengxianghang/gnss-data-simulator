@@ -27,6 +27,7 @@ struct SimulatorRunSummary {
     std::uint64_t range_messages;
     std::uint64_t psrpos_messages;
     std::uint64_t psrvel_messages;
+    std::uint64_t bestpos_messages;
     std::uint64_t nav_messages;
     std::uint64_t power_on_events;
     std::uint64_t power_off_events;

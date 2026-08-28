@@ -47,10 +47,23 @@ bool run(const gnss_sim::SimConfig& config, const char* name, gnss_sim::Simulato
     return ok;
 }
 
-bool file_contains(const std::string& path, const std::string& text) {
+std::string read_file(const std::string& path) {
     std::ifstream input(path, std::ios::binary);
-    const std::string contents((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-    return contents.find(text) != std::string::npos;
+    return std::string((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+}
+
+bool file_contains(const std::string& path, const std::string& text) {
+    return read_file(path).find(text) != std::string::npos;
+}
+
+std::size_t occurrence_count(const std::string& text, const std::string& needle) {
+    std::size_t count = 0;
+    std::size_t position = 0;
+    while ((position = text.find(needle, position)) != std::string::npos) {
+        ++count;
+        position += needle.size();
+    }
+    return count;
 }
 
 TEST(StreamingSimulator, KsProducesOneLogSetPerEpoch) {
@@ -66,6 +79,8 @@ TEST(StreamingSimulator, KsProducesOneLogSetPerEpoch) {
     EXPECT_EQ(summary.range_messages, 50U);
     EXPECT_EQ(summary.psrpos_messages, 50U);
     EXPECT_EQ(summary.psrvel_messages, 50U);
+    EXPECT_EQ(summary.bestpos_messages, 50U);
+    EXPECT_EQ(occurrence_count(read_file(test_output_path("ks")), "#BESTPOSA,"), 50U);
     EXPECT_EQ(summary.power_on_events, 1U);
     EXPECT_EQ(summary.power_off_events, 0U);
     EXPECT_GT(summary.max_observations_per_epoch, 0);
@@ -90,6 +105,8 @@ TEST(StreamingSimulator, ReaKeepsLogsRunningWithZeroRangeDuringSignalOff) {
     EXPECT_EQ(summary.range_messages, 60U);
     EXPECT_EQ(summary.psrpos_messages, 60U);
     EXPECT_EQ(summary.psrvel_messages, 60U);
+    EXPECT_EQ(summary.bestpos_messages, 60U);
+    EXPECT_EQ(occurrence_count(read_file(test_output_path("rea")), "#BESTPOSA,"), 60U);
     EXPECT_EQ(summary.power_off_events, 0U);
     EXPECT_EQ(summary.signal_off_events, 2U);
     EXPECT_EQ(summary.signal_on_events, 2U);
@@ -113,6 +130,8 @@ void expect_ttff_log_suppression(gnss_sim::StartupMode mode, const char* name) {
     EXPECT_EQ(summary.range_messages, 60U);
     EXPECT_EQ(summary.psrpos_messages, 60U);
     EXPECT_EQ(summary.psrvel_messages, 60U);
+    EXPECT_EQ(summary.bestpos_messages, 60U);
+    EXPECT_EQ(occurrence_count(read_file(test_output_path(name)), "#BESTPOSA,"), 60U);
     EXPECT_EQ(summary.power_on_events, 2U);
     EXPECT_EQ(summary.power_off_events, 2U);
     std::remove(test_output_path(name).c_str());

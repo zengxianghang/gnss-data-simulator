@@ -832,8 +832,8 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
 
 bool emit_epoch_logs(const SimConfig& config, const ScenarioEpochState& scenario,
                      const std::vector<MeasurementObservation>& measurements, int tracked_satellites,
-                     const SolutionEpoch& solution, std::ofstream* output, SimulatorRunSummary* summary,
-                     std::string* error_message) {
+                     const SolutionEpoch& solution, const ReceiverTruth& receiver, std::ofstream* output,
+                     SimulatorRunSummary* summary, std::string* error_message) {
     std::string message;
     const MeasurementObservation* data = measurements.empty() ? nullptr : measurements.data();
     if (!format_novatel_rangea(scenario.time, data, static_cast<int>(measurements.size()), &message, error_message) ||
@@ -852,6 +852,12 @@ bool emit_epoch_logs(const SimConfig& config, const ScenarioEpochState& scenario
         return false;
     }
     ++summary->psrvel_messages;
+
+    if (!format_novatel_bestposa(scenario.time, receiver, &message, error_message) ||
+        !write_message(output, message, error_message)) {
+        return false;
+    }
+    ++summary->bestpos_messages;
     return true;
 }
 
@@ -1013,8 +1019,8 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
                                   static_cast<int>(measurements.size()), config.elevation_mask_deg,
                                   config.atmosphere_mode, &runtime.solution_state, &solution, error_message) ||
             !truth_writer_write_solution(truth_writer, solution, tracked_satellites, error_message) ||
-            !emit_epoch_logs(config, scenario, measurements, tracked_satellites, solution, &output, &result,
-                             error_message)) {
+            !emit_epoch_logs(config, scenario, measurements, tracked_satellites, solution, runtime.receiver, &output,
+                             &result, error_message)) {
             ok = false;
             break;
         }

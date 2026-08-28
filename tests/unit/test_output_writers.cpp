@@ -76,6 +76,21 @@ TEST(NovatelRangeWriter, ReaSignalOffEmitsZeroObservationGoldenRecord) {
     EXPECT_EQ(message, "#RANGEA,COM1,0,0.0,FINE,2300,12345.678,00000000,0,0;0*a633981e\r\n");
 }
 
+TEST(NovatelSolutionWriter, BestPosATruthIsByteStableAndDailyAnalysisCompatible) {
+    gnss_sim::ReceiverTruth truth{};
+    truth.latitude_deg = 20.0;
+    truth.longitude_deg = 120.0;
+    truth.height_m = 100.0;
+
+    std::string message;
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::format_novatel_bestposa(writer_time(), truth, &message, &error_message)) << error_message;
+    EXPECT_EQ(message, "#BESTPOSA,COM1,0,0.0,FINE,2300,12345.678,00000000,0,0;"
+                       "SOL_COMPUTED,NARROW_INT,20.00000000000,120.00000000000,100.0000,0.0000,WGS84,"
+                       "0.0010,0.0010,0.0010,\"\",0.000,0.000,0,0,0,0,00,00,00,00*923a3330\r\n");
+    EXPECT_NE(message.find(";SOL_COMPUTED,NARROW_INT,"), std::string::npos);
+}
+
 TEST(NovatelSolutionWriter, ValidPsrPosAIsByteStable) {
     gnss_sim::SolutionEpoch solution{};
     solution.time = writer_time();

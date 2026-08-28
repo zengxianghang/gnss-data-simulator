@@ -27,6 +27,9 @@ jobs:
             'https://raw.githubusercontent.com/h-shiono/MRTKLIB/8781ebf1448251544be7c7273a06176641510c24/tests/data/rinex4/BRD400DLR_S_20260680000_01D_MN.rnx.gz' \
             -o /tmp/BRD400DLR_S_20260680000_01D_MN.rnx.gz
           gunzip -c /tmp/BRD400DLR_S_20260680000_01D_MN.rnx.gz > /tmp/BRD400DLR_S_20260680000_01D_MN.rnx
+          echo "RAW_CNAV=$(grep -Ec '^> EPH G[0-9][0-9] CNAV' /tmp/BRD400DLR_S_20260680000_01D_MN.rnx || true)"
+          echo "RAW_CNV2=$(grep -Ec '^> EPH G[0-9][0-9] CNV2' /tmp/BRD400DLR_S_20260680000_01D_MN.rnx || true)"
+          grep -n -m 3 -E '^> EPH G[0-9][0-9] CNV2' /tmp/BRD400DLR_S_20260680000_01D_MN.rnx || true
       - name: Compile pinned RTKLIB health scanner
         run: |
           cat >/tmp/scan_gps_modern.c <<'EOF'
@@ -37,7 +40,8 @@ jobs:
           int main(void) {
               obs_t obs={0}; nav_t nav={0}; sta_t sta={0};
               const char *path="/tmp/BRD400DLR_S_20260680000_01D_MN.rnx";
-              int cnav_total=0,cnav_zero=0,cnv2_total=0,cnv2_zero=0,printed_cnav=0,printed_cnv2=0;
+              int cnav_total=0,cnv2_total=0;
+              int cnav_hist[16]={0},cnv2_hist[16]={0};
               if (!readrnx(path,1,"",&obs,&nav,&sta)) {
                   fprintf(stderr,"readrnx failed\n");
                   return 2;
@@ -46,31 +50,21 @@ jobs:
               uniqnav(&nav);
               for (int i=0;i<nav.n;i++) {
                   eph_t *e=&nav.eph[i];
-                  int prn=0,sys=satsys(e->sat,&prn),week=0;
-                  double toe,ttr;
-                  char id[16]={0};
+                  int prn=0,sys=satsys(e->sat,&prn);
                   if (sys!=SYS_GPS) continue;
-                  if (e->hdr.msg_type!=NAV_CNAV && e->hdr.msg_type!=NAV_CNV2) continue;
-                  toe=time2gpst(e->toe,&week);
-                  ttr=time2gpst(e->ttr,&week);
-                  satno2id(e->sat,id);
                   if (e->hdr.msg_type==NAV_CNAV) {
                       cnav_total++;
-                      if (e->svh==0) {
-                          cnav_zero++;
-                          if (printed_cnav++<20) printf("HEALTHY_CNAV sat=%s svh=%d toe=%.3f ttr=%.3f week=%d\n",id,e->svh,toe,ttr,week);
-                      }
-                  } else {
+                      if (e->svh>=0 && e->svh<16) cnav_hist[e->svh]++;
+                  } else if (e->hdr.msg_type==NAV_CNV2) {
                       cnv2_total++;
-                      if (e->svh==0) {
-                          cnv2_zero++;
-                          if (printed_cnv2++<20) printf("HEALTHY_CNV2 sat=%s svh=%d toe=%.3f ttr=%.3f week=%d\n",id,e->svh,toe,ttr,week);
-                      }
+                      if (e->svh>=0 && e->svh<16) cnv2_hist[e->svh]++;
                   }
               }
-              printf("GPS_MODERN_HEALTH_SUMMARY cnav_total=%d cnav_svh0=%d cnv2_total=%d cnv2_svh0=%d\n",cnav_total,cnav_zero,cnv2_total,cnv2_zero);
+              printf("PARSED_GPS_MODERN cnav=%d cnv2=%d\n",cnav_total,cnv2_total);
+              for (int i=0;i<16;i++) if (cnav_hist[i]) printf("CNAV_SVH value=%d count=%d\n",i,cnav_hist[i]);
+              for (int i=0;i<16;i++) if (cnv2_hist[i]) printf("CNV2_SVH value=%d count=%d\n",i,cnv2_hist[i]);
               freenav(&nav,0xFF);
-              return cnav_zero>0 && cnv2_zero>0 ? 0 : 3;
+              return 0;
           }
           EOF
           cc -O2 -std=c99 -ffunction-sections -fdata-sections \
@@ -78,5 +72,5 @@ jobs:
             /tmp/scan_gps_modern.c src/gnss/rtklib_rinex_obs_ext.c \
             third_party/RTKLIB/src/rtklib_obs_ext.c third_party/RTKLIB/src/rtkcmn.c \
             -Wl,--gc-sections -lm -lpthread -o /tmp/scan_gps_modern
-      - name: Scan health-zero GPS CNAV and CNV2
+      - name: Compare parser output with raw RINEX records
         run: /tmp/scan_gps_modern

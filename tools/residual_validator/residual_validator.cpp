@@ -386,9 +386,10 @@ bool validate_observation_truth(const ValidationOptions& options, ValidationRepo
             observation.code[0] = static_cast<unsigned char>(observation_code);
             observation.SNR[0] = static_cast<unsigned char>(
                 std::clamp(std::lround(std::stod(fields[columns.at("cn0_dbhz")]) * 4.0), 0L, 255L));
-            if (pseudorange_valid) {
-                observation.P[0] = std::stod(fields[columns.at("pseudorange_m")]);
-            }
+            // RTKLIB's Doppler residual reconstructs transmit time from the raw pseudorange.
+            // Keep P[0] populated even when code validity is false; pseudorange_valid still
+            // controls whether a code residual is evaluated.
+            observation.P[0] = std::stod(fields[columns.at("pseudorange_m")]);
             if (doppler_valid) {
                 observation.D[0] = static_cast<float>(std::stod(fields[columns.at("doppler_hz")]));
             }

@@ -15,6 +15,7 @@ on:
       - tools/apply_issue51_solution_engine_signature.py
       - tools/apply_issue51_spp_family_nav.py
       - tools/apply_issue51_multisite_coverage.py
+      - tools/apply_issue51_gps_cnav_window.py
       - .github/workflows/apply-issue51-glo-l3oc.yml
 
 permissions:
@@ -48,6 +49,7 @@ jobs:
           tools/apply_issue51_solution_engine_signature.py
           tools/apply_issue51_spp_family_nav.py
           tools/apply_issue51_multisite_coverage.py
+          tools/apply_issue51_gps_cnav_window.py
 
       - name: Apply guarded implementation and multi-site validation
         run: |
@@ -60,6 +62,7 @@ jobs:
           python tools/apply_issue51_spp_family_nav.py
           python tools/apply_issue51_requested_family_validation.py
           python tools/apply_issue51_multisite_coverage.py
+          python tools/apply_issue51_gps_cnav_window.py
 
       - name: Format modified C and C++ sources
         run: >-
@@ -98,65 +101,7 @@ jobs:
           ./build/gnss_sim_integration_tests
           --gtest_filter=V1Acceptance.EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks
 
-      - name: Discover real GPS CNV2 records in full-day BRD400DLR
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          bkg='https://igs.bkg.bund.de/root_ftp/IGS/BRDC/2025/003/BRD400DLR_S_20250030000_01D_MN.rnx.gz'
-          ign='ftp://igs.ign.fr/pub/igs/data/2025/003/BRD400DLR_S_20250030000_01D_MN.rnx.gz'
-          source_url=''
-          for url in "${bkg}" "${ign}"; do
-            echo "CNV2_SOURCE_ATTEMPT ${url}"
-            if curl -4 -fsSL --connect-timeout 12 --max-time 75 --retry 1 --retry-delay 2 "${url}" -o /tmp/brd400dlr_2025003.rnx.gz; then
-              source_url="${url}"
-              break
-            fi
-          done
-          if [ -z "${source_url}" ]; then
-            echo 'CNV2_SOURCE_UNAVAILABLE BKG_HTTPS_AND_IGN_FTP'
-            exit 1
-          fi
-          echo "CNV2_SOURCE_OK ${source_url}"
-          gzip -dc /tmp/brd400dlr_2025003.rnx.gz > /tmp/brd400dlr_2025003.rnx
-          python - <<'PY'
-          from datetime import datetime
-          from pathlib import Path
-
-          lines = Path('/tmp/brd400dlr_2025003.rnx').read_text(errors='strict').splitlines()
-          records = []
-          i = 0
-          while i < len(lines):
-              if not (lines[i].startswith('> EPH G') and 'CNV2' in lines[i]):
-                  i += 1
-                  continue
-              j = i + 1
-              while j < len(lines) and not lines[j].startswith('>'):
-                  j += 1
-              block = lines[i:j]
-              epoch = None
-              if len(block) >= 2:
-                  fields = block[1].split()
-                  try:
-                      epoch = datetime(int(fields[1]), int(fields[2]), int(fields[3]), int(fields[4]), int(fields[5]),
-                                       int(float(fields[6])))
-                  except (ValueError, IndexError):
-                      pass
-              records.append((epoch, block))
-              i = j
-
-          target = datetime(2025, 1, 3, 1, 15, 0)
-          print(f'CNV2_COUNT {len(records)}')
-          candidates = sorted(records, key=lambda item: abs((item[0] - target).total_seconds()) if item[0] else 1e99)
-          for rank, (epoch, block) in enumerate(candidates[:8], start=1):
-              age = abs((epoch - target).total_seconds()) if epoch else float('inf')
-              print(f'CNV2_CANDIDATE rank={rank} epoch={epoch} target_age_sec={age:.0f}')
-              print('\n'.join(block))
-              print('CNV2_CANDIDATE_END')
-          if not records:
-              raise SystemExit('no GPS CNV2 record found in full-day BRD400DLR')
-          PY
-
       - name: Diagnostic branch remains uncommitted
         run: |
           echo 'Guarded implementation validated in the worktree only.'
-          echo 'No source commit is made until GPS modern-family coverage is strict again.'
+          echo 'GPS L1C remains pending a real GPS CNV2 fixture companion.'

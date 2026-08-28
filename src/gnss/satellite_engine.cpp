@@ -55,6 +55,12 @@ bool compute_range_rate(const RtklibSatelliteState& satellite_state, const Recei
     return std::isfinite(rate_mps);
 }
 
+bool rtklib_state_provider(const void* context, int gps_week, double sow_sec, int satellite_number,
+                           RtklibSatelliteState* state, std::string* error_message) {
+    return get_rtklib_satellite_state(static_cast<const RtklibNavStore*>(context), gps_week, sow_sec, satellite_number,
+                                      state, error_message);
+}
+
 } // namespace
 
 bool subtract_propagation_time(const SimTime& receive_time, double propagation_time_sec, int* transmit_gps_week,
@@ -93,11 +99,12 @@ bool elevation_passes_mask(double elevation_rad, double elevation_mask_deg) {
     return elevation_rad >= elevation_mask_deg * kDegreesToRadians;
 }
 
-bool compute_satellite_geometry(const RtklibNavStore* nav_store, const ReceiverTruth& receiver,
-                                const SimTime& receive_time, int satellite_number, double elevation_mask_deg,
-                                SatelliteGeometry* geometry, std::string* error_message) {
-    if (nav_store == nullptr || geometry == nullptr || satellite_number <= 0 || receive_time.gps_week < 0 ||
-        receive_time.tow_ns < 0 || receive_time.tow_ns >= GPS_WEEK_NANOSECONDS ||
+bool compute_satellite_geometry_with_provider(SatelliteStateProvider state_provider, const void* state_context,
+                                              const ReceiverTruth& receiver, const SimTime& receive_time,
+                                              int satellite_number, double elevation_mask_deg,
+                                              SatelliteGeometry* geometry, std::string* error_message) {
+    if (state_provider == nullptr || state_context == nullptr || geometry == nullptr || satellite_number <= 0 ||
+        receive_time.gps_week < 0 || receive_time.tow_ns < 0 || receive_time.tow_ns >= GPS_WEEK_NANOSECONDS ||
         !finite_vector3(receiver.position_ecef_m) || !finite_vector3(receiver.velocity_ecef_mps) ||
         !std::isfinite(elevation_mask_deg) || elevation_mask_deg < -90.0 || elevation_mask_deg > 90.0) {
         set_error(error_message, "satellite-geometry request has invalid arguments");
@@ -119,8 +126,8 @@ bool compute_satellite_geometry(const RtklibNavStore* nav_store, const ReceiverT
         }
 
         RtklibSatelliteState satellite_state{};
-        if (!get_rtklib_satellite_state(nav_store, transmit_week, transmit_sow_sec, satellite_number, &satellite_state,
-                                        error_message)) {
+        if (!state_provider(state_context, transmit_week, transmit_sow_sec, satellite_number, &satellite_state,
+                            error_message)) {
             return false;
         }
 
@@ -164,8 +171,8 @@ bool compute_satellite_geometry(const RtklibNavStore* nav_store, const ReceiverT
     // satellite_state, and geometric_range describe the same final iterate.
     if (!subtract_propagation_time(receive_time, result.propagation_time_sec, &result.transmit_gps_week,
                                    &result.transmit_sow_sec) ||
-        !get_rtklib_satellite_state(nav_store, result.transmit_gps_week, result.transmit_sow_sec, satellite_number,
-                                    &result.satellite_state, error_message) ||
+        !state_provider(state_context, result.transmit_gps_week, result.transmit_sow_sec, satellite_number,
+                        &result.satellite_state, error_message) ||
         !rtklib_geometric_distance(result.satellite_state.position_ecef_m, receiver.position_ecef_m,
                                    &result.geometric_range_m, result.line_of_sight_ecef) ||
         !rtklib_azimuth_elevation(receiver.position_ecef_m, result.line_of_sight_ecef, &result.azimuth_rad,
@@ -182,6 +189,17 @@ bool compute_satellite_geometry(const RtklibNavStore* nav_store, const ReceiverT
 
     *geometry = result;
     return true;
+}
+
+bool compute_satellite_geometry(const RtklibNavStore* nav_store, const ReceiverTruth& receiver,
+                                const SimTime& receive_time, int satellite_number, double elevation_mask_deg,
+                                SatelliteGeometry* geometry, std::string* error_message) {
+    if (nav_store == nullptr) {
+        set_error(error_message, "satellite-geometry navigation store is null");
+        return false;
+    }
+    return compute_satellite_geometry_with_provider(rtklib_state_provider, nav_store, receiver, receive_time,
+                                                    satellite_number, elevation_mask_deg, geometry, error_message);
 }
 
 } // namespace gnss_sim

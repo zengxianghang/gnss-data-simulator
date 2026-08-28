@@ -404,4 +404,37 @@ TEST(ZeroNoiseMeasurement, AdrAmbiguityIsContinuousResetsOnSignalOffAndChangesAf
     EXPECT_NE(reacquired.ambiguity_cycles, o1.ambiguity_cycles);
 }
 
+TEST(ZeroNoiseMeasurement, GalileoE6ExplicitCodeBiasUsesExternalObservableBiasWithoutBroadcastBgd) {
+    NavGuard nav{gnss_sim::create_rtklib_nav_store()};
+    ASSERT_NE(nav.store, nullptr);
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(nav.store, mixed_nav_path().c_str(), &error_message));
+    gnss_sim::ReceiverTruth receiver{};
+    ASSERT_TRUE(make_test_receiver(&receiver, &error_message));
+    gnss_sim::SimTime receive_time{};
+    ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2041, 172900.0, &receive_time));
+    int satellite_number = 0;
+    ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number("E01", &satellite_number));
+    gnss_sim::SatelliteGeometry geometry{};
+    ASSERT_TRUE(gnss_sim::compute_satellite_geometry(nav.store, receiver, receive_time, satellite_number, -90.0,
+                                                     &geometry, &error_message));
+
+    gnss_sim::SignalTracker tracker = tracking_tracker(gnss_sim::SignalId::kGalileoE6, receive_time);
+    gnss_sim::AtmosphereCorrection atmosphere{};
+    atmosphere.mode = gnss_sim::AtmosphereMode::NONE;
+    gnss_sim::CarrierAmbiguityState ambiguity{};
+    gnss_sim::MeasurementObservation observation{};
+    constexpr double kExternalC6cOsbM = -0.4;
+    ASSERT_TRUE(gnss_sim::generate_zero_noise_measurement_with_explicit_code_bias(
+        geometry, receiver, tracker, atmosphere, kExternalC6cOsbM, &ambiguity, &observation, &error_message));
+    EXPECT_EQ(observation.code_bias_status, gnss_sim::BroadcastCodeBiasStatus::kApplied);
+    EXPECT_EQ(observation.broadcast_message_family, gnss_sim::RtklibBroadcastMessageFamily::kUnknown);
+    EXPECT_DOUBLE_EQ(observation.code_bias_m, kExternalC6cOsbM);
+    EXPECT_TRUE(observation.pseudorange_valid);
+    EXPECT_NEAR(observation.pseudorange_m,
+                geometry.geometric_range_m - kSpeedOfLightMps * geometry.satellite_state.clock_bias_sec +
+                    kExternalC6cOsbM,
+                1.0e-9);
+}
+
 } // namespace

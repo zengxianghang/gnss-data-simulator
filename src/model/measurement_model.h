@@ -65,6 +65,11 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
                                      const AtmosphereCorrection& atmosphere, CarrierAmbiguityState* ambiguity_state,
                                      MeasurementObservation* observation, std::string* error_message);
 
+bool generate_zero_noise_measurement_with_explicit_code_bias(
+    const SatelliteGeometry& geometry, const ReceiverTruth& receiver, const SignalTracker& tracker,
+    const AtmosphereCorrection& atmosphere, double code_bias_m, CarrierAmbiguityState* ambiguity_state,
+    MeasurementObservation* observation, std::string* error_message);
+
 const char* broadcast_code_bias_status_name(BroadcastCodeBiasStatus status);
 
 } // namespace gnss_sim

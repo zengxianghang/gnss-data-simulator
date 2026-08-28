@@ -1,0 +1,66 @@
+name: Fix issue 51 Windows residual test stack
+
+on:
+  push:
+    branches: [issue-51-all-signal-residuals]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Draft branch with dependencies
+        uses: actions/checkout@v4
+        with:
+          ref: issue-51-all-signal-residuals
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Move second RTKLIB nav store off the test stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tests/integration/test_all_signal_residuals.cpp')
+          text = path.read_text()
+          if '#include <memory>\n' not in text:
+              anchor = '#include <map>\n'
+              if text.count(anchor) != 1:
+                  raise RuntimeError(f'memory include anchor count={text.count(anchor)}')
+              text = text.replace(anchor, anchor + '#include <memory>\n', 1)
+          old = '        nav_t cnv2_nav{};\n'
+          new = '        auto cnv2_nav = std::make_unique<nav_t>();\n'
+          if text.count(old) != 1:
+              raise RuntimeError(f'cnv2 nav declaration count={text.count(old)}')
+          text = text.replace(old, new, 1)
+          ref_count = text.count('&cnv2_nav')
+          if ref_count != 4:
+              raise RuntimeError(f'cnv2 nav address count={ref_count}')
+          text = text.replace('&cnv2_nav', 'cnv2_nav.get()')
+          path.write_text(text)
+          PY
+          clang-format -i tests/integration/test_all_signal_residuals.cpp
+          git diff --check
+
+      - name: Build and test full suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -DBUILD_TESTING=ON
+          cmake --build build --config Release --parallel
+          ctest --test-dir build -C Release --output-on-failure
+
+      - name: Commit only the permanent test fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/integration/test_all_signal_residuals.cpp
+          git diff --cached --check
+          git commit -m 'Fix Windows stack use in all-signal residual test'
+          git push origin HEAD:issue-51-all-signal-residuals

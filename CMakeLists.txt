@@ -89,6 +89,7 @@ add_library(gnss_sim_core STATIC
     src/core/sim_config.cpp
     src/core/sim_time.cpp
     src/core/simulator.cpp
+    src/gnss/galileo_has_adapter.cpp
     src/gnss/nav_message_scheduler.cpp
     src/gnss/nav_output_metadata.cpp
     src/gnss/navigation_state.cpp

@@ -31,6 +31,18 @@ void set_error(std::string* error_message, const std::string& message) {
     }
 }
 
+std::string rtklib_file_path(const char* path) {
+    std::string normalized(path);
+#ifdef _WIN32
+    for (char& character : normalized) {
+        if (character == '/') {
+            character = '\\';
+        }
+    }
+#endif
+    return normalized;
+}
+
 bool parse_bias_epoch(const std::string& text, gtime_t* time) {
     if (time == nullptr) {
         return false;
@@ -123,8 +135,8 @@ std::string precise_state_outage_message(const nav_t& nav, gtime_t time, int sat
     }
 
     std::ostringstream stream;
-    stream << "Galileo HAS precise orbit/clock state is unavailable at the requested epoch"
-           << "; ne=" << nav.ne << "; nc=" << nav.nc << "; sat_orbit_epochs=" << orbit_epochs_with_satellite
+    stream << "Galileo HAS precise orbit/clock state is unavailable at the requested epoch" << "; ne=" << nav.ne
+           << "; nc=" << nav.nc << "; sat_orbit_epochs=" << orbit_epochs_with_satellite
            << "; sat_clock_epochs=" << clock_epochs_with_satellite;
     if (nav.ne > 0) {
         stream << "; orbit_from_first_s=" << timediff(time, nav.peph[0].time)
@@ -164,14 +176,16 @@ bool load_galileo_has_products(GalileoHasStore* store, const char* sp3_path, con
         return false;
     }
 
+    const std::string rtklib_sp3_path = rtklib_file_path(sp3_path);
+    const std::string rtklib_clock_path = rtklib_file_path(clock_path);
     nav_t precise_nav{};
-    readsp3(sp3_path, &precise_nav, 0);
+    readsp3(rtklib_sp3_path.c_str(), &precise_nav, 0);
     if (precise_nav.ne <= 0) {
         freenav(&precise_nav, 0xFF);
         set_error(error_message, std::string("Galileo HAS SP3 contains no precise ephemeris: ") + sp3_path);
         return false;
     }
-    if (readrnxc(clock_path, &precise_nav) <= 0 || precise_nav.nc <= 0) {
+    if (readrnxc(rtklib_clock_path.c_str(), &precise_nav) <= 0 || precise_nav.nc <= 0) {
         freenav(&precise_nav, 0xFF);
         set_error(error_message, std::string("Galileo HAS CLK contains no precise clocks: ") + clock_path);
         return false;

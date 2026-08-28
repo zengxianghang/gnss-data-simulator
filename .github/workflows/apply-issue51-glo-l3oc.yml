@@ -17,6 +17,7 @@ on:
       - tools/apply_issue51_gps_cnav_window.py
       - tools/apply_issue51_snapshot_family.py
       - tools/apply_issue51_signal_health.py
+      - tools/apply_issue51_signal_health_status.py
       - tools/apply_issue51_real_gps_modern_probe.py
       - .github/workflows/apply-issue51-glo-l3oc.yml
 
@@ -71,6 +72,7 @@ jobs:
           tools/apply_issue51_gps_cnav_window.py
           tools/apply_issue51_snapshot_family.py
           tools/apply_issue51_signal_health.py
+          tools/apply_issue51_signal_health_status.py
           tools/apply_issue51_real_gps_modern_probe.py
 
       - name: Apply permanent guarded implementation
@@ -88,6 +90,7 @@ jobs:
           python tools/apply_issue51_gps_cnav_window.py
           python tools/apply_issue51_snapshot_family.py
           python tools/apply_issue51_signal_health.py
+          python tools/apply_issue51_signal_health_status.py
 
       - name: Format modified C and C++ sources
         run: >-

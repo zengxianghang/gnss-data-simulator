@@ -87,13 +87,62 @@ jobs:
       - name: Harness self-test
         run: python3 tools/extended_validation/run_extended.py --self-test
 
-      - name: Run ${{ matrix.case }}
+      - name: Download pinned real RINEX NAV
+        if: matrix.case == 'ks_8h' || matrix.case == 'rea_8h' || matrix.case == 'ttff_8h' || matrix.case == 'stress_50hz_1h'
+        shell: bash
         run: |
-          python3 tools/extended_validation/run_extended.py \
-            --simulator build/gnss-data-simulator \
-            --repo-root . \
-            --case "${{ matrix.case }}" \
+          set -euo pipefail
+          mkdir -p .cache/igs
+
+          compressed=".cache/igs/BRD400DLR_S_20250030000_01D_MN.rnx.gz"
+          nav=".cache/igs/BRD400DLR_S_20250030000_01D_MN.rnx"
+          expected_compressed="fb84d4046b06e905e8e4ec0efb82f0e9ad044bc44d664cc0209cb9b4c92b9512"
+          expected_uncompressed="b11c638eea42978b8bd6aa8b65a5099fe6556dfe527bc037ed481d2b239afc42"
+          sources=(
+            "ftp://igs.gnsswhu.cn/pub/gps/data/daily/2025/brdc/BRD400DLR_S_20250030000_01D_MN.rnx.gz"
+            "http://igs.gnsswhu.cn/pub/gps/data/daily/2025/brdc/BRD400DLR_S_20250030000_01D_MN.rnx.gz"
+          )
+
+          downloaded=0
+          for url in "${sources[@]}"; do
+            echo "Downloading real RINEX NAV from ${url}"
+            rm -f "$compressed" "$nav"
+            if curl --fail --location --retry 3 --retry-delay 2 --connect-timeout 20 --max-time 300 \
+              "$url" --output "$compressed"; then
+              compressed_sha="$(sha256sum "$compressed" | awk '{print $1}')"
+              if [[ "$compressed_sha" != "$expected_compressed" ]]; then
+                echo "Compressed SHA256 mismatch from ${url}: ${compressed_sha}" >&2
+                continue
+              fi
+              gzip -dc "$compressed" > "$nav"
+              uncompressed_sha="$(sha256sum "$nav" | awk '{print $1}')"
+              if [[ "$uncompressed_sha" != "$expected_uncompressed" ]]; then
+                echo "Uncompressed SHA256 mismatch from ${url}: ${uncompressed_sha}" >&2
+                continue
+              fi
+              downloaded=1
+              break
+            fi
+          done
+
+          if [[ "$downloaded" -ne 1 ]]; then
+            echo "Unable to obtain the pinned real WHU RINEX NAV with the expected hashes." >&2
+            exit 1
+          fi
+
+      - name: Run ${{ matrix.case }}
+        shell: bash
+        run: |
+          args=(
+            --simulator build/gnss-data-simulator
+            --repo-root .
+            --case "${{ matrix.case }}"
             --output-dir "extended-results/${{ matrix.case }}"
+          )
+          if [[ -f ".cache/igs/BRD400DLR_S_20250030000_01D_MN.rnx" ]]; then
+            args+=(--real-nav ".cache/igs/BRD400DLR_S_20250030000_01D_MN.rnx")
+          fi
+          python3 tools/extended_validation/run_extended.py "${args[@]}"
 
       - name: Publish step summary
         if: always()

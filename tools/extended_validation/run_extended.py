@@ -5,11 +5,9 @@ from __future__ import annotations
 
 import argparse
 import csv
-import datetime as dt
 import hashlib
 import io
 import json
-import math
 import os
 from pathlib import Path
 import shutil
@@ -17,9 +15,7 @@ import subprocess
 import threading
 import time
 
-GPS_EPOCH = dt.datetime(1980, 1, 6)
 NS = 1_000_000_000
-MU_GPS = 3.9860050e14
 MEMORY_HEADROOM_KIB = 64 * 1024
 FIFO_NAMES = ("simulated.log", "event_truth.csv", "observation_truth.csv", "solution_truth.csv")
 REGULAR_NAMES = ("scenario.json", "run_manifest.json")
@@ -31,6 +27,15 @@ ALL_CASES = (
     "determinism_50hz_10m",
     "memory_trend_50hz",
 )
+
+PINNED_REAL_NAV_FILENAME = "BRD400DLR_S_20250030000_01D_MN.rnx"
+PINNED_REAL_NAV_SHA256 = "b11c638eea42978b8bd6aa8b65a5099fe6556dfe527bc037ed481d2b239afc42"
+PINNED_REAL_NAV_SOURCE_URL = (
+    "ftp://igs.gnsswhu.cn/pub/gps/data/daily/2025/brdc/"
+    "BRD400DLR_S_20250030000_01D_MN.rnx.gz"
+)
+PINNED_REAL_NAV_WEEK = 2347
+PINNED_REAL_NAV_SOW = 436500
 
 
 def base_config(scenario: str, duration_sec: int, rate_hz: int) -> dict:
@@ -56,102 +61,18 @@ def base_config(scenario: str, duration_sec: int, rate_hz: int) -> dict:
 
 def case_definition(name: str):
     if name == "ks_8h":
-        return base_config("KS", 28800, 10), "long_gps", 2253, 172900
+        return base_config("KS", 28800, 10), "real_full_day", PINNED_REAL_NAV_WEEK, PINNED_REAL_NAV_SOW
     if name == "rea_8h":
-        return base_config("REA", 28800, 10), "long_gps", 2253, 172900
+        return base_config("REA", 28800, 10), "real_full_day", PINNED_REAL_NAV_WEEK, PINNED_REAL_NAV_SOW
     if name == "ttff_8h":
-        return base_config("TTFF", 28800, 10), "long_gps", 2253, 172900
+        return base_config("TTFF", 28800, 10), "real_full_day", PINNED_REAL_NAV_WEEK, PINNED_REAL_NAV_SOW
     if name == "stress_50hz_1h":
-        return base_config("KS", 3600, 50), "long_gps", 2253, 172900
+        return base_config("KS", 3600, 50), "real_full_day", PINNED_REAL_NAV_WEEK, PINNED_REAL_NAV_SOW
     if name == "determinism_50hz_10m":
-        return base_config("KS", 600, 50), "brd4", 2347, 436500
+        return base_config("KS", 600, 50), "brd4", PINNED_REAL_NAV_WEEK, PINNED_REAL_NAV_SOW
     if name == "memory_trend_50hz":
-        return base_config("KS", 900, 50), "brd4", 2347, 436500
+        return base_config("KS", 900, 50), "brd4", PINNED_REAL_NAV_WEEK, PINNED_REAL_NAV_SOW
     raise ValueError(f"unknown extended case: {name}")
-
-
-def split_gps_rinex(path: Path):
-    lines = path.read_text(encoding="ascii").splitlines(keepends=True)
-    for index, line in enumerate(lines):
-        if "END OF HEADER" in line:
-            header, body = lines[: index + 1], lines[index + 1 :]
-            break
-    else:
-        raise ValueError("GPS loopback RINEX has no END OF HEADER")
-    if not body or len(body) % 8:
-        raise ValueError("GPS loopback RINEX must contain complete 8-line GPS ephemerides")
-    records = [body[index : index + 8] for index in range(0, len(body), 8)]
-    if any(not record[0].startswith("G") for record in records):
-        raise ValueError("long NAV source must be GPS-only")
-    return header, records
-
-
-def field_value(line: str, first_column: int, field_index: int) -> float:
-    start = first_column + field_index * 19
-    end = start + 19
-    if len(line.rstrip("\n")) < end:
-        raise ValueError("short RINEX NAV field")
-    return float(line[start:end].replace("D", "E"))
-
-
-def replace_field(line: str, first_column: int, field_index: int, value: float) -> str:
-    start = first_column + field_index * 19
-    end = start + 19
-    if len(line.rstrip("\n")) < end:
-        raise ValueError("short RINEX NAV field")
-    return line[:start] + f"{value:19.12E}" + line[end:]
-
-
-def shift_gps_ephemeris_reference(base, toe: int, week: int):
-    """Move GPS LNAV Toe/Toc while preserving the same continuous orbit/clock."""
-    rec = list(base)
-    base_toe = field_value(base[3], 4, 0)
-    delta = float(toe) - base_toe
-
-    sqrt_a = field_value(base[2], 4, 3)
-    semi_major_axis = sqrt_a * sqrt_a
-    delta_n = field_value(base[1], 4, 2)
-    mean_motion = math.sqrt(MU_GPS / (semi_major_axis**3)) + delta_n
-
-    m0 = field_value(base[1], 4, 3)
-    omega0 = field_value(base[3], 4, 2)
-    i0 = field_value(base[4], 4, 0)
-    omega_dot = field_value(base[4], 4, 3)
-    i_dot = field_value(base[5], 4, 0)
-    f0 = field_value(base[0], 23, 0)
-    f1 = field_value(base[0], 23, 1)
-    f2 = field_value(base[0], 23, 2)
-
-    epoch = GPS_EPOCH + dt.timedelta(weeks=week, seconds=toe)
-    prefix = (
-        f"{rec[0][:3]} {epoch.year:04d} {epoch.month:02d} {epoch.day:02d} "
-        f"{epoch.hour:02d} {epoch.minute:02d} {epoch.second:02d}"
-    )
-    rec[0] = prefix + rec[0][23:]
-    rec[0] = replace_field(rec[0], 23, 0, f0 + f1 * delta + f2 * delta * delta)
-    rec[0] = replace_field(rec[0], 23, 1, f1 + 2.0 * f2 * delta)
-    rec[1] = replace_field(rec[1], 4, 3, m0 + mean_motion * delta)
-    rec[3] = replace_field(rec[3], 4, 0, float(toe))
-    rec[3] = replace_field(rec[3], 4, 2, omega0 + omega_dot * delta)
-    rec[4] = replace_field(rec[4], 4, 0, i0 + i_dot * delta)
-    rec[5] = replace_field(rec[5], 4, 2, float(week))
-    rec[7] = replace_field(rec[7], 4, 0, float(toe))
-    return rec
-
-
-def materialize_long_gps_nav(source: Path, destination: Path, week: int, start_sow: int, duration_sec: int) -> None:
-    header, records = split_gps_rinex(source)
-    interval = 3600
-    first_toe = (start_sow // interval) * interval
-    last_toe = start_sow + duration_sec + interval
-    output = list(header)
-    for toe in range(first_toe, last_toe + 1, interval):
-        if not 0 <= toe < 604800:
-            raise ValueError("long GPS NAV fixture currently stays within one GPS week")
-        for base in records:
-            output.extend(shift_gps_ephemeris_reference(base, toe, week))
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text("".join(output), encoding="ascii", newline="\n")
 
 
 class Capture:
@@ -200,6 +121,43 @@ def hash_file(path: Path) -> dict:
             digest.update(chunk)
             size += len(chunk)
     return {"sha256": digest.hexdigest(), "size_bytes": size}
+
+
+def resolve_nav(repo: Path, nav_kind: str, real_nav: Path | None) -> tuple[Path, dict]:
+    if nav_kind == "brd4":
+        nav = repo / "tests/data/minimal/brd400dlr_rinex4_acceptance_nav.rnx"
+        if not nav.is_file():
+            raise ValueError(f"real RINEX 4 fixture is missing: {nav}")
+        identity = hash_file(nav)
+        identity.update({"source": "committed real WHU RINEX subset", "pinned_full_day": False})
+        return nav, identity
+
+    if nav_kind != "real_full_day":
+        raise ValueError(f"unsupported NAV kind: {nav_kind}")
+    if real_nav is None:
+        raise ValueError(
+            "long-duration validation requires --real-nav pointing to the unmodified real RINEX NAV file; "
+            f"download {PINNED_REAL_NAV_SOURCE_URL} instead of synthesizing ephemeris"
+        )
+
+    nav = real_nav.resolve()
+    if not nav.is_file():
+        raise ValueError(f"real RINEX NAV file is missing: {nav}")
+    identity = hash_file(nav)
+    if identity["sha256"].lower() != PINNED_REAL_NAV_SHA256:
+        raise ValueError(
+            "real RINEX NAV SHA256 mismatch: expected "
+            f"{PINNED_REAL_NAV_SHA256}, got {identity['sha256']}; "
+            "do not alter or regenerate navigation records"
+        )
+    identity.update(
+        {
+            "source": PINNED_REAL_NAV_SOURCE_URL,
+            "source_filename": PINNED_REAL_NAV_FILENAME,
+            "pinned_full_day": True,
+        }
+    )
+    return nav, identity
 
 
 def tail_text(path: Path, limit: int = 4096) -> str:
@@ -291,8 +249,6 @@ def expected_epoch_counts(config: dict) -> dict:
             float(config["ttff"]["power_off_sec"]),
         )
         signal_on = powered
-        # Summary signal_off_epochs counts powered RF-off epochs only. Receiver
-        # power-off duration is verified separately by scheduled-powered.
         signal_off = 0
     else:
         raise ValueError(f"unsupported scenario: {scenario}")
@@ -417,7 +373,6 @@ def validate(run: dict, config: dict) -> list[str]:
         actual = int(run.get("event_counts", {}).get(key, 0))
         if actual != expected:
             failures.append(f"{key}: expected {expected}, got {actual}")
-
     if run.get("exit_code") != 0:
         message = f"simulator exit code {run.get('exit_code')}"
         if run.get("stderr_tail"):
@@ -462,21 +417,19 @@ def write_report(name: str, report: dict, out_dir: Path) -> None:
     (out_dir / "summary.md").write_text("\n".join(lines) + "\n")
 
 
-def run_case(simulator: Path, repo: Path, name: str, out_dir: Path) -> bool:
+def run_case(simulator: Path, repo: Path, name: str, out_dir: Path, real_nav: Path | None) -> bool:
     config, nav_kind, week, sow = case_definition(name)
-    if nav_kind == "brd4":
-        nav = repo / "tests/data/minimal/brd400dlr_rinex4_acceptance_nav.rnx"
-    else:
-        nav = out_dir / "long_gps_nav.rnx"
-        materialize_long_gps_nav(
-            repo / "tests/data/minimal/gps_loopback_nav.rnx",
-            nav,
-            week,
-            sow,
-            int(config["duration_sec"]),
-        )
+    nav, nav_identity = resolve_nav(repo, nav_kind, real_nav)
 
-    report = {"schema_version": 1, "case": name, "config": config, "nav_path": nav.name, "runs": [], "failures": []}
+    report = {
+        "schema_version": 1,
+        "case": name,
+        "config": config,
+        "nav_path": str(nav),
+        "nav_identity": nav_identity,
+        "runs": [],
+        "failures": [],
+    }
     failures = report["failures"]
 
     if name == "memory_trend_50hz":
@@ -550,31 +503,13 @@ def self_test() -> None:
     assert counts["range_messages"] == 60
     assert expected_events(ttff) == {"POWER_ON": 2, "POWER_OFF": 2, "SIGNAL_ON": 2, "SIGNAL_OFF": 2}
 
-    sample = [
-        "G01 2023 03 14 00 00 00 1.000000000000E-04 2.000000000000E-12 3.000000000000E-20\n",
-        "     1.000000000000E+00 0.000000000000E+00 4.000000000000E-09 5.000000000000E-01\n",
-        "     0.000000000000E+00 1.000000000000E-02 0.000000000000E+00 5.153795477500E+03\n",
-        "     1.728000000000E+05 0.000000000000E+00 1.000000000000E+00 0.000000000000E+00\n",
-        "     9.500000000000E-01 0.000000000000E+00 2.000000000000E+00-8.000000000000E-09\n",
-        "     1.000000000000E-10 0.000000000000E+00 2.253000000000E+03 0.000000000000E+00\n",
-        "     2.000000000000E+00 0.000000000000E+00 0.000000000000E+00 1.000000000000E+00\n",
-        "     1.728000000000E+05 4.000000000000E+00 0.000000000000E+00 0.000000000000E+00\n",
-    ]
-    shifted = shift_gps_ephemeris_reference(sample, 176400, 2253)
-    delta = 3600.0
-    semi_major_axis = field_value(sample[2], 4, 3) ** 2
-    mean_motion = math.sqrt(MU_GPS / (semi_major_axis**3)) + field_value(sample[1], 4, 2)
-    assert math.isclose(field_value(shifted[1], 4, 3), 0.5 + mean_motion * delta, rel_tol=0.0, abs_tol=1e-11)
-    assert math.isclose(field_value(shifted[3], 4, 2), 1.0 - 8.0e-9 * delta, rel_tol=0.0, abs_tol=1e-11)
-    assert math.isclose(field_value(shifted[4], 4, 0), 0.95 + 1.0e-10 * delta, rel_tol=0.0, abs_tol=1e-11)
-    assert math.isclose(
-        field_value(shifted[0], 23, 0),
-        1.0e-4 + 2.0e-12 * delta + 3.0e-20 * delta**2,
-        rel_tol=0.0,
-        abs_tol=1e-15,
+    assert case_definition("stress_50hz_1h")[1:] == (
+        "real_full_day",
+        PINNED_REAL_NAV_WEEK,
+        PINNED_REAL_NAV_SOW,
     )
-    assert case_definition("stress_50hz_1h")[1:] == ("long_gps", 2253, 172900)
     assert case_definition("determinism_50hz_10m")[1] == "brd4"
+    assert len(PINNED_REAL_NAV_SHA256) == 64
     assert MEMORY_HEADROOM_KIB == 64 * 1024
 
 
@@ -584,6 +519,11 @@ def main() -> int:
     parser.add_argument("--repo-root", type=Path, default=Path("."))
     parser.add_argument("--case", choices=ALL_CASES)
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument(
+        "--real-nav",
+        type=Path,
+        help="Unmodified full-day real RINEX NAV for long-duration cases; SHA256 is pinned and verified.",
+    )
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
 
@@ -599,7 +539,17 @@ def main() -> int:
     simulator = args.simulator.resolve()
     if not simulator.is_file():
         raise SystemExit(f"simulator executable not found: {simulator}")
-    return 0 if run_case(simulator, args.repo_root.resolve(), args.case, args.output_dir.resolve()) else 1
+    try:
+        passed = run_case(
+            simulator,
+            args.repo_root.resolve(),
+            args.case,
+            args.output_dir.resolve(),
+            args.real_nav,
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":

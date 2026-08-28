@@ -67,7 +67,7 @@ void cleanup(const std::filesystem::path& path) {
     std::filesystem::remove_all(path, error);
 }
 
-TEST(RangeaRoundtripIntegration, RealWhuRinex4DefaultMaskSerializedRangeaPositionsWithinHalfMeter) {
+TEST(RangeaRoundtripIntegration, RealWhuRinex4SerializedRangeaPositionsWithinHalfMeter) {
     const std::filesystem::path directory = "gnss_sim_rangea_roundtrip_real_whu";
     gnss_sim::SimulatorRunSummary simulator_summary{};
     std::string error_message;

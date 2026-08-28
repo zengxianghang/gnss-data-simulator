@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  windows-stage-trace:
+  windows-stack-check:
     runs-on: windows-latest
     steps:
       - name: Checkout Draft branch with dependencies
@@ -19,84 +19,19 @@ jobs:
           ref: issue-51-all-signal-residuals
           submodules: recursive
 
-      - name: Add temporary stage markers
-        shell: python
-        run: |
-          from pathlib import Path
-
-          test = Path('tests/integration/test_all_signal_residuals.cpp')
-          text = test.read_text()
-          old = '''        const gnss_sim::SimulatorRunOptions options{nav_text.c_str(), output_text.c_str(), site_start};
-          gnss_sim::SimulatorRunSummary run_summary{};
-          std::string error_message;
-          ASSERT_TRUE(gnss_sim::run_simulator(config, options, &run_summary, &error_message))
-              << "site=" << site.name << " " << error_message;
-          '''
-          new = '''        const gnss_sim::SimulatorRunOptions options{nav_text.c_str(), output_text.c_str(), site_start};
-          gnss_sim::SimulatorRunSummary run_summary{};
-          std::string error_message;
-          std::fprintf(stderr, "WIN_TRACE before_run site=%s\\n", site.name);
-          ASSERT_TRUE(gnss_sim::run_simulator(config, options, &run_summary, &error_message))
-              << "site=" << site.name << " " << error_message;
-          std::fprintf(stderr, "WIN_TRACE after_run site=%s\\n", site.name);
-          '''
-          if old not in text:
-              raise SystemExit('site run anchor mismatch')
-          test.write_text(text.replace(old, new, 1))
-
-          sim = Path('src/core/simulator.cpp')
-          text = sim.read_text()
-          text = text.replace('#include <fstream>\n', '#include <fstream>\n#include <cstdio>\n', 1)
-          old = '''bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, SimulatorRunSummary* summary,
-                             std::string* error_message) {
-          '''
-          new = old + '    std::fprintf(stderr, "WIN_TRACE run_enter\\n");\n'
-          if old not in text:
-              raise SystemExit('run_simulator anchor mismatch')
-          text = text.replace(old, new, 1)
-          old = '    SimulatorRunSummary result{};\n    RuntimeState runtime{};\n'
-          if old not in text:
-              raise SystemExit('runtime anchor mismatch')
-          text = text.replace(old, old + '    std::fprintf(stderr, "WIN_TRACE runtime_zeroed\\n");\n', 1)
-          old = '    runtime.navigation = create_navigation_state();\n'
-          if old not in text:
-              raise SystemExit('create nav anchor mismatch')
-          text = text.replace(old, '    std::fprintf(stderr, "WIN_TRACE before_create_nav\\n");\n' + old +
-                              '    std::fprintf(stderr, "WIN_TRACE after_create_nav ptr=%p\\n", static_cast<void*>(runtime.navigation));\n', 1)
-          old = '''    bool ok =
-              load_truth_navigation(runtime.navigation, options.rinex_nav_path, error_message) &&
-              make_static_receiver_truth(config.receiver, &runtime.receiver, error_message) &&
-              build_truth_schedule(truth_navigation_store(runtime.navigation), &runtime.truth_schedule, error_message) &&
-              build_satellite_runtimes(runtime.truth_schedule, options.start_time, &runtime.satellites, error_message);
-          '''
-          if old not in text:
-              raise SystemExit('setup chain anchor mismatch')
-          new = '''    std::fprintf(stderr, "WIN_TRACE before_load_nav\\n");
-          bool ok = load_truth_navigation(runtime.navigation, options.rinex_nav_path, error_message);
-          std::fprintf(stderr, "WIN_TRACE after_load_nav ok=%d\\n", ok ? 1 : 0);
-          if (ok) {
-              ok = make_static_receiver_truth(config.receiver, &runtime.receiver, error_message);
-              std::fprintf(stderr, "WIN_TRACE after_receiver ok=%d\\n", ok ? 1 : 0);
-          }
-          if (ok) {
-              ok = build_truth_schedule(truth_navigation_store(runtime.navigation), &runtime.truth_schedule, error_message);
-              std::fprintf(stderr, "WIN_TRACE after_schedule ok=%d count=%zu\\n", ok ? 1 : 0,
-                           runtime.truth_schedule.size());
-          }
-          if (ok) {
-              ok = build_satellite_runtimes(runtime.truth_schedule, options.start_time, &runtime.satellites,
-                                            error_message);
-              std::fprintf(stderr, "WIN_TRACE after_runtimes ok=%d count=%zu\\n", ok ? 1 : 0,
-                           runtime.satellites.size());
-          }
-          '''
-          sim.write_text(text.replace(old, new, 1))
-
       - name: Configure
         run: cmake -S . -B build -DBUILD_TESTING=ON
 
       - name: Build integration tests
         run: cmake --build build --config Release --target gnss_sim_integration_tests --parallel
 
-      - name: Run residual acceptance directly
+      - name: Show and enlarge test executable stack
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          dumpbin /headers build\Release\gnss_sim_integration_tests.exe | findstr /i "stack"
+          editbin /STACK:8388608 build\Release\gnss_sim_integration_tests.exe
+          dumpbin /headers build\Release\gnss_sim_integration_tests.exe | findstr /i "stack"
+
+      - name: Run residual acceptance with 8 MiB stack
         run: .\build\Release\gnss_sim_integration_tests.exe --gtest_filter=V1Acceptance.EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks

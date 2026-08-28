@@ -39,12 +39,16 @@ jobs:
           from pathlib import Path
           import re
 
+          def lines_without_eol_padding(path):
+              # RINEX/SP3 source files use fixed-width trailing padding. Removing
+              # only whitespace after the final field preserves every field
+              # start column and numeric token while keeping git diff --check clean.
+              return [line.rstrip() for line in Path(path).read_text().splitlines()]
+
           out = Path('tests/data/minimal')
           out.mkdir(parents=True, exist_ok=True)
 
-          # Bias-SINEX: retain the source's GPS time declaration and the original
-          # E02 C6C OSB solution rows spanning 00:03:00..00:13:00 GPS time.
-          bia_lines = Path('/tmp/jrc_has/has.bia').read_text().splitlines()
+          bia_lines = lines_without_eol_padding('/tmp/jrc_has/has.bia')
           time_system = next(line for line in bia_lines if 'TIME_SYSTEM' in line)
           osb_rows = []
           for line in bia_lines:
@@ -58,7 +62,7 @@ jobs:
               raise RuntimeError(f'expected >=10 E02 C6C OSB rows, got {len(osb_rows)}')
           bia_out = [
               '%=BIA 1.00 JRC 2026:001:00780 JRC 2026:001:00180 2026:001:00780 A 00000001',
-              '* Extracted verbatim from SSRC00JRC0_20260010000_01D_50S_BIA.BIA',
+              '* Numeric/source rows extracted from SSRC00JRC0_20260010000_01D_50S_BIA.BIA; trailing padding removed',
               '+FILE/REFERENCE',
               ' INPUT             HAS corrections',
               '-FILE/REFERENCE',
@@ -74,10 +78,7 @@ jobs:
           ]
           (out / 'jrc_has_2026001_e02_c6c.bia').write_text('\n'.join(bia_out) + '\n')
 
-          # RINEX clock: preserve the complete original header and original E02
-          # AS records over 00:02:00..00:14:00.  This is consumed directly by
-          # pinned RTKLIB readrnxc().
-          clk_lines = Path('/tmp/jrc_has/has.clk').read_text().splitlines()
+          clk_lines = lines_without_eol_padding('/tmp/jrc_has/has.clk')
           end_header = next(i for i, line in enumerate(clk_lines) if 'END OF HEADER' in line)
           clk_rows = []
           for line in clk_lines[end_header + 1:]:
@@ -94,11 +95,7 @@ jobs:
               raise RuntimeError(f'expected >=60 E02 clock rows, got {len(clk_rows)}')
           (out / 'jrc_has_2026001_e02.clk').write_text('\n'.join(clk_lines[:end_header + 1] + clk_rows) + '\n')
 
-          # SP3: preserve the original header, every source epoch in the same
-          # window, and the original PE02 position row for that epoch. Missing
-          # other satellites are intentional; RTKLIB accepts sparse precise
-          # records and peph2pos() interpolates the retained E02 series.
-          sp3_lines = Path('/tmp/jrc_has/has.sp3').read_text().splitlines()
+          sp3_lines = lines_without_eol_padding('/tmp/jrc_has/has.sp3')
           first_epoch = next(i for i, line in enumerate(sp3_lines) if line.startswith('*'))
           sp3_out = list(sp3_lines[:first_epoch])
           kept = 0

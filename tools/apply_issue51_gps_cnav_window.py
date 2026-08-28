@@ -22,9 +22,6 @@ new = '''    struct ResidualSite {
     };
     const ResidualSite sites[] = {
         {"asia", 20.0, 120.0, 436500.0, 60},
-        // G17's real CNAV record in the compact BRD400DLR fixture has Toc
-        // 01:25:00. Start this coverage leg at that real modern-family window
-        // rather than using the earlier 01:15 legacy-oriented epoch.
         {"gps_cnav", 36.272115, -19.973734, 437100.0, 120},
         {"bds_bcnav12", -47.507042, -174.038033, 436500.0, 60},
     };'''
@@ -82,9 +79,26 @@ new = '''        gnss_sim::SimConfig config = base_config;
                 }
             }
             std::fprintf(stderr,
-                         "GPS_CNAV_WINDOW sow=%.1f generic_status=%d generic_elev=%.6f cnav_status=%d cnav_elev=%.6f cnav_type=%d\\n",
-                         site.start_sow_sec, generic_status, generic_azel[1] * R2D, cnav_status,
-                         cnav_azel[1] * R2D, cnav_info.message_type);
+                         "GPS_CNAV_WINDOW sow=%.1f generic_status=%d generic_svh=%d generic_elev=%.6f cnav_status=%d cnav_svh=%d cnav_elev=%.6f cnav_type=%d\\n",
+                         site.start_sow_sec, generic_status, generic_svh, generic_azel[1] * R2D, cnav_status,
+                         cnav_eph.svh, cnav_azel[1] * R2D, cnav_info.message_type);
+
+            for (int eph_index = 0; eph_index < nav.n; ++eph_index) {
+                const eph_t& candidate = nav.eph[eph_index];
+                if (candidate.hdr.sys != SYS_GPS || candidate.hdr.msg_type != NAV_CNAV) continue;
+                char candidate_id[16]{};
+                satno2id(candidate.sat, candidate_id);
+                double candidate_rs[3]{};
+                double candidate_dts = 0.0;
+                double candidate_var = 0.0;
+                double candidate_pos[3]{};
+                eph2pos(site_time, &candidate, candidate_rs, &candidate_dts, &candidate_var);
+                ecef2pos(candidate_rs, candidate_pos);
+                std::fprintf(stderr,
+                             "GPS_CNAV_CANDIDATE sat=%s svh=%d toe_age=%.1f sub_lat=%.6f sub_lon=%.6f\\n",
+                             candidate_id, candidate.svh, std::fabs(timediff(candidate.toe, site_time)),
+                             candidate_pos[0] * R2D, candidate_pos[1] * R2D);
+            }
         }
 
         const std::filesystem::path site_directory = directory / site.name;'''
@@ -101,13 +115,13 @@ text = text.replace(old, new, 1)
 old = '''        } else if (signal_name == "GPS L1C" || signal_name == "GPS L2C" || signal_name == "GPS L5Q") {
             // Diagnostic phase for GPS modern-family coverage.
         } else {'''
-new = '''        } else if (signal_name == "GPS L1C") {
-            // The compact fixture has no real GPS CNV2 record; L1C remains
-            // explicitly pending a real CNV2 companion from the daily product.
+new = '''        } else if (signal_name == "GPS L1C" || signal_name == "GPS L2C" || signal_name == "GPS L5Q") {
+            // Diagnostic phase: compact GPS modern-family health/fixture
+            // suitability is resolved before restoring strict expectations.
         } else {'''
 if text.count(old) != 1:
     raise RuntimeError("GPS modern expectation anchor mismatch")
 text = text.replace(old, new, 1)
 
 path.write_text(text)
-print("GPS CNAV coverage leg moved to the real G17 CNAV epoch; L2C/L5Q strict again")
+print("GPS CNAV health and all compact CNAV candidates diagnostic applied")

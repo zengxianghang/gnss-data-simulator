@@ -368,9 +368,9 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, SatelliteG
 
     const RtklibBroadcastMessageFamily requested_family = requested_bias_family(signal->nav_message_family);
     RtklibBroadcastBiasData bias_data{};
-    const bool signal_family_bias_available = rtklib_broadcast_bias_data_for_family(
-        nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec, geometry.satellite_number, requested_family,
-        &bias_data, nullptr);
+    const bool signal_family_bias_available =
+        rtklib_broadcast_bias_data_for_family(nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec,
+                                              geometry.satellite_number, requested_family, &bias_data, nullptr);
     if (!signal_family_bias_available &&
         !rtklib_broadcast_bias_data(nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec,
                                     geometry.satellite_number, &bias_data, error_message)) {

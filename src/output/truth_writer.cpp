@@ -163,6 +163,7 @@ std::string config_json(const SimConfig& config, int indent) {
     output << inner << "\"duration_ns\": " << config.duration_ns << ",\n";
     output << inner << "\"sampling_rate_hz\": " << config.sampling_rate_hz << ",\n";
     output << inner << "\"elevation_mask_deg\": " << config.elevation_mask_deg << ",\n";
+    output << inner << "\"solution_elevation_mask_deg\": " << config.solution_elevation_mask_deg << ",\n";
     output << inner << "\"output_eph\": " << bool_json(config.output_eph) << ",\n";
     output << inner << "\"output_ion\": " << bool_json(config.output_ion) << ",\n";
     output << inner << "\"measurement_noise_enabled\": " << bool_json(config.measurement_noise_enabled) << ",\n";

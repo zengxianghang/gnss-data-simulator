@@ -266,6 +266,7 @@ SimConfig default_sim_config() {
     config.duration_ns = 28800LL * NANOSECONDS_PER_SECOND;
     config.sampling_rate_hz = 10;
     config.elevation_mask_deg = 3.0;
+    config.solution_elevation_mask_deg = 5.0;
     config.output_eph = true;
     config.output_ion = true;
     config.measurement_noise_enabled = false;
@@ -297,6 +298,11 @@ bool validate_sim_config(const SimConfig& config, std::string* error_message) {
     if (!std::isfinite(config.elevation_mask_deg) || config.elevation_mask_deg < 0.0 ||
         config.elevation_mask_deg > 90.0) {
         set_error(error_message, "elevation_mask_deg must be within [0, 90]");
+        return false;
+    }
+    if (!std::isfinite(config.solution_elevation_mask_deg) || config.solution_elevation_mask_deg < 0.0 ||
+        config.solution_elevation_mask_deg > 90.0) {
+        set_error(error_message, "solution_elevation_mask_deg must be within [0, 90]");
         return false;
     }
     if (config.measurement_noise_enabled) {
@@ -370,6 +376,7 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                                         "duration_sec",
                                         "sampling_rate_hz",
                                         "elevation_mask_deg",
+                                        "solution_elevation_mask_deg",
                                         "output_eph",
                                         "output_ion",
                                         "measurement_noise_enabled",
@@ -383,7 +390,7 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                                         "seed"};
 
     SimConfig parsed = default_sim_config();
-    bool success = validate_object_keys(root, "root", allowed_keys, 16U, error_message);
+    bool success = validate_object_keys(root, "root", allowed_keys, 17U, error_message);
 
     double duration_sec = static_cast<double>(parsed.duration_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
     const char* scenario_name = scenario_type_name(parsed.scenario);
@@ -397,6 +404,8 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
             seconds_to_ns(duration_sec, "duration_sec", &parsed.duration_ns, error_message) &&
             read_optional_int(root, "sampling_rate_hz", &parsed.sampling_rate_hz, error_message) &&
             read_optional_number(root, "elevation_mask_deg", &parsed.elevation_mask_deg, error_message) &&
+            read_optional_number(root, "solution_elevation_mask_deg", &parsed.solution_elevation_mask_deg,
+                                 error_message) &&
             read_optional_bool(root, "output_eph", &parsed.output_eph, error_message) &&
             read_optional_bool(root, "output_ion", &parsed.output_ion, error_message) &&
             read_optional_bool(root, "measurement_noise_enabled", &parsed.measurement_noise_enabled, error_message) &&

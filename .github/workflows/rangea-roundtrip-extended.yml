@@ -1,0 +1,208 @@
+name: RANGEA round-trip extended validation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "47 18 * * 6"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rangea-roundtrip-extended-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  real-whu-10m:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout with pinned dependencies
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure release build
+        run: cmake -S . -B build -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build simulator and round-trip validator
+        run: cmake --build build --config Release --parallel
+
+      - name: Download pinned real WHU RINEX NAV
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/igs
+
+          compressed=".cache/igs/BRD400DLR_S_20250030000_01D_MN.rnx.gz"
+          nav=".cache/igs/BRD400DLR_S_20250030000_01D_MN.rnx"
+          expected_compressed="fb84d4046b06e905e8e4ec0efb82f0e9ad044bc44d664cc0209cb9b4c92b9512"
+          expected_uncompressed="b11c638eea42978b8bd6aa8b65a5099fe6556dfe527bc037ed481d2b239afc42"
+          sources=(
+            "ftp://igs.gnsswhu.cn/pub/gps/data/daily/2025/brdc/BRD400DLR_S_20250030000_01D_MN.rnx.gz"
+            "http://igs.gnsswhu.cn/pub/gps/data/daily/2025/brdc/BRD400DLR_S_20250030000_01D_MN.rnx.gz"
+          )
+
+          downloaded=0
+          for url in "${sources[@]}"; do
+            echo "Downloading real RINEX NAV from ${url}"
+            rm -f "$compressed" "$nav"
+            if curl --fail --location --retry 3 --retry-delay 2 --connect-timeout 20 --max-time 300 \
+              "$url" --output "$compressed"; then
+              compressed_sha="$(sha256sum "$compressed" | awk '{print $1}')"
+              if [[ "$compressed_sha" != "$expected_compressed" ]]; then
+                echo "Compressed SHA256 mismatch from ${url}: ${compressed_sha}" >&2
+                continue
+              fi
+              gzip -dc "$compressed" > "$nav"
+              uncompressed_sha="$(sha256sum "$nav" | awk '{print $1}')"
+              if [[ "$uncompressed_sha" != "$expected_uncompressed" ]]; then
+                echo "Uncompressed SHA256 mismatch from ${url}: ${uncompressed_sha}" >&2
+                continue
+              fi
+              downloaded=1
+              break
+            fi
+          done
+
+          if [[ "$downloaded" -ne 1 ]]; then
+            echo "Unable to obtain the pinned real WHU RINEX NAV with the expected hashes." >&2
+            exit 1
+          fi
+
+      - name: Generate 10 minute real-RINEX RANGEA log
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p extended-results/rangea_roundtrip_10m
+          cat > extended-results/rangea_roundtrip_10m/config.json <<'JSON'
+          {
+            "schema_version": 1,
+            "scenario": "KS",
+            "duration_sec": 600,
+            "sampling_rate_hz": 1,
+            "elevation_mask_deg": 0.0,
+            "output_eph": true,
+            "output_ion": true,
+            "measurement_noise_enabled": false,
+            "multipath_enabled": false,
+            "receiver_clock_bias_m": 0.0,
+            "receiver_clock_drift_mps": 0.0,
+            "atmosphere_mode": "broadcast",
+            "receiver": {
+              "latitude_deg": 20.0,
+              "longitude_deg": 120.0,
+              "height_m": 100.0
+            },
+            "ttff": {
+              "startup_mode": "HOT",
+              "power_on_sec": 300.0,
+              "power_off_sec": 30.0
+            },
+            "rea": {
+              "signal_on_sec": 300.0,
+              "signal_off_sec": 10.0
+            },
+            "seed": 96
+          }
+          JSON
+
+          build/gnss-data-simulator \
+            --config extended-results/rangea_roundtrip_10m/config.json \
+            --nav .cache/igs/BRD400DLR_S_20250030000_01D_MN.rnx \
+            --output extended-results/rangea_roundtrip_10m/simulated.log \
+            --week 2347 \
+            --sow 436500
+
+      - name: Validate serialized RANGEA through RTKLIB pntpos
+        shell: bash
+        run: |
+          set -euo pipefail
+          build/validate-rangea-roundtrip \
+            --log extended-results/rangea_roundtrip_10m/simulated.log \
+            --nav .cache/igs/BRD400DLR_S_20250030000_01D_MN.rnx \
+            --truth-lat 20 \
+            --truth-lon 120 \
+            --truth-height 100 \
+            --elevation-mask 0 \
+            --broadcast-atmosphere \
+            | tee extended-results/rangea_roundtrip_10m/roundtrip.txt
+
+      - name: Enforce extended round-trip gates
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("extended-results/rangea_roundtrip_10m")
+          values = {}
+          for line in (root / "roundtrip.txt").read_text().splitlines():
+              if "=" in line:
+                  key, value = line.split("=", 1)
+                  values[key] = value
+
+          manifest = json.loads((root / "run_manifest.json").read_text())
+          summary = manifest["run_summary"]
+          expected_range = int(summary["range_messages"])
+          expected_valid = int(summary["valid_position_epochs"])
+          range_epochs = int(values["range_epochs"])
+          valid_epochs = int(values["valid_position_epochs"])
+          selected = int(values["selected_position_observations"])
+          max_error = float(values["max_position_error_m"])
+
+          failures = []
+          if expected_range != 600:
+              failures.append(f"simulator range_messages expected 600, got {expected_range}")
+          if range_epochs != expected_range:
+              failures.append(f"round-trip range_epochs {range_epochs} != simulator {expected_range}")
+          if expected_valid <= 0:
+              failures.append("simulator produced no valid position epoch")
+          if valid_epochs != expected_valid:
+              failures.append(f"round-trip valid_position_epochs {valid_epochs} != simulator {expected_valid}")
+          if selected < 4 * valid_epochs:
+              failures.append(
+                  f"selected observation coverage too small: selected={selected}, valid_epochs={valid_epochs}"
+              )
+          if not max_error < 0.5:
+              failures.append(f"max_position_error_m {max_error} is not < 0.5 m")
+
+          result = {
+              "range_epochs": range_epochs,
+              "valid_position_epochs": valid_epochs,
+              "simulator_valid_position_epochs": expected_valid,
+              "selected_position_observations": selected,
+              "max_position_error_m": max_error,
+              "failures": failures,
+          }
+          (root / "summary.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+          if failures:
+              raise SystemExit("\n".join(failures))
+          PY
+
+      - name: Publish step summary
+        if: always()
+        shell: bash
+        run: |
+          echo "# RANGEA real-WHU 10 minute round-trip" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f extended-results/rangea_roundtrip_10m/roundtrip.txt ]]; then
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            cat extended-results/rangea_roundtrip_10m/roundtrip.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No round-trip result was produced." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rangea-roundtrip-real-whu-10m-${{ github.run_id }}
+          path: |
+            extended-results/rangea_roundtrip_10m/config.json
+            extended-results/rangea_roundtrip_10m/run_manifest.json
+            extended-results/rangea_roundtrip_10m/roundtrip.txt
+            extended-results/rangea_roundtrip_10m/summary.json
+          if-no-files-found: warn
+          retention-days: 14

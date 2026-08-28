@@ -103,6 +103,19 @@ struct RtklibSolutionObservation {
     bool doppler_valid;
 };
 
+// Raw code observation used at serialization boundaries. Unlike
+// RtklibSolutionObservation this contains no simulator-owned code-bias term;
+// the serialized pseudorange is passed to RTKLIB unchanged and RTKLIB applies
+// its own signal-specific broadcast code-bias correction inside pntpos().
+struct RtklibRawCodeObservation {
+    int satellite_number;
+    int observation_code;
+    RtklibBroadcastMessageFamily message_family;
+    double pseudorange_m;
+    double cn0_dbhz;
+    bool pseudorange_valid;
+};
+
 struct RtklibPositionSolution {
     bool valid;
     double position_ecef_m[3];
@@ -160,6 +173,10 @@ bool rtklib_solve_single_position(const RtklibNavStore* receiver_nav, int gps_we
                                   const RtklibSolutionObservation* observations, int observation_count,
                                   double elevation_mask_deg, bool broadcast_atmosphere,
                                   RtklibPositionSolution* solution, std::string* error_message);
+bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
+                                      const RtklibRawCodeObservation* observations, int observation_count,
+                                      double elevation_mask_deg, bool broadcast_atmosphere,
+                                      RtklibPositionSolution* solution, std::string* error_message);
 bool rtklib_solve_single_velocity(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
                                   const RtklibSolutionObservation* observations, int observation_count,
                                   const double position_hint_ecef_m[3], double elevation_mask_deg,

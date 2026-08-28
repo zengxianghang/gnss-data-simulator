@@ -98,6 +98,7 @@ add_library(gnss_sim_core STATIC
     src/gnss/rtklib_bias_adapter.cpp
     src/gnss/rtklib_nav_output_adapter.cpp
     src/gnss/rtklib_output_adapter.cpp
+    src/gnss/rtklib_raw_position_adapter.cpp
     src/gnss/rtklib_solution_adapter.cpp
     src/gnss/satellite_engine.cpp
     src/gnss/signal_definitions.cpp
@@ -172,6 +173,25 @@ add_executable(validate-residuals
 target_link_libraries(validate-residuals PRIVATE residual_validator_core)
 gnss_sim_set_project_warnings(validate-residuals)
 
+add_library(rangea_roundtrip_core STATIC
+    tools/rangea_roundtrip/rangea_roundtrip.cpp
+)
+target_include_directories(rangea_roundtrip_core
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/tools/rangea_roundtrip"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_link_libraries(rangea_roundtrip_core
+    PUBLIC gnss_sim::core
+    PRIVATE gnss_sim::rtklib
+)
+gnss_sim_set_project_warnings(rangea_roundtrip_core)
+
+add_executable(validate-rangea-roundtrip
+    tools/rangea_roundtrip/main.cpp
+)
+target_link_libraries(validate-rangea-roundtrip PRIVATE rangea_roundtrip_core)
+gnss_sim_set_project_warnings(validate-rangea-roundtrip)
+
 if(BUILD_TESTING)
     include(FetchContent)
 
@@ -224,6 +244,7 @@ if(BUILD_TESTING)
     add_executable(gnss_sim_integration_tests
         tests/integration/test_scenarios.cpp
         tests/integration/test_all_signal_residuals.cpp
+        tests/integration/test_rangea_roundtrip.cpp
         tests/integration/test_residual_validator.cpp
         tests/integration/test_truth_outputs.cpp
         tests/integration/test_v1_acceptance.cpp
@@ -236,6 +257,7 @@ if(BUILD_TESTING)
         gnss_sim::core
         gnss_sim::rtklib
         residual_validator_core
+        rangea_roundtrip_core
         GTest::gtest_main
     )
     gnss_sim_set_project_warnings(gnss_sim_integration_tests)

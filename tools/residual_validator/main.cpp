@@ -129,8 +129,7 @@ int main(int argc, char** argv) {
                       << row.code_max_elevation_deg << "deg";
         }
         std::cout << " doppler=" << row.doppler_residuals << " doppler_rms_mps=" << row.doppler_rms_mps
-                  << " doppler_p95_mps=" << row.doppler_p95_abs_mps << " doppler_max_mps="
-                  << row.doppler_max_abs_mps;
+                  << " doppler_p95_mps=" << row.doppler_p95_abs_mps << " doppler_max_mps=" << row.doppler_max_abs_mps;
         if (row.doppler_residuals > 0U) {
             std::cout << " doppler_max_at=" << row.doppler_max_gps_week << '/' << row.doppler_max_sow_sec << '@'
                       << row.doppler_max_elevation_deg << "deg";

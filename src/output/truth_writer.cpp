@@ -521,6 +521,7 @@ bool finalize_truth_writer(TruthWriter* writer, const SimulatorRunSummary& summa
              << "    \"range_messages\": " << summary.range_messages << ",\n"
              << "    \"psrpos_messages\": " << summary.psrpos_messages << ",\n"
              << "    \"psrvel_messages\": " << summary.psrvel_messages << ",\n"
+             << "    \"bestpos_messages\": " << summary.bestpos_messages << ",\n"
              << "    \"nav_messages\": " << summary.nav_messages << ",\n"
              << "    \"valid_position_epochs\": " << summary.valid_position_epochs << ",\n"
              << "    \"valid_velocity_epochs\": " << summary.valid_velocity_epochs << ",\n"

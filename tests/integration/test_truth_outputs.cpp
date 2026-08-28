@@ -107,6 +107,8 @@ TEST(TruthOutputs, HeadersAreVersionedAndExplicit) {
               std::string::npos);
     EXPECT_NE(manifest.find("\"hash_algorithm\": \"fnv1a64\""), std::string::npos);
     EXPECT_NE(manifest.find("\"random_seed\": 7"), std::string::npos);
+    EXPECT_NE(manifest.find("\"bestpos_messages\": 10"), std::string::npos);
+    EXPECT_EQ(summary.bestpos_messages, 10U);
     EXPECT_NE(manifest.find("\"source\": \"BUILTIN_FALLBACK\""), std::string::npos);
     EXPECT_NE(manifest.find("\"schema_version\": \"builtin-cn0-v1\""), std::string::npos);
     EXPECT_NE(manifest.find("\"hash_algorithm\": \"none\""), std::string::npos);

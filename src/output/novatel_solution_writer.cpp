@@ -29,6 +29,12 @@ bool consistent_position(const PositionSolution& position) {
     return position.status == ReceiverSolutionStatus::kInsufficientObs && position.type == ReceiverSolutionType::kNone;
 }
 
+bool consistent_receiver_truth(const ReceiverTruth& truth) {
+    return std::isfinite(truth.latitude_deg) && truth.latitude_deg >= -90.0 && truth.latitude_deg <= 90.0 &&
+           std::isfinite(truth.longitude_deg) && truth.longitude_deg >= -180.0 && truth.longitude_deg <= 180.0 &&
+           std::isfinite(truth.height_m);
+}
+
 bool consistent_velocity(const VelocitySolution& velocity) {
     if (velocity.valid) {
         return velocity.status == ReceiverSolutionStatus::kSolComputed &&
@@ -69,6 +75,26 @@ bool format_novatel_psrposa(const SolutionEpoch& solution, int tracked_satellite
 
     if (!novatel_ascii::frame("PSRPOSA", solution.time, body.str(), message)) {
         set_error(error_message, "PSRPOSA header time cannot be represented");
+        return false;
+    }
+    return true;
+}
+
+bool format_novatel_bestposa(const SimTime& time, const ReceiverTruth& truth, std::string* message,
+                             std::string* error_message) {
+    if (message == nullptr || !consistent_receiver_truth(truth)) {
+        set_error(error_message, "BESTPOSA truth metadata is invalid");
+        return false;
+    }
+
+    std::ostringstream body;
+    body.imbue(std::locale::classic());
+    body << "SOL_COMPUTED,NARROW_INT," << std::fixed << std::setprecision(11) << truth.latitude_deg << ','
+         << truth.longitude_deg << ',' << std::setprecision(4) << truth.height_m
+         << ",0.0000,WGS84,0.0010,0.0010,0.0010,\"\",0.000,0.000,0,0,0,0,00,00,00,00";
+
+    if (!novatel_ascii::frame("BESTPOSA", time, body.str(), message)) {
+        set_error(error_message, "BESTPOSA header time cannot be represented");
         return false;
     }
     return true;

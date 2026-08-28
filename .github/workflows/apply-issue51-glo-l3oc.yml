@@ -18,6 +18,7 @@ on:
       - tools/apply_issue51_snapshot_family.py
       - tools/apply_issue51_signal_health.py
       - tools/apply_issue51_signal_health_status.py
+      - tools/apply_issue51_diagnostic_residual.py
       - tools/apply_issue51_real_gps_modern_probe.py
       - .github/workflows/apply-issue51-glo-l3oc.yml
 
@@ -44,18 +45,18 @@ jobs:
         run: |
           set -euo pipefail
           git -C third_party/RTKLIB fetch origin issue-6-all-signal-residuals-bds-tgd
-          git -C third_party/RTKLIB checkout 894417e20a8c1b7178e08bd410840eeb4f1ff779
+          git -C third_party/RTKLIB checkout 8d515582713e9c9618450c56721bb3ef1037144e
           python - <<'PY'
           from pathlib import Path
           path = Path('CMakeLists.txt')
           text = path.read_text()
           old = 'set(GNSS_SIM_RTKLIB_COMMIT "8d252915f589e570e69db7f01f27cda276a08f02" CACHE STRING'
-          new = 'set(GNSS_SIM_RTKLIB_COMMIT "894417e20a8c1b7178e08bd410840eeb4f1ff779" CACHE STRING'
+          new = 'set(GNSS_SIM_RTKLIB_COMMIT "8d515582713e9c9618450c56721bb3ef1037144e" CACHE STRING'
           if text.count(old) != 1:
               raise RuntimeError(f'CMake RTKLIB pin anchor count={text.count(old)}')
           path.write_text(text.replace(old, new, 1))
           PY
-          test "$(git -C third_party/RTKLIB rev-parse HEAD)" = "894417e20a8c1b7178e08bd410840eeb4f1ff779"
+          test "$(git -C third_party/RTKLIB rev-parse HEAD)" = "8d515582713e9c9618450c56721bb3ef1037144e"
 
       - name: Syntax-check guarded patch drivers
         run: >-
@@ -73,6 +74,7 @@ jobs:
           tools/apply_issue51_snapshot_family.py
           tools/apply_issue51_signal_health.py
           tools/apply_issue51_signal_health_status.py
+          tools/apply_issue51_diagnostic_residual.py
           tools/apply_issue51_real_gps_modern_probe.py
 
       - name: Apply permanent guarded implementation
@@ -91,6 +93,7 @@ jobs:
           python tools/apply_issue51_snapshot_family.py
           python tools/apply_issue51_signal_health.py
           python tools/apply_issue51_signal_health_status.py
+          python tools/apply_issue51_diagnostic_residual.py
 
       - name: Format modified C and C++ sources
         run: >-

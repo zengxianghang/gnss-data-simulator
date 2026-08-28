@@ -224,6 +224,7 @@ if(BUILD_TESTING)
     add_executable(gnss_sim_integration_tests
         tests/integration/test_scenarios.cpp
         tests/integration/test_all_signal_residuals.cpp
+        tests/integration/test_residual_validator.cpp
         tests/integration/test_truth_outputs.cpp
         tests/integration/test_v1_acceptance.cpp
     )

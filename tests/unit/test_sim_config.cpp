@@ -40,6 +40,11 @@ TEST_F(SimConfigTest, FrozenDefaultsAreCentralized) {
     EXPECT_DOUBLE_EQ(config.measurement_error.ttff_cold.psr_extra_sigma_m, 0.70);
     EXPECT_DOUBLE_EQ(config.measurement_error.rea_reacquisition.decay_tau_sec, 0.8);
     EXPECT_DOUBLE_EQ(config.measurement_error.rea_fade.duration_sec, 0.25);
+    EXPECT_TRUE(config.bestpos_rtk.enabled);
+    EXPECT_EQ(config.bestpos_rtk.stable_duration_ns, 5LL * gnss_sim::NANOSECONDS_PER_SECOND);
+    EXPECT_EQ(config.bestpos_rtk.min_used_satellites, 6);
+    EXPECT_DOUBLE_EQ(config.bestpos_rtk.horizontal_std_m, 0.01);
+    EXPECT_DOUBLE_EQ(config.bestpos_rtk.height_std_m, 0.02);
     EXPECT_FALSE(config.multipath_enabled);
     EXPECT_DOUBLE_EQ(config.receiver_clock_bias_m, 0.0);
     EXPECT_DOUBLE_EQ(config.receiver_clock_drift_mps, 0.0);
@@ -164,6 +169,31 @@ TEST_F(SimConfigTest, LoadsMeasurementErrorOverridesWhileNoiseRemainsDisabled) {
     EXPECT_DOUBLE_EQ(config.measurement_error.ttff_hot.decay_tau_sec, 1.2);
     EXPECT_DOUBLE_EQ(config.measurement_error.rea_fade.duration_sec, 0.4);
     EXPECT_DOUBLE_EQ(config.measurement_error.rea_fade.cn0_drop_db, 5.0);
+}
+
+TEST_F(SimConfigTest, LoadsAndValidatesBestposRtkOverrides) {
+    write_test_config(R"json({
+        "bestpos_rtk": {
+            "enabled": false,
+            "stable_duration_sec": 3.5,
+            "min_used_satellites": 7,
+            "horizontal_std_m": 0.015,
+            "height_std_m": 0.03
+        }
+    })json");
+
+    gnss_sim::SimConfig config{};
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message)) << error_message;
+    EXPECT_FALSE(config.bestpos_rtk.enabled);
+    EXPECT_EQ(config.bestpos_rtk.stable_duration_ns, 3500000000LL);
+    EXPECT_EQ(config.bestpos_rtk.min_used_satellites, 7);
+    EXPECT_DOUBLE_EQ(config.bestpos_rtk.horizontal_std_m, 0.015);
+    EXPECT_DOUBLE_EQ(config.bestpos_rtk.height_std_m, 0.03);
+
+    write_test_config(R"json({"bestpos_rtk":{"min_used_satellites":3}})json");
+    EXPECT_FALSE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message));
+    EXPECT_NE(error_message.find("bestpos_rtk"), std::string::npos);
 }
 
 TEST_F(SimConfigTest, RejectsInvalidMeasurementErrorConfiguration) {

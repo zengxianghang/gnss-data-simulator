@@ -80,20 +80,36 @@ bool format_novatel_psrposa(const SolutionEpoch& solution, int tracked_satellite
     return true;
 }
 
-bool format_novatel_bestposa(const SimTime& time, const ReceiverTruth& truth, std::string* message,
+bool format_novatel_bestposa(const SolutionEpoch& solution, int tracked_satellites, const ReceiverTruth& truth,
+                             bool rtk_fixed, const BestposRtkConfig& rtk_config, std::string* message,
                              std::string* error_message) {
-    if (message == nullptr || !consistent_receiver_truth(truth)) {
-        set_error(error_message, "BESTPOSA truth metadata is invalid");
+    if (message == nullptr || tracked_satellites < 0 || tracked_satellites > 255 ||
+        !consistent_position(solution.position) || !consistent_receiver_truth(truth) ||
+        (rtk_fixed && !solution.position.valid)) {
+        set_error(error_message, "BESTPOSA solution metadata is invalid");
         return false;
     }
 
+    const PositionSolution& position = solution.position;
+    const bool valid = position.valid;
+    const double latitude_deg = rtk_fixed ? truth.latitude_deg : (valid ? position.latitude_deg : 0.0);
+    const double longitude_deg = rtk_fixed ? truth.longitude_deg : (valid ? position.longitude_deg : 0.0);
+    const double height_m = rtk_fixed ? truth.height_m : (valid ? position.height_m : 0.0);
+    const double latitude_std_m = rtk_fixed ? rtk_config.horizontal_std_m : (valid ? position.latitude_std_m : 0.0);
+    const double longitude_std_m = rtk_fixed ? rtk_config.horizontal_std_m : (valid ? position.longitude_std_m : 0.0);
+    const double height_std_m = rtk_fixed ? rtk_config.height_std_m : (valid ? position.height_std_m : 0.0);
+    const int used_satellites = valid ? position.used_satellites : 0;
+    const char* status = rtk_fixed ? "SOL_COMPUTED" : receiver_solution_status_name(position.status);
+    const char* type = rtk_fixed ? "NARROW_INT" : receiver_solution_type_name(position.type);
+
     std::ostringstream body;
     body.imbue(std::locale::classic());
-    body << "SOL_COMPUTED,NARROW_INT," << std::fixed << std::setprecision(11) << truth.latitude_deg << ','
-         << truth.longitude_deg << ',' << std::setprecision(4) << truth.height_m
-         << ",0.0000,WGS84,0.0010,0.0010,0.0010,\"\",0.000,0.000,0,0,0,0,00,00,00,00";
+    body << status << ',' << type << ',' << std::fixed << std::setprecision(11) << latitude_deg << ',' << longitude_deg
+         << ',' << std::setprecision(4) << height_m << ",0.0000,WGS84," << latitude_std_m << ',' << longitude_std_m
+         << ',' << height_std_m << ",\"\",0.000,0.000," << tracked_satellites << ',' << used_satellites
+         << ",0,0,00,00,00,00";
 
-    if (!novatel_ascii::frame("BESTPOSA", time, body.str(), message)) {
+    if (!novatel_ascii::frame("BESTPOSA", solution.time, body.str(), message)) {
         set_error(error_message, "BESTPOSA header time cannot be represented");
         return false;
     }

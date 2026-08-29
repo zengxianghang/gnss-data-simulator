@@ -103,6 +103,7 @@ add_library(gnss_sim_core STATIC
     src/gnss/satellite_engine.cpp
     src/gnss/signal_definitions.cpp
     src/model/atmosphere_model.cpp
+    src/model/bestpos_rtk_model.cpp
     src/model/cn0_model.cpp
     src/model/measurement_error_model.cpp
     src/model/measurement_model.cpp
@@ -224,6 +225,7 @@ if(BUILD_TESTING)
 
     add_executable(gnss_sim_unit_tests
         tests/unit/test_atmosphere_model.cpp
+        tests/unit/test_bestpos_rtk_model.cpp
         tests/unit/test_cn0_model.cpp
         tests/unit/test_cn0_statistics.cpp
         tests/unit/test_deterministic_rng.cpp

@@ -11,7 +11,8 @@ namespace gnss_sim {
 bool format_novatel_psrposa(const SolutionEpoch& solution, int tracked_satellites, std::string* message,
                             std::string* error_message);
 bool format_novatel_psrvela(const SolutionEpoch& solution, std::string* message, std::string* error_message);
-bool format_novatel_bestposa(const SimTime& time, const ReceiverTruth& truth, std::string* message,
+bool format_novatel_bestposa(const SolutionEpoch& solution, int tracked_satellites, const ReceiverTruth& truth,
+                             bool rtk_fixed, const BestposRtkConfig& rtk_config, std::string* message,
                              std::string* error_message);
 
 } // namespace gnss_sim

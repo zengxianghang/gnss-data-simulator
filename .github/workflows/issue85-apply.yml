@@ -1,0 +1,30 @@
+name: issue85-apply
+
+on:
+  push:
+    branches:
+      - issue-85-bds-legacy-ion-output
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Add temporary issue 85 apply workflow'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-85-bds-legacy-ion-output
+          fetch-depth: 0
+      - name: Apply issue 85
+        run: python3 .github/issue85_patch.py
+      - name: Format changed C++ files
+        run: clang-format -i src/gnss/rtklib_nav_output_adapter.cpp tests/unit/test_nav_output_writers.cpp
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/gnss/rtklib_nav_output_adapter.cpp tests/unit/test_nav_output_writers.cpp
+          git commit -m "Serialize real legacy BeiDou ionosphere records"
+          git push origin HEAD:issue-85-bds-legacy-ion-output

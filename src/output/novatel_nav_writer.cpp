@@ -128,12 +128,16 @@ bool format_novatel_nav_output_record(const NavOutputRecord& source, const SimTi
         const KeplerianNavOutputData& eph = record.ephemeris;
         switch (eph.system) {
             case NavOutputSystem::kGps:
-                log_name = "GPSEPHEMA";
-                body = generic_kepler_body(eph, false, false);
+                if (eph.message_family == RtklibBroadcastMessageFamily::kLegacy) {
+                    log_name = "GPSEPHEMA";
+                    body = generic_kepler_body(eph, false, false);
+                }
                 break;
             case NavOutputSystem::kQzss:
-                log_name = "QZSSEPHEMERISA";
-                body = generic_kepler_body(eph, true, false);
+                if (eph.message_family == RtklibBroadcastMessageFamily::kLegacy) {
+                    log_name = "QZSSEPHEMERISA";
+                    body = generic_kepler_body(eph, true, false);
+                }
                 break;
             case NavOutputSystem::kGalileo:
                 log_name = "GALEPHEMERISA";

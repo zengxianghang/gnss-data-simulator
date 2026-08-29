@@ -1,0 +1,293 @@
+name: TTFF and REA transient extended validation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 19 1 * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: transient-validation-extended-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  real-whu-transients:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout with pinned dependencies
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure release build
+        run: cmake -S . -B build -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build simulator and validators
+        run: cmake --build build --config Release --parallel
+
+      - name: Download pinned real WHU RINEX NAV
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/igs
+          compressed=".cache/igs/BRD400DLR_S_20250030000_01D_MN.rnx.gz"
+          nav=".cache/igs/BRD400DLR_S_20250030000_01D_MN.rnx"
+          expected_compressed="fb84d4046b06e905e8e4ec0efb82f0e9ad044bc44d664cc0209cb9b4c92b9512"
+          expected_uncompressed="b11c638eea42978b8bd6aa8b65a5099fe6556dfe527bc037ed481d2b239afc42"
+          sources=(
+            "ftp://igs.gnsswhu.cn/pub/gps/data/daily/2025/brdc/BRD400DLR_S_20250030000_01D_MN.rnx.gz"
+            "http://igs.gnsswhu.cn/pub/gps/data/daily/2025/brdc/BRD400DLR_S_20250030000_01D_MN.rnx.gz"
+          )
+          downloaded=0
+          for url in "${sources[@]}"; do
+            echo "Downloading ${url}"
+            rm -f "$compressed" "$nav"
+            if curl --fail --location --retry 3 --retry-delay 2 --connect-timeout 20 --max-time 300 \
+              "$url" --output "$compressed"; then
+              compressed_sha="$(sha256sum "$compressed" | awk '{print $1}')"
+              if [[ "$compressed_sha" != "$expected_compressed" ]]; then
+                echo "Compressed SHA256 mismatch: ${compressed_sha}" >&2
+                continue
+              fi
+              gzip -dc "$compressed" > "$nav"
+              uncompressed_sha="$(sha256sum "$nav" | awk '{print $1}')"
+              if [[ "$uncompressed_sha" != "$expected_uncompressed" ]]; then
+                echo "Uncompressed SHA256 mismatch: ${uncompressed_sha}" >&2
+                continue
+              fi
+              downloaded=1
+              break
+            fi
+          done
+          if [[ "$downloaded" -ne 1 ]]; then
+            echo "Unable to obtain pinned real WHU RINEX NAV." >&2
+            exit 1
+          fi
+
+      - name: Create deterministic scenario configs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p extended-results/transients
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("extended-results/transients")
+          cases = [
+              ("TTFF_HOT", "TTFF", "HOT", 35, 40, 2, 300, 10, 0.0, 74011),
+              ("TTFF_WARM", "TTFF", "WARM", 60, 65, 2, 300, 10, 0.0, 74012),
+              ("TTFF_COLD", "TTFF", "COLD", 120, 125, 2, 300, 10, 0.0, 74013),
+              ("REA_HARD", "REA", "HOT", 35, 300, 30, 8, 2, 0.0, 74014),
+              ("REA_FADE", "REA", "HOT", 35, 300, 30, 8, 2, 0.25, 74015),
+          ]
+          for label, scenario, startup, duration, power_on, power_off, signal_on, signal_off, fade, seed in cases:
+              directory = root / label
+              directory.mkdir(parents=True, exist_ok=True)
+              config = {
+                  "schema_version": 1,
+                  "scenario": scenario,
+                  "duration_sec": duration,
+                  "sampling_rate_hz": 10,
+                  "elevation_mask_deg": 3.0,
+                  "solution_elevation_mask_deg": 5.0,
+                  "output_eph": False,
+                  "output_ion": False,
+                  "multipath_enabled": False,
+                  "receiver_clock_bias_m": 0.0,
+                  "receiver_clock_drift_mps": 0.0,
+                  "atmosphere_mode": "broadcast",
+                  "receiver": {"latitude_deg": 20.0, "longitude_deg": 120.0, "height_m": 100.0},
+                  "ttff": {"startup_mode": startup, "power_on_sec": power_on, "power_off_sec": power_off},
+                  "rea": {"signal_on_sec": signal_on, "signal_off_sec": signal_off},
+                  "measurement_error": {"rea_fade": {"duration_sec": fade}},
+                  "seed": seed,
+              }
+              (directory / "config.json").write_text(json.dumps(config, indent=2) + "\n")
+          PY
+
+      - name: Generate and validate all transient cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          nav=".cache/igs/BRD400DLR_S_20250030000_01D_MN.rnx"
+          for label in TTFF_HOT TTFF_WARM TTFF_COLD REA_HARD REA_FADE; do
+            case_dir="extended-results/transients/${label}"
+            fade="0"
+            if [[ "$label" == "REA_FADE" ]]; then fade="0.25"; fi
+            build/gnss-data-simulator \
+              --config "${case_dir}/config.json" \
+              --nav "$nav" \
+              --output "${case_dir}/simulated.log" \
+              --week 2347 \
+              --sow 436500
+            build/validate-transient-observations \
+              --log "${case_dir}/simulated.log" \
+              --truth "${case_dir}/observation_truth.csv" \
+              --events "${case_dir}/event_truth.csv" \
+              --nav "$nav" \
+              --scenario "$label" \
+              --fade-duration "$fade" \
+              --output "${case_dir}/transient_summary.json" \
+              --truth-lat 20 \
+              --truth-lon 120 \
+              --truth-height 100 \
+              --elevation-mask 5 \
+              --broadcast-atmosphere \
+              | tee "${case_dir}/validator.txt"
+          done
+
+      - name: Enforce extended statistical gates
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("extended-results/transients")
+          labels = ["TTFF_HOT", "TTFF_WARM", "TTFF_COLD", "REA_HARD", "REA_FADE"]
+          summaries = {label: json.loads((root / label / "transient_summary.json").read_text()) for label in labels}
+          failures = []
+
+          def metric(data, window, name):
+              return data["windows"][window][name]
+
+          for label in labels:
+              data = summaries[label]
+              if data["matched_observations"] <= 0:
+                  failures.append(f"{label}: no matched observations")
+              if data["unmatched_observations"] != 0:
+                  failures.append(f"{label}: unmatched observations={data['unmatched_observations']}")
+              if data["positioning"]["valid_position_epochs"] <= 0:
+                  failures.append(f"{label}: no valid RTKLIB SPP epoch")
+              if not data["positioning"]["final_position_error_m"] < 5.0:
+                  failures.append(
+                      f"{label}: final SPP error {data['positioning']['final_position_error_m']} m is not < 5 m"
+                  )
+
+          for label in ["TTFF_HOT", "TTFF_WARM", "TTFF_COLD"]:
+              data = summaries[label]
+              early_psr = metric(data, "early_0_1s", "pseudorange_m")
+              recovery_psr = metric(data, "recovery_1_3s", "pseudorange_m")
+              settled_psr = metric(data, "settled_ge_3s", "pseudorange_m")
+              early_doppler = metric(data, "early_0_1s", "doppler_mps")
+              recovery_doppler = metric(data, "recovery_1_3s", "doppler_mps")
+              settled_doppler = metric(data, "settled_ge_3s", "doppler_mps")
+              early_cn0 = metric(data, "early_0_1s", "cn0_dbhz")
+              recovery_cn0 = metric(data, "recovery_1_3s", "cn0_dbhz")
+              settled_cn0 = metric(data, "settled_ge_3s", "cn0_dbhz")
+              settled_adr = metric(data, "settled_ge_3s", "adr_m")
+              if (
+                  early_psr["sample_count"] == 0
+                  or recovery_psr["sample_count"] == 0
+                  or settled_psr["sample_count"] == 0
+              ):
+                  failures.append(f"{label}: missing early, recovery, or settled PSR samples")
+              elif not early_psr["rms"] > recovery_psr["rms"] > settled_psr["rms"]:
+                  failures.append(f"{label}: PSR RMS did not decay through early > recovery > settled")
+              if (
+                  early_doppler["sample_count"] == 0
+                  or recovery_doppler["sample_count"] == 0
+                  or settled_doppler["sample_count"] == 0
+              ):
+                  failures.append(f"{label}: missing early, recovery, or settled Doppler samples")
+              elif not early_doppler["rms"] > recovery_doppler["rms"] > settled_doppler["rms"]:
+                  failures.append(f"{label}: Doppler RMS did not decay through early > recovery > settled")
+              if (
+                  early_cn0["sample_count"] == 0
+                  or recovery_cn0["sample_count"] == 0
+                  or settled_cn0["sample_count"] == 0
+              ):
+                  failures.append(f"{label}: missing early, recovery, or settled CN0 samples")
+              elif not early_cn0["rms"] > recovery_cn0["rms"] > settled_cn0["rms"]:
+                  failures.append(f"{label}: CN0 RMS did not decay through early > recovery > settled")
+              if not settled_psr["rms"] < 0.25:
+                  failures.append(f"{label}: settled PSR RMS {settled_psr['rms']} m is not < 0.25 m")
+              if not settled_doppler["rms"] < 0.10:
+                  failures.append(
+                      f"{label}: settled Doppler RMS {settled_doppler['rms']} m/s is not < 0.10 m/s"
+                  )
+              if settled_adr["sample_count"] == 0 or not settled_adr["rms"] < 0.005:
+                  failures.append(f"{label}: settled ADR RMS is missing or not < 0.005 m")
+
+          for label in ["REA_HARD", "REA_FADE"]:
+              data = summaries[label]
+              rea = data["rea"]
+              if rea["signal_off_range_epochs"] <= 0:
+                  failures.append(f"{label}: no serialized RANGEA signal-off epochs")
+              if rea["signal_off_nonzero_epochs"] != 0:
+                  failures.append(f"{label}: fabricated observations during signal-off")
+              if rea["reacquisition_cycles"] < 2:
+                  failures.append(f"{label}: expected at least two reacquisition cycles")
+              if rea["ambiguity_pairs_checked"] <= 0 or rea["ambiguity_pairs_changed"] != rea["ambiguity_pairs_checked"]:
+                  failures.append(f"{label}: ADR ambiguity did not reset for every comparable signal")
+              if not rea["max_first_psr_delay_sec"] < 4.0:
+                  failures.append(f"{label}: first PSR recovery delay >= 4 s")
+              if not rea["max_first_doppler_delay_sec"] < 4.0:
+                  failures.append(f"{label}: first Doppler recovery delay >= 4 s")
+              if not rea["max_first_adr_delay_sec"] < 4.5:
+                  failures.append(f"{label}: first ADR recovery delay >= 4.5 s")
+              early = metric(data, "rea_reacquisition_early_0_1s", "pseudorange_m")
+              settled = metric(data, "rea_reacquisition_settled_ge_3s", "pseudorange_m")
+              if early["sample_count"] == 0 or settled["sample_count"] == 0:
+                  failures.append(f"{label}: missing reacquisition early or settled PSR samples")
+              elif not early["rms"] > settled["rms"]:
+                  failures.append(f"{label}: reacquisition early PSR RMS did not exceed settled RMS")
+
+          hard_fade = metric(summaries["REA_HARD"], "rea_fade", "pseudorange_m")
+          if hard_fade["sample_count"] != 0:
+              failures.append("REA_HARD: fade window unexpectedly contains samples")
+          fade_cn0 = metric(summaries["REA_FADE"], "rea_fade", "cn0_dbhz")
+          if fade_cn0["sample_count"] == 0:
+              failures.append("REA_FADE: fade window contains no samples")
+          elif not fade_cn0["mean"] < -0.10:
+              failures.append(f"REA_FADE: mean CN0 delta {fade_cn0['mean']} dB does not show degradation")
+
+          aggregate = {
+              "cases": {
+                  label: {
+                      "matched_observations": summaries[label]["matched_observations"],
+                      "max_position_error_m": summaries[label]["positioning"]["max_position_error_m"],
+                      "final_position_error_m": summaries[label]["positioning"]["final_position_error_m"],
+                      "settled_psr_rms_m": metric(summaries[label], "settled_ge_3s", "pseudorange_m")["rms"],
+                      "settled_doppler_rms_mps": metric(summaries[label], "settled_ge_3s", "doppler_mps")["rms"],
+                  }
+                  for label in labels
+              },
+              "failures": failures,
+          }
+          (root / "extended_summary.json").write_text(json.dumps(aggregate, indent=2, sort_keys=True) + "\n")
+          if failures:
+              raise SystemExit("\n".join(failures))
+          PY
+
+      - name: Publish step summary
+        if: always()
+        shell: bash
+        run: |
+          echo "# Real-WHU TTFF/REA transient validation" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f extended-results/transients/extended_summary.json ]]; then
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat extended-results/transients/extended_summary.json >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No aggregate summary was produced." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: transient-real-whu-${{ github.run_id }}
+          path: |
+            extended-results/transients/*/config.json
+            extended-results/transients/*/run_manifest.json
+            extended-results/transients/*/transient_summary.json
+            extended-results/transients/*/validator.txt
+            extended-results/transients/extended_summary.json
+          if-no-files-found: warn
+          retention-days: 14

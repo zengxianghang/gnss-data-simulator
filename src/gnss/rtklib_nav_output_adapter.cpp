@@ -1,12 +1,11 @@
 #include "gnss/nav_output_record.h"
 
-extern "C" {
-#include <rtklib.h>
-}
-
 #include <cmath>
 #include <cstring>
 
+extern "C" {
+#include <rtklib.h>
+}
 namespace gnss_sim {
 
 struct RtklibNavStore {
@@ -243,10 +242,6 @@ bool fill_glonass(const nav_t& nav, int index, NavOutputRecord* record) {
     return true;
 }
 
-bool legacy_gps_ion_message(int message_type) {
-    return message_type == NAV_LNAV;
-}
-
 bool legacy_beidou_ion_message(int message_type) {
     return message_type == NAV_D1 || message_type == NAV_D2 || message_type == NAV_D1D2;
 }
@@ -267,8 +262,7 @@ bool fill_explicit_ion(const nav_t& nav, int index, NavOutputRecord* record) {
     std::memcpy(output.coefficients, ion.alpha, sizeof(output.coefficients));
     output.region = ion.region;
     output.leap_seconds = nav.leaps;
-    output.legacy_metadata = (ion.hdr.sys == SYS_GPS && legacy_gps_ion_message(ion.hdr.msg_type)) ||
-                             (ion.hdr.sys == SYS_CMP && legacy_beidou_ion_message(ion.hdr.msg_type));
+    output.legacy_metadata = ion.hdr.sys == SYS_CMP && legacy_beidou_ion_message(ion.hdr.msg_type);
     record->kind = RtklibNavRecordKind::kIonosphere;
     record->ionosphere = output;
     return output.system != NavOutputSystem::kUnknown;

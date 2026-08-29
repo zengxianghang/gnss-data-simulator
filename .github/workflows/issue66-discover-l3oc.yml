@@ -1,0 +1,57 @@
+name: issue66-discover-l3oc
+
+on:
+  push:
+    branches:
+      - issue-66-real-glonass-l3oc
+  workflow_dispatch:
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find real GLONASS L3OC record
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidates=(
+            "2025/003/BRD400DLR_S_20250030000_01D_MN.rnx.gz"
+            "2025/100/BRD400DLR_S_20251000000_01D_MN.rnx.gz"
+            "2025/200/BRD400DLR_S_20252000000_01D_MN.rnx.gz"
+            "2025/300/BRD400DLR_S_20253000000_01D_MN.rnx.gz"
+            "2026/001/BRD400DLR_S_20260010000_01D_MN.rnx.gz"
+            "2026/100/BRD400DLR_S_20261000000_01D_MN.rnx.gz"
+            "2026/200/BRD400DLR_S_20262000000_01D_MN.rnx.gz"
+          )
+          found=0
+          for rel in "${candidates[@]}"; do
+            url="https://igs.bkg.bund.de/root_ftp/IGS/BRDC/${rel}"
+            echo "PROBE ${url}"
+            rm -f candidate.rnx.gz candidate.rnx
+            if ! curl --retry 3 --retry-delay 2 -fsSL "${url}" -o candidate.rnx.gz; then
+              echo "DOWNLOAD_FAILED ${url}"
+              continue
+            fi
+            sha256sum candidate.rnx.gz
+            gzip -dc candidate.rnx.gz > candidate.rnx
+            sha256sum candidate.rnx
+            echo "RINEX_VERSION $(head -n 1 candidate.rnx)"
+            count=$(grep -cE '^> EPH R[0-9][0-9] L3OC([[:space:]]|$)' candidate.rnx || true)
+            echo "L3OC_COUNT ${count}"
+            if [[ "${count}" -gt 0 ]]; then
+              found=1
+              echo "FOUND_URL ${url}"
+              echo "FIRST_L3OC_BEGIN"
+              awk '
+                /^> EPH R[0-9][0-9] L3OC([[:space:]]|$)/ {capture=1}
+                capture && /^>/ && !/^> EPH R[0-9][0-9] L3OC([[:space:]]|$)/ && n>0 {exit}
+                capture {print; n++}
+              ' candidate.rnx | head -n 20
+              echo "FIRST_L3OC_END"
+              break
+            fi
+          done
+          if [[ "${found}" -ne 1 ]]; then
+            echo "No real L3OC record found in candidate BRD400 files" >&2
+            exit 1
+          fi

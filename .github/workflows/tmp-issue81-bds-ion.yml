@@ -1,0 +1,105 @@
+name: tmp-issue81-bds-ion
+
+on:
+  push:
+    branches:
+      - issue-81-serialized-nav-roundtrip
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[issue81-bds-ion]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-81-serialized-nav-roundtrip
+      - name: Fix BDS leap restoration and add regression
+        shell: python
+        run: |
+          from pathlib import Path
+
+          parser = Path('tools/rangea_roundtrip/serialized_nav_parser.cpp')
+          text = parser.read_text()
+          old = '    ion.leap_seconds = leap_a;\n'
+          new = ('    // BD2IONUTCA carries BDT-UTC, while RTKLIB nav.leaps is GPST-UTC.\n'
+                 '    ion.leap_seconds = name == "BD2IONUTCA" ? leap_a + 14 : leap_a;\n')
+          assert old in text
+          parser.write_text(text.replace(old, new, 1))
+
+          test = Path('tests/integration/test_rangea_roundtrip.cpp')
+          text = test.read_text()
+          marker = '\n} // namespace\n'
+          assert text.endswith(marker)
+          addition = r'''
+
+TEST(RangeaRoundtripIntegration, RealBeidouLegacyIonRestoresRtklibGpsUtcLeapMetadata) {
+    gnss_sim::RtklibNavStore* full = gnss_sim::create_rtklib_nav_store();
+    gnss_sim::RtklibNavStore* rebuilt = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(full, nullptr);
+    ASSERT_NE(rebuilt, nullptr);
+
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(full, brd4_nav_path().c_str(), &error_message)) << error_message;
+
+    bool compared = false;
+    const int output_count = gnss_sim::rtklib_nav_output_record_count(full);
+    for (int index = 0; index < output_count; ++index) {
+        gnss_sim::NavOutputRecord source{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(full, index, &source, &error_message)) << error_message;
+        if (source.kind != gnss_sim::RtklibNavRecordKind::kIonosphere ||
+            source.ionosphere.system != gnss_sim::NavOutputSystem::kBeidou || !source.ionosphere.legacy_metadata) {
+            continue;
+        }
+
+        std::string message;
+        bool supported = false;
+        ASSERT_TRUE(gnss_sim::format_novatel_nav_output_record(source, start_time(), &message, &supported, &error_message))
+            << error_message;
+        ASSERT_TRUE(supported);
+        ASSERT_EQ(message.rfind("#BD2IONUTCA,", 0), 0U);
+
+        gnss_sim::ParsedSerializedNavRecord parsed{};
+        bool recognized = false;
+        ASSERT_TRUE(
+            gnss_sim::parse_serialized_novatel_nav_line_independent(message, &parsed, &recognized, &error_message))
+            << error_message;
+        ASSERT_TRUE(recognized);
+        EXPECT_EQ(parsed.record.ionosphere.leap_seconds, source.ionosphere.leap_seconds);
+        ASSERT_TRUE(gnss_sim::rtklib_append_nav_output_record(rebuilt, parsed.record, &error_message)) << error_message;
+
+        const int rebuilt_count = gnss_sim::rtklib_nav_output_record_count(rebuilt);
+        for (int rebuilt_index = 0; rebuilt_index < rebuilt_count; ++rebuilt_index) {
+            gnss_sim::NavOutputRecord restored{};
+            ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(rebuilt, rebuilt_index, &restored, &error_message))
+                << error_message;
+            if (restored.kind == gnss_sim::RtklibNavRecordKind::kIonosphere &&
+                restored.ionosphere.system == gnss_sim::NavOutputSystem::kBeidou) {
+                EXPECT_EQ(restored.ionosphere.leap_seconds, source.ionosphere.leap_seconds);
+                compared = true;
+                break;
+            }
+        }
+        break;
+    }
+
+    EXPECT_TRUE(compared) << "real BRD400 fixture must preserve BDS legacy ion leap metadata through ASCII NAV";
+    gnss_sim::destroy_rtklib_nav_store(rebuilt);
+    gnss_sim::destroy_rtklib_nav_store(full);
+}
+'''
+          test.write_text(text[:-len(marker)] + addition + marker)
+      - name: Format
+        run: clang-format -i tools/rangea_roundtrip/serialized_nav_parser.cpp tests/integration/test_rangea_roundtrip.cpp
+      - name: Commit
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/rangea_roundtrip/serialized_nav_parser.cpp tests/integration/test_rangea_roundtrip.cpp
+          git commit -m "Restore BDS ION leap metadata from ASCII [issue81-bds-ion]"
+          git push origin HEAD:issue-81-serialized-nav-roundtrip

@@ -101,10 +101,10 @@ bool validate_raw_observation(const RtklibRawCodeObservation& source, int index,
 
 } // namespace
 
-bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
-                                      const RtklibRawCodeObservation* observations, int observation_count,
-                                      double elevation_mask_deg, bool broadcast_atmosphere,
-                                      RtklibPositionSolution* solution, std::string* error_message) {
+bool solve_raw_single_position_impl(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
+                                    const RtklibRawCodeObservation* observations, int observation_count,
+                                    double elevation_mask_deg, bool broadcast_atmosphere, bool skip_missing_navigation,
+                                    RtklibPositionSolution* solution, std::string* error_message) {
     if (receiver_nav == nullptr || observations == nullptr || observation_count < 0 || observation_count > MAXOBS ||
         solution == nullptr || !valid_time(gps_week, sow_sec) || !std::isfinite(elevation_mask_deg) ||
         elevation_mask_deg < -90.0 || elevation_mask_deg > 90.0) {
@@ -112,10 +112,6 @@ bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gp
         return false;
     }
 
-    // The current black-box accuracy gate intentionally uses every ephemeris
-    // available in the real RINEX NAV input. Receiver acquisition/update order
-    // is out of scope until the serialized RANGEA positioning error is first
-    // characterized with unrestricted real broadcast navigation.
     const gtime_t epoch_time = gpst2time(gps_week, sow_sec);
     RtklibSolutionObservation converted[MAXOBS]{};
     bool seen_satellite[MAXSAT]{};
@@ -140,6 +136,9 @@ bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gp
         double rtklib_code_bias_m = 0.0;
         const int bias_status = signal_bias_status(receiver_nav, epoch_time, source, message_mask, &rtklib_code_bias_m);
         if (bias_status != 1 || !std::isfinite(rtklib_code_bias_m)) {
+            if (skip_missing_navigation && bias_status == 0) {
+                continue;
+            }
             if (error_message != nullptr) {
                 char message[224]{};
                 std::snprintf(message, sizeof(message),
@@ -168,6 +167,27 @@ bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gp
 
     return rtklib_solve_single_position(receiver_nav, gps_week, sow_sec, converted, prepared_count, elevation_mask_deg,
                                         broadcast_atmosphere, solution, error_message);
+}
+
+bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
+                                      const RtklibRawCodeObservation* observations, int observation_count,
+                                      double elevation_mask_deg, bool broadcast_atmosphere,
+                                      RtklibPositionSolution* solution, std::string* error_message) {
+    // The historical RANGEA black-box reference path intentionally assumes a
+    // complete real-RINEX NAV store. Keep missing family EPH as a hard failure.
+    return solve_raw_single_position_impl(receiver_nav, gps_week, sow_sec, observations, observation_count,
+                                          elevation_mask_deg, broadcast_atmosphere, false, solution, error_message);
+}
+
+bool rtklib_solve_raw_single_position_available_nav(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
+                                                    const RtklibRawCodeObservation* observations, int observation_count,
+                                                    double elevation_mask_deg, bool broadcast_atmosphere,
+                                                    RtklibPositionSolution* solution, std::string* error_message) {
+    // A receiver can track a signal before it owns the corresponding broadcast
+    // family. Serialized-log replay must therefore ignore only observations
+    // whose valid family EPH has not appeared yet, matching solve_receiver_epoch().
+    return solve_raw_single_position_impl(receiver_nav, gps_week, sow_sec, observations, observation_count,
+                                          elevation_mask_deg, broadcast_atmosphere, true, solution, error_message);
 }
 
 } // namespace gnss_sim

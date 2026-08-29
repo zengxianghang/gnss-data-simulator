@@ -1,5 +1,7 @@
 #include "gnss/rtklib_adapter.h"
 
+#include "gnss/nav_output_record.h"
+
 extern "C" {
 #include <rtklib.h>
 #include <rtklib_obs_ext.h>
@@ -439,6 +441,198 @@ bool rtklib_copy_nav_record(const RtklibNavStore* source, int record_index, Rtkl
         return false;
     }
     return true;
+}
+
+int output_system_to_rtklib(NavOutputSystem system) {
+    switch (system) {
+        case NavOutputSystem::kGps:
+            return SYS_GPS;
+        case NavOutputSystem::kGlonass:
+            return SYS_GLO;
+        case NavOutputSystem::kGalileo:
+            return SYS_GAL;
+        case NavOutputSystem::kBeidou:
+            return SYS_CMP;
+        case NavOutputSystem::kQzss:
+            return SYS_QZS;
+        case NavOutputSystem::kNavic:
+            return SYS_IRN;
+        case NavOutputSystem::kUnknown:
+            return SYS_NONE;
+    }
+    return SYS_NONE;
+}
+
+int output_family_to_message_type(int system, RtklibBroadcastMessageFamily family) {
+    switch (family) {
+        case RtklibBroadcastMessageFamily::kLegacy:
+            if (system == SYS_GPS || system == SYS_QZS) {
+                return NAV_LNAV;
+            }
+            if (system == SYS_CMP) {
+                return NAV_D1D2;
+            }
+            return 0;
+        case RtklibBroadcastMessageFamily::kCnav:
+            return NAV_CNAV;
+        case RtklibBroadcastMessageFamily::kCnav2:
+            return NAV_CNV2;
+        case RtklibBroadcastMessageFamily::kGalileoInav:
+            return NAV_INAV;
+        case RtklibBroadcastMessageFamily::kGalileoFnav:
+            return NAV_FNAV;
+        case RtklibBroadcastMessageFamily::kBeidouBcnav1:
+            return NAV_CNV1;
+        case RtklibBroadcastMessageFamily::kBeidouBcnav2:
+            return NAV_CNV2;
+        case RtklibBroadcastMessageFamily::kBeidouBcnav3:
+            return NAV_CNV3;
+        case RtklibBroadcastMessageFamily::kGlonassFdma:
+            return NAV_FDMA;
+        case RtklibBroadcastMessageFamily::kGlonassL3Oc:
+            return NAV_L3OC;
+        case RtklibBroadcastMessageFamily::kUnknown:
+            return 0;
+    }
+    return 0;
+}
+
+bool rtklib_append_nav_output_record(RtklibNavStore* destination, const NavOutputRecord& record,
+                                     std::string* error_message) {
+    if (destination == nullptr) {
+        set_error(error_message, "serialized NAV append request has null destination");
+        return false;
+    }
+
+    if (record.kind == RtklibNavRecordKind::kEphemeris) {
+        const KeplerianNavOutputData& source = record.ephemeris;
+        const int system = output_system_to_rtklib(source.system);
+        const int message_type = output_family_to_message_type(system, source.message_family);
+        if (system == SYS_NONE || message_type == 0 || source.prn <= 0 || source.toe_week < 0 || source.toc_week < 0 ||
+            source.transmit_week < 0 || !valid_gps_time(source.toe_week, source.toe_sow_sec) ||
+            !valid_gps_time(source.toc_week, source.toc_sow_sec) ||
+            !valid_gps_time(source.transmit_week, source.transmit_sow_sec) ||
+            !std::isfinite(source.semi_major_axis_m) || source.semi_major_axis_m <= 0.0) {
+            set_error(error_message, "serialized Keplerian NAV record has invalid required fields");
+            return false;
+        }
+        const int satellite = satno(system, source.prn);
+        if (satellite <= 0) {
+            set_error(error_message, "serialized Keplerian NAV record has unsupported satellite");
+            return false;
+        }
+
+        eph_t eph{};
+        eph.sat = satellite;
+        eph.iode = source.iode;
+        eph.iodc = source.iodc;
+        eph.sva = source.sva;
+        eph.svh = source.svh;
+        eph.week = source.toe_week;
+        eph.code = source.code;
+        eph.flag = source.flag;
+        eph.toe = gpst2time(source.toe_week, source.toe_sow_sec);
+        eph.toc = gpst2time(source.toc_week, source.toc_sow_sec);
+        eph.ttr = gpst2time(source.transmit_week, source.transmit_sow_sec);
+        eph.A = source.semi_major_axis_m;
+        eph.e = source.eccentricity;
+        eph.i0 = source.inclination_rad;
+        eph.OMG0 = source.omega0_rad;
+        eph.omg = source.argument_of_perigee_rad;
+        eph.M0 = source.mean_anomaly_rad;
+        eph.deln = source.delta_mean_motion_radps;
+        eph.OMGd = source.omega_dot_radps;
+        eph.idot = source.inclination_dot_radps;
+        eph.crc = source.crc_m;
+        eph.crs = source.crs_m;
+        eph.cuc = source.cuc_rad;
+        eph.cus = source.cus_rad;
+        eph.cic = source.cic_rad;
+        eph.cis = source.cis_rad;
+        eph.toes = source.toe_sow_sec;
+        eph.fit = source.fit_hours;
+        eph.f0 = source.clock_bias_sec;
+        eph.f1 = source.clock_drift_sec_per_sec;
+        eph.f2 = source.clock_drift_rate_sec_per_sec2;
+        std::memcpy(eph.tgd, source.tgd_sec, sizeof(eph.tgd));
+        std::memcpy(eph.isc, source.isc_sec, sizeof(eph.isc));
+        eph.hdr.data_type = NAV_EPH;
+        eph.hdr.sys = system;
+        eph.hdr.prn = source.prn;
+        eph.hdr.msg_type = message_type;
+        if (!append_eph(eph, &destination->nav)) {
+            set_error(error_message, "cannot allocate serialized Keplerian NAV record");
+            return false;
+        }
+        uniqnav(&destination->nav);
+        return true;
+    }
+
+    if (record.kind == RtklibNavRecordKind::kGlonassEphemeris) {
+        const GlonassNavOutputData& source = record.glonass;
+        if (source.message_family != RtklibBroadcastMessageFamily::kGlonassFdma || source.prn <= 0 ||
+            source.toe_week < 0 || source.frame_week < 0 || !valid_gps_time(source.toe_week, source.toe_sow_sec) ||
+            !valid_gps_time(source.frame_week, source.frame_sow_sec)) {
+            set_error(error_message, "serialized GLONASS NAV record has invalid required fields");
+            return false;
+        }
+        const int satellite = satno(SYS_GLO, source.prn);
+        if (satellite <= 0) {
+            set_error(error_message, "serialized GLONASS NAV record has unsupported satellite");
+            return false;
+        }
+        geph_t geph{};
+        geph.sat = satellite;
+        geph.iode = source.iode;
+        geph.frq = source.frequency_channel;
+        geph.svh = source.svh;
+        geph.sva = source.sva;
+        geph.age = source.age_days;
+        geph.flag = source.flags;
+        geph.toe = gpst2time(source.toe_week, source.toe_sow_sec);
+        geph.tof = gpst2time(source.frame_week, source.frame_sow_sec);
+        std::memcpy(geph.pos, source.position_ecef_m, sizeof(geph.pos));
+        std::memcpy(geph.vel, source.velocity_ecef_mps, sizeof(geph.vel));
+        std::memcpy(geph.acc, source.acceleration_ecef_mps2, sizeof(geph.acc));
+        geph.taun = source.clock_bias_sec;
+        geph.gamn = source.relative_frequency_bias;
+        geph.dtaun = source.differential_delay_sec;
+        geph.hdr.data_type = NAV_EPH;
+        geph.hdr.sys = SYS_GLO;
+        geph.hdr.prn = source.prn;
+        geph.hdr.msg_type = NAV_FDMA;
+        if (!append_geph(geph, &destination->nav)) {
+            set_error(error_message, "cannot allocate serialized GLONASS NAV record");
+            return false;
+        }
+        uniqnav(&destination->nav);
+        return true;
+    }
+
+    if (record.kind == RtklibNavRecordKind::kIonosphere) {
+        const IonosphereNavOutputData& source = record.ionosphere;
+        if (!source.legacy_metadata || source.coefficient_count < 8) {
+            set_error(error_message, "serialized ionosphere record is outside supported legacy ASCII scope");
+            return false;
+        }
+        if (source.system == NavOutputSystem::kGps) {
+            std::memcpy(destination->nav.ion_gps, source.coefficients, sizeof(destination->nav.ion_gps));
+            std::memcpy(destination->nav.utc_gps, source.utc, sizeof(destination->nav.utc_gps));
+            destination->nav.leaps = source.leap_seconds;
+            return true;
+        }
+        if (source.system == NavOutputSystem::kBeidou) {
+            std::memcpy(destination->nav.ion_cmp, source.coefficients, sizeof(destination->nav.ion_cmp));
+            std::memcpy(destination->nav.utc_cmp, source.utc, sizeof(destination->nav.utc_cmp));
+            destination->nav.leaps = source.leap_seconds;
+            return true;
+        }
+        set_error(error_message, "serialized ionosphere record has unsupported system");
+        return false;
+    }
+
+    set_error(error_message, "serialized NAV record has unsupported kind");
+    return false;
 }
 
 bool rtklib_nav_store_has_satellite_ephemeris(const RtklibNavStore* store, int satellite_number) {

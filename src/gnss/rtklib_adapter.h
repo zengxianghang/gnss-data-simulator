@@ -6,6 +6,7 @@
 namespace gnss_sim {
 
 struct RtklibNavStore;
+struct NavOutputRecord;
 
 enum class RtklibNavRecordKind {
     kEphemeris,
@@ -148,6 +149,8 @@ bool rtklib_copy_nav_snapshot(const RtklibNavStore* source, int gps_week, double
                               std::string* error_message);
 bool rtklib_copy_nav_record(const RtklibNavStore* source, int record_index, RtklibNavStore* destination,
                             std::string* error_message);
+bool rtklib_append_nav_output_record(RtklibNavStore* destination, const NavOutputRecord& record,
+                                     std::string* error_message);
 bool rtklib_nav_store_has_satellite_ephemeris(const RtklibNavStore* store, int satellite_number);
 
 bool rtklib_satellite_state_available(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number);
@@ -177,6 +180,10 @@ bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gp
                                       const RtklibRawCodeObservation* observations, int observation_count,
                                       double elevation_mask_deg, bool broadcast_atmosphere,
                                       RtklibPositionSolution* solution, std::string* error_message);
+bool rtklib_solve_raw_single_position_available_nav(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
+                                                    const RtklibRawCodeObservation* observations, int observation_count,
+                                                    double elevation_mask_deg, bool broadcast_atmosphere,
+                                                    RtklibPositionSolution* solution, std::string* error_message);
 bool rtklib_solve_single_velocity(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
                                   const RtklibSolutionObservation* observations, int observation_count,
                                   const double position_hint_ecef_m[3], double elevation_mask_deg,

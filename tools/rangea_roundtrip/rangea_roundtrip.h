@@ -8,6 +8,9 @@
 
 namespace gnss_sim {
 
+struct RtklibNavStore;
+struct RtklibPositionSolution;
+
 struct ParsedRangeObservation {
     int satellite_number;
     int signal_id;
@@ -28,6 +31,13 @@ struct ParsedRangeEpoch {
 };
 
 bool parse_rangea_line_independent(const std::string& raw_line, ParsedRangeEpoch* epoch, std::string* error_message);
+bool solve_parsed_rangea_epoch(const ParsedRangeEpoch& epoch, const RtklibNavStore* nav, double elevation_mask_deg,
+                               bool broadcast_atmosphere, RtklibPositionSolution* solution, int* selected_count,
+                               std::string* error_message);
+bool solve_parsed_rangea_epoch_available_nav(const ParsedRangeEpoch& epoch, const RtklibNavStore* nav,
+                                             double elevation_mask_deg, bool broadcast_atmosphere,
+                                             RtklibPositionSolution* solution, int* selected_count,
+                                             std::string* error_message);
 
 struct RangeaRoundtripSummary {
     std::uint64_t range_epochs;

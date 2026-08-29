@@ -194,6 +194,25 @@ add_executable(validate-rangea-roundtrip
 target_link_libraries(validate-rangea-roundtrip PRIVATE rangea_roundtrip_core)
 gnss_sim_set_project_warnings(validate-rangea-roundtrip)
 
+add_library(serialized_nav_roundtrip_core STATIC
+    tools/serialized_nav_roundtrip/serialized_nav_roundtrip.cpp
+)
+target_include_directories(serialized_nav_roundtrip_core
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/tools/serialized_nav_roundtrip"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_link_libraries(serialized_nav_roundtrip_core
+    PUBLIC rangea_roundtrip_core
+    PRIVATE gnss_sim::rtklib
+)
+gnss_sim_set_project_warnings(serialized_nav_roundtrip_core)
+
+add_executable(validate-serialized-nav-roundtrip
+    tools/serialized_nav_roundtrip/main.cpp
+)
+target_link_libraries(validate-serialized-nav-roundtrip PRIVATE serialized_nav_roundtrip_core)
+gnss_sim_set_project_warnings(validate-serialized-nav-roundtrip)
+
 add_library(transient_validator_core STATIC
     tools/transient_validator/transient_validator.cpp
 )
@@ -269,6 +288,7 @@ if(BUILD_TESTING)
         tests/integration/test_measurement_noise_integration.cpp
         tests/integration/test_rea_fade.cpp
         tests/integration/test_rangea_roundtrip.cpp
+        tests/integration/test_serialized_nav_roundtrip.cpp
         tests/integration/test_transient_validator.cpp
         tests/integration/test_residual_validator.cpp
         tests/integration/test_truth_outputs.cpp
@@ -283,6 +303,7 @@ if(BUILD_TESTING)
         gnss_sim::rtklib
         residual_validator_core
         rangea_roundtrip_core
+        serialized_nav_roundtrip_core
         transient_validator_core
         GTest::gtest_main
     )

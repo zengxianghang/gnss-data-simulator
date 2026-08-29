@@ -411,6 +411,49 @@ bool parse_rangea_line_independent(const std::string& raw_line, ParsedRangeEpoch
     return parse_rangea_line_impl(raw_line, epoch, error_message);
 }
 
+bool solve_parsed_rangea_epoch(const ParsedRangeEpoch& epoch, const RtklibNavStore* nav, double elevation_mask_deg,
+                               bool broadcast_atmosphere, RtklibPositionSolution* solution, int* selected_count,
+                               std::string* error_message) {
+    if (nav == nullptr || solution == nullptr || selected_count == nullptr) {
+        set_error(error_message, "parsed RANGEA solve request has invalid arguments");
+        return false;
+    }
+    std::vector<RtklibRawCodeObservation> selected;
+    if (!select_position_observations(epoch, &selected, error_message)) {
+        return false;
+    }
+    *selected_count = static_cast<int>(selected.size());
+    if (selected.empty()) {
+        *solution = RtklibPositionSolution{};
+        return true;
+    }
+    return rtklib_solve_raw_single_position(nav, epoch.gps_week, epoch.sow_sec, selected.data(),
+                                            static_cast<int>(selected.size()), elevation_mask_deg, broadcast_atmosphere,
+                                            solution, error_message);
+}
+
+bool solve_parsed_rangea_epoch_available_nav(const ParsedRangeEpoch& epoch, const RtklibNavStore* nav,
+                                             double elevation_mask_deg, bool broadcast_atmosphere,
+                                             RtklibPositionSolution* solution, int* selected_count,
+                                             std::string* error_message) {
+    if (nav == nullptr || solution == nullptr || selected_count == nullptr) {
+        set_error(error_message, "parsed RANGEA receiver-NAV solve request has invalid arguments");
+        return false;
+    }
+    std::vector<RtklibRawCodeObservation> selected;
+    if (!select_position_observations(epoch, &selected, error_message)) {
+        return false;
+    }
+    *selected_count = static_cast<int>(selected.size());
+    if (selected.empty()) {
+        *solution = RtklibPositionSolution{};
+        return true;
+    }
+    return rtklib_solve_raw_single_position_available_nav(nav, epoch.gps_week, epoch.sow_sec, selected.data(),
+                                                          static_cast<int>(selected.size()), elevation_mask_deg,
+                                                          broadcast_atmosphere, solution, error_message);
+}
+
 bool validate_rangea_roundtrip_stream(std::istream* input, const char* rinex_nav_path, double truth_latitude_deg,
                                       double truth_longitude_deg, double truth_height_m, double elevation_mask_deg,
                                       bool broadcast_atmosphere, RangeaRoundtripSummary* summary,

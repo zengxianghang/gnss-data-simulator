@@ -329,6 +329,47 @@ TEST(NavOutputWriter, NovatelLegacyEphemerisLogsDoNotMasqueradeModernGpsOrQzssFa
     gnss_sim::destroy_rtklib_nav_store(store);
 }
 
+TEST(NavOutputWriter, RealRinex4BeiDouLegacyIonSerializesWithoutModernFamilyMasquerade) {
+    gnss_sim::RtklibNavStore* store = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(store, nullptr);
+    std::string error_message;
+    ASSERT_TRUE(
+        gnss_sim::load_rinex_nav_file(store, data_path("brd400dlr_rinex4_acceptance_nav.rnx").c_str(), &error_message))
+        << error_message;
+
+    int legacy_count = 0;
+    int modern_count = 0;
+    const int count = gnss_sim::rtklib_nav_output_record_count(store);
+    for (int index = 0; index < count; ++index) {
+        gnss_sim::NavOutputRecord record{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(store, index, &record, &error_message)) << error_message;
+        if (record.kind != gnss_sim::RtklibNavRecordKind::kIonosphere ||
+            record.ionosphere.system != gnss_sim::NavOutputSystem::kBeidou) {
+            continue;
+        }
+
+        std::string message;
+        bool supported = false;
+        const gnss_sim::SimTime time = output_time();
+        ASSERT_TRUE(gnss_sim::format_novatel_nav_output_record(record, time, &message, &supported, &error_message))
+            << error_message;
+        if (record.ionosphere.legacy_metadata) {
+            ++legacy_count;
+            EXPECT_TRUE(supported);
+            EXPECT_EQ(log_name(message), "BD2IONUTCA");
+            EXPECT_TRUE(valid_ascii_crc(message));
+        } else {
+            ++modern_count;
+            EXPECT_FALSE(supported);
+            EXPECT_TRUE(message.empty());
+        }
+    }
+
+    EXPECT_GT(legacy_count, 0) << "real BRD400DLR fixture must contain legacy BeiDou D1/D2/D1D2 ION";
+    EXPECT_GT(modern_count, 0) << "real BRD400DLR fixture must contain modern BeiDou ION that cannot masquerade as BD2";
+    gnss_sim::destroy_rtklib_nav_store(store);
+}
+
 TEST(NavOutputWriter, Bd3IonHasByteLevelGoldenRecord) {
     gnss_sim::NavOutputRecord record{};
     record.kind = gnss_sim::RtklibNavRecordKind::kIonosphere;

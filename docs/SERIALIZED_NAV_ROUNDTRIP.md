@@ -41,6 +41,8 @@ The serialized-NAV import adapter therefore keeps the parsed absolute Toe epoch 
 
 `BD2IONUTCA` similarly carries BDT-UTC leap seconds. The importer adds 14 seconds when restoring RTKLIB `nav.leaps`, whose convention is GPST-UTC. The validator also refuses broadcast-atmosphere positioning until a serialized GPS `IONUTCA` has appeared, so RTKLIB cannot silently fall back to its built-in default Klobuchar coefficients.
 
+The compact five-system BRD400DLR fixture does not contain a NovAtel-serializable legacy GPS `IONUTCA`; its normal broadcast-atmosphere path intentionally inherits pinned RTKLIB default-Klobuchar behavior. The self-contained five-system positioning gate therefore runs both simulator and validator with atmosphere disabled, while independent real-RINEX GPS/BDS ION round-trip tests verify `IONUTCA`/`BD2IONUTCA` reconstruction. When broadcast atmosphere is requested from the serialized-log validator, a real serialized GPS `IONUTCA` is mandatory.
+
 ## Causality
 
 Navigation records are applied to an initially empty RTKLIB navigation store as they appear in the generated log. A `RANGEA` epoch can use only navigation that appeared earlier in the stream. The validator never scans ahead for future EPH/ION records.

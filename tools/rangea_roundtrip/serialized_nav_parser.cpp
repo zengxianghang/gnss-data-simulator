@@ -117,6 +117,9 @@ bool parse_frame(const std::string& raw_line, std::string* log_name, int* output
     }
     *recognized = false;
     std::string line = raw_line;
+    if (!line.empty() && line.back() == '\n') {
+        line.pop_back();
+    }
     if (!line.empty() && line.back() == '\r') {
         line.pop_back();
     }

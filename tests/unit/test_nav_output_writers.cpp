@@ -287,6 +287,48 @@ TEST(NavOutputWriter, RealModernBdsAndNavicStayWithinFrozenOutputScope) {
     EXPECT_EQ(signal_count, 21U);
 }
 
+TEST(NavOutputWriter, NovatelLegacyEphemerisLogsDoNotMasqueradeModernGpsOrQzssFamilies) {
+    gnss_sim::RtklibNavStore* store = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(store, nullptr);
+    std::string error_message;
+    ASSERT_TRUE(
+        gnss_sim::load_rinex_nav_file(store, data_path("brd400dlr_rinex4_acceptance_nav.rnx").c_str(), &error_message))
+        << error_message;
+
+    int legacy_supported = 0;
+    int modern_rejected = 0;
+    const int count = gnss_sim::rtklib_nav_output_record_count(store);
+    for (int index = 0; index < count; ++index) {
+        gnss_sim::NavOutputRecord record{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(store, index, &record, &error_message)) << error_message;
+        if (record.kind != gnss_sim::RtklibNavRecordKind::kEphemeris ||
+            (record.ephemeris.system != gnss_sim::NavOutputSystem::kGps &&
+             record.ephemeris.system != gnss_sim::NavOutputSystem::kQzss)) {
+            continue;
+        }
+
+        const gnss_sim::SimTime time = ephemeris_output_time(record);
+        std::string message;
+        bool supported = false;
+        ASSERT_TRUE(gnss_sim::format_novatel_nav_output_record(record, time, &message, &supported, &error_message))
+            << error_message;
+        if (record.ephemeris.message_family == gnss_sim::RtklibBroadcastMessageFamily::kLegacy) {
+            ++legacy_supported;
+            EXPECT_TRUE(supported);
+            EXPECT_TRUE(valid_ascii_crc(message));
+            EXPECT_TRUE(log_name(message) == "GPSEPHEMA" || log_name(message) == "QZSSEPHEMERISA");
+        } else {
+            ++modern_rejected;
+            EXPECT_FALSE(supported);
+            EXPECT_TRUE(message.empty());
+        }
+    }
+
+    EXPECT_GT(legacy_supported, 0);
+    EXPECT_GT(modern_rejected, 0) << "real BRD400 fixture must contain modern GPS/QZSS ephemeris records";
+    gnss_sim::destroy_rtklib_nav_store(store);
+}
+
 TEST(NavOutputWriter, Bd3IonHasByteLevelGoldenRecord) {
     gnss_sim::NavOutputRecord record{};
     record.kind = gnss_sim::RtklibNavRecordKind::kIonosphere;

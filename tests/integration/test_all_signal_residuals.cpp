@@ -4,21 +4,12 @@
 #include "gnss_sim/simulator.h"
 #include "residual_validator.h"
 
-#include <gtest/gtest.h>
-
-extern "C" {
-#include <rtklib.h>
-}
-
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <iomanip>
+#include <gtest/gtest.h>
 #include <map>
-#include <sstream>
 #include <string>
-#include <vector>
 
 namespace {
 
@@ -49,106 +40,6 @@ std::string jrc_has_clock_path() {
 
 std::string jrc_has_bias_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/jrc_has_2026001_e02_c6c.bia";
-}
-
-double rinex4_field(const std::string& line, std::size_t offset) {
-    return std::stod(line.substr(offset, 19));
-}
-
-void write_rinex4_field(std::ostream* output, double value) {
-    *output << std::scientific << std::setprecision(12) << std::setw(19) << value;
-}
-
-void write_rinex4_four(std::ostream* output, double a, double b, double c, double d) {
-    *output << "    ";
-    write_rinex4_field(output, a);
-    write_rinex4_field(output, b);
-    write_rinex4_field(output, c);
-    write_rinex4_field(output, d);
-    *output << '\n';
-}
-
-bool write_g3_overlay_nav(const std::filesystem::path& directory, std::string* output_path) {
-    if (output_path == nullptr) {
-        return false;
-    }
-    std::ifstream source(brd4_nav_path(), std::ios::binary);
-    if (!source) {
-        return false;
-    }
-
-    std::vector<std::string> lines;
-    std::string line;
-    while (std::getline(source, line)) {
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
-        lines.push_back(line);
-    }
-
-    const std::filesystem::path path = directory / "brd400dlr_plus_synthetic_glo_l3oc.rnx";
-    std::ofstream output(path, std::ios::binary | std::ios::trunc);
-    if (!output) {
-        return false;
-    }
-    for (const std::string& original : lines) {
-        output << original << '\n';
-    }
-
-    // Compact-test-only overlay. It supplies a signal-specific G3/L3OC code
-    // bias family while retaining the real FDMA orbit/clock state. Real WHU
-    // validation must use the original source NAV and never this overlay.
-    constexpr double kSyntheticIscL3OcpSec = 25.0e-9;
-    for (std::size_t index = 0; index + 5 < lines.size(); ++index) {
-        std::istringstream header(lines[index]);
-        std::string marker;
-        std::string kind;
-        std::string satellite;
-        std::string family;
-        header >> marker >> kind >> satellite >> family;
-        if (marker != ">" || kind != "EPH" || satellite.size() != 3U || satellite[0] != 'R' || family != "FDMA") {
-            continue;
-        }
-
-        const std::string& clock = lines[index + 1];
-        const std::string& orbit1 = lines[index + 2];
-        const std::string& orbit2 = lines[index + 3];
-        const std::string& orbit3 = lines[index + 4];
-        if (clock.rfind(satellite, 0) != 0 || clock.size() < 80U || orbit1.size() < 80U || orbit2.size() < 80U ||
-            orbit3.size() < 80U) {
-            return false;
-        }
-
-        std::istringstream epoch_stream(clock.substr(4, 19));
-        double epoch[6]{};
-        if (!(epoch_stream >> epoch[0] >> epoch[1] >> epoch[2] >> epoch[3] >> epoch[4] >> epoch[5])) {
-            return false;
-        }
-        const double t_tm = time2gpst(epoch2time(epoch), nullptr);
-
-        output << "> EPH " << satellite << " L3OC\n";
-        output << clock.substr(0, 23);
-        write_rinex4_field(&output, rinex4_field(clock, 23));
-        write_rinex4_field(&output, rinex4_field(clock, 42));
-        write_rinex4_field(&output, 0.0);
-        output << '\n';
-        write_rinex4_four(&output, rinex4_field(orbit1, 4), rinex4_field(orbit1, 23), rinex4_field(orbit1, 42),
-                          rinex4_field(orbit1, 61));
-        write_rinex4_four(&output, rinex4_field(orbit2, 4), rinex4_field(orbit2, 23), rinex4_field(orbit2, 42), 0.0);
-        write_rinex4_four(&output, rinex4_field(orbit3, 4), rinex4_field(orbit3, 23), rinex4_field(orbit3, 42),
-                          kSyntheticIscL3OcpSec);
-        for (int extra = 0; extra < 4; ++extra) {
-            write_rinex4_four(&output, 0.0, 0.0, 0.0, 0.0);
-        }
-        write_rinex4_four(&output, 0.0, 0.0, 0.0, t_tm);
-    }
-
-    output.flush();
-    if (!output) {
-        return false;
-    }
-    *output_path = path.string();
-    return true;
 }
 
 void configure_zero_noise_ks(gnss_sim::SimConfig* config, gnss_sim::AtmosphereMode atmosphere_mode, double latitude_deg,
@@ -231,9 +122,6 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
     ASSERT_TRUE(std::filesystem::create_directories(directory, filesystem_error));
     ASSERT_FALSE(filesystem_error);
 
-    std::string overlay_nav_path;
-    ASSERT_TRUE(write_g3_overlay_nav(directory, &overlay_nav_path));
-
     std::map<int, SignalResidualUnion> aggregate;
     std::string error_message;
 
@@ -258,7 +146,8 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
         ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2347, site.start_sow_sec, &start));
 
         gnss_sim::residual_validator::ValidationReport report{};
-        ASSERT_TRUE(run_and_validate(directory / site.name, config, start, overlay_nav_path,
+        const std::string nav_path = brd4_nav_path();
+        ASSERT_TRUE(run_and_validate(directory / site.name, config, start, nav_path,
                                      gnss_sim::residual_validator::AtmosphereMode::kBroadcast, &report, &error_message))
             << "site=" << site.name << " " << error_message;
         merge_signal_report(report, &aggregate);
@@ -353,6 +242,11 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
                 << "official JRC HAS companion must exercise Galileo E6-C code residual";
             EXPECT_GT(stats.code_unavailable, 0U)
                 << "2025 compact broadcast coverage must retain missing HAS code-bias evidence";
+        } else if (definition.signal_id == gnss_sim::SignalId::kGlonassG3) {
+            EXPECT_EQ(stats.code_residuals, 0U)
+                << "G3 code residual must stay unavailable until an authoritative real L3OC NAV record is present";
+            EXPECT_GT(stats.code_unavailable, 0U)
+                << "G3 must expose missing real L3OC code-bias coverage instead of synthesizing ephemeris";
         } else {
             EXPECT_GT(stats.code_residuals, 0U)
                 << "compact coverage union must exercise code residual: " << definition.name;
@@ -363,7 +257,11 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
                  definition_count);
     std::fprintf(stderr, "SHARED_DOPPLER_COVERAGE_UNION covered=%zu total=%zu\n", doppler_covered_signal_count,
                  definition_count);
-    EXPECT_EQ(code_covered_signal_count, definition_count);
+    // The authoritative BRD400DLR samples checked for Issue #66 contain no
+    // GLONASS L3OC EPH record. G3 therefore contributes explicit
+    // code_unavailable evidence while all 21 frequencies retain Doppler
+    // residual coverage. Never synthesize an L3OC record to make this 21/21.
+    EXPECT_EQ(code_covered_signal_count + 1U, definition_count);
     EXPECT_EQ(doppler_covered_signal_count, definition_count);
 
     std::filesystem::remove_all(directory, filesystem_error);

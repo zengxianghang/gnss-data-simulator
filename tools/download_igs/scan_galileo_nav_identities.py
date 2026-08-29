@@ -82,8 +82,8 @@ def scan(identities: Sequence[Identity]) -> Dict[str, object]:
         by_satellite.setdefault(satellite, []).append((family, iodnav, week, toe))
 
     matching: Set[Tuple[str, int, int, float]] = set()
-    same_toe_different_iodnav: Set[Tuple[str, int, str, int, str, int]] = set()
-    same_iodnav_different_toe: Set[Tuple[str, int, int, float, float]] = set()
+    same_toe_different_iodnav: Set[Tuple[str, int, float, str, int, str, int]] = set()
+    same_iodnav_different_toe: Set[Tuple[str, int, int, float, int, float]] = set()
 
     for satellite, records in by_satellite.items():
         inav = {(iodnav, week, toe) for family, iodnav, week, toe in records if family == "INAV"}
@@ -95,20 +95,20 @@ def scan(identities: Sequence[Identity]) -> Dict[str, object]:
                     continue
                 first = min((family_a, iodnav_a), (family_b, iodnav_b))
                 second = max((family_a, iodnav_a), (family_b, iodnav_b))
-                same_toe_different_iodnav.add((satellite, week_a, first[0], first[1], second[0], second[1]))
+                same_toe_different_iodnav.add(
+                    (satellite, week_a, toe_a, first[0], first[1], second[0], second[1]))
         inav_toes: Dict[int, Set[Tuple[int, float]]] = {}
         fnav_toes: Dict[int, Set[Tuple[int, float]]] = {}
         for family, iodnav, week, toe in records:
             (inav_toes if family == "INAV" else fnav_toes).setdefault(iodnav, set()).add((week, toe))
         for iodnav in sorted(set(inav_toes) & set(fnav_toes)):
-            for week_a, toe_a in sorted(inav_toes[iodnav]):
-                for week_b, toe_b in sorted(fnav_toes[iodnav]):
-                    if (week_a, toe_a) != (week_b, toe_b):
-                        key = (satellite, iodnav, week_a, toe_a, week_b, toe_b)
-                        swapped = (satellite, iodnav, week_b, toe_b, week_a, toe_a)
-                        normalized = min(key, swapped)
-                        same_iodnav_different_toe.add((normalized[0], normalized[1], normalized[2], normalized[3],
-                                                       normalized[4]))
+            # Both endpoints are retained in full; the INAV and FNAV sides are explicit,
+            # so no swap or min normalization may drop an endpoint Toe.
+            for inav_week, inav_toe in sorted(inav_toes[iodnav]):
+                for fnav_week, fnav_toe in sorted(fnav_toes[iodnav]):
+                    if (inav_week, inav_toe) != (fnav_week, fnav_toe):
+                        same_iodnav_different_toe.add(
+                            (satellite, iodnav, inav_week, inav_toe, fnav_week, fnav_toe))
     return {
         "galileo_record_count": len(identities),
         "satellite_count": len(by_satellite),
@@ -159,6 +159,25 @@ def self_test() -> int:
     ])
     assert same_week_iod["matching_pairs"] == 0, same_week_iod
     assert same_week_iod["same_toe_different_iodnav_count"] == 1, same_week_iod
+
+    # Endpoint preservation: two FNAV Toes matching the same INAV instance are two
+    # distinct same-IODnav/different-Toe occurrences; neither second Toe may be dropped.
+    two_toes = scan([
+        ("E02", "INAV", 5, 2347, 100000.0),
+        ("E02", "FNAV", 5, 2347, 100600.0),
+        ("E02", "FNAV", 5, 2347, 101200.0),
+    ])
+    assert two_toes["same_iodnav_different_toe_count"] == 2, two_toes
+
+    # Toe occurrence identity: the same IOD combination occurring at two distinct Toe
+    # epochs is two distinct same-Toe/different-IODnav occurrences.
+    two_epochs = scan([
+        ("E02", "INAV", 5, 2347, 100000.0),
+        ("E02", "FNAV", 6, 2347, 100000.0),
+        ("E02", "INAV", 5, 2347, 100600.0),
+        ("E02", "FNAV", 6, 2347, 100600.0),
+    ])
+    assert two_epochs["same_toe_different_iodnav_count"] == 2, two_epochs
     print("scan_galileo_nav_identities self-test: OK")
     return 0
 

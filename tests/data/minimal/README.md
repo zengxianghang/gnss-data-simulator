@@ -60,7 +60,7 @@ is 07:09:42Z). A real same-Toe/different-IODnav case was searched with
 `tools/download_igs/scan_galileo_nav_identities.py` over seven consecutive
 BRD400DLR daily products (2025-001 through 2025-007, spanning GPS weeks 2347
 and 2348; 41897 Galileo INAV/FNAV records, 29 satellites) using week-aware
-navigation identities: 20605 matching pairs and 25199 same-IODnav/
+navigation identities: 20605 matching pairs and 103915 same-IODnav/
 different-Toe pairs exist, but zero same-Toe/different-IODnav pairs occur. The
 case is documented as absent and was not fabricated; per-product hashes and
 counts are frozen in `brd400dlr_rinex4_galileo_companion_nav.meta.json`, and

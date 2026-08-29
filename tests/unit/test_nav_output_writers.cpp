@@ -7,6 +7,18 @@
 #include "output/novatel_nav_writer.h"
 #include "output/unicore_nav_writer.h"
 
+extern "C" {
+#include <rtklib.h>
+}
+
+#ifdef lock
+#undef lock
+#endif
+#ifdef unlock
+#undef unlock
+#endif
+
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <gtest/gtest.h>
@@ -47,6 +59,87 @@ bool valid_ascii_crc(const std::string& message) {
     char* end = nullptr;
     const unsigned long parsed = std::strtoul(crc_text.c_str(), &end, 16);
     return end != nullptr && *end == '\0' && parsed == gnss_sim::novatel_ascii::crc32(payload);
+}
+
+std::string body_between_semicolon_and_crc(const std::string& message) {
+    const std::size_t semicolon = message.find(';');
+    const std::size_t star = message.rfind('*');
+    if (semicolon == std::string::npos || star == std::string::npos || star < semicolon) {
+        return {};
+    }
+    return message.substr(semicolon + 1, star - semicolon - 1);
+}
+
+std::vector<std::string> split_body_fields(const std::string& body) {
+    std::vector<std::string> fields;
+    std::size_t begin = 0;
+    while (true) {
+        const std::size_t comma = body.find(',', begin);
+        if (comma == std::string::npos) {
+            fields.push_back(body.substr(begin));
+            break;
+        }
+        fields.push_back(body.substr(begin, comma - begin));
+        begin = comma + 1;
+    }
+    return fields;
+}
+
+// Rebuilds the ephemeris an independent serialized-log parser would obtain from a
+// GALEPHEMERISA body: fields[13..27] hold the common orbit block, fields[32..35]
+// hold the INAV clock block, and field 12 holds Toe SOW; the GPS week comes from
+// the receiver-log header time, not from the body.
+eph_t ephemeris_from_galileo_body_fields(const std::vector<std::string>& fields, int toe_week, int satellite_number) {
+    eph_t eph{};
+    eph.sat = satellite_number;
+    const double sqrt_a = std::stod(fields[13]);
+    eph.A = sqrt_a * sqrt_a;
+    eph.deln = std::stod(fields[14]);
+    eph.M0 = std::stod(fields[15]);
+    eph.e = std::stod(fields[16]);
+    eph.omg = std::stod(fields[17]);
+    eph.cuc = std::stod(fields[18]);
+    eph.cus = std::stod(fields[19]);
+    eph.crc = std::stod(fields[20]);
+    eph.crs = std::stod(fields[21]);
+    eph.cic = std::stod(fields[22]);
+    eph.cis = std::stod(fields[23]);
+    eph.i0 = std::stod(fields[24]);
+    eph.idot = std::stod(fields[25]);
+    eph.OMG0 = std::stod(fields[26]);
+    eph.OMGd = std::stod(fields[27]);
+    eph.toe = gpst2time(toe_week, std::stod(fields[12]));
+    eph.toc = gpst2time(toe_week, std::stod(fields[32]));
+    eph.f0 = std::stod(fields[33]);
+    eph.f1 = std::stod(fields[34]);
+    eph.f2 = std::stod(fields[35]);
+    return eph;
+}
+
+eph_t ephemeris_from_keplerian_record(const gnss_sim::KeplerianNavOutputData& data) {
+    eph_t eph{};
+    eph.sat = data.satellite_number;
+    eph.A = data.semi_major_axis_m;
+    eph.deln = data.delta_mean_motion_radps;
+    eph.M0 = data.mean_anomaly_rad;
+    eph.e = data.eccentricity;
+    eph.omg = data.argument_of_perigee_rad;
+    eph.cuc = data.cuc_rad;
+    eph.cus = data.cus_rad;
+    eph.crc = data.crc_m;
+    eph.crs = data.crs_m;
+    eph.cic = data.cic_rad;
+    eph.cis = data.cis_rad;
+    eph.i0 = data.inclination_rad;
+    eph.idot = data.inclination_dot_radps;
+    eph.OMG0 = data.omega0_rad;
+    eph.OMGd = data.omega_dot_radps;
+    eph.toe = gpst2time(data.toe_week, data.toe_sow_sec);
+    eph.toc = gpst2time(data.toc_week, data.toc_sow_sec);
+    eph.f0 = data.clock_bias_sec;
+    eph.f1 = data.clock_drift_sec_per_sec;
+    eph.f2 = data.clock_drift_rate_sec_per_sec2;
+    return eph;
 }
 
 void collect_supported_names(const gnss_sim::RtklibNavStore* store, bool unicore, std::set<std::string>* names) {
@@ -465,6 +558,126 @@ TEST(NavOutputWriter, GalileoHealthBitsAreDecodedFromRealRinexBeforeSerializatio
     EXPECT_GT(galileo_records, 0);
     EXPECT_GT(nonzero_health_records, 0)
         << "real BRD400 fixture must retain at least one nonzero Galileo health-status record";
+    gnss_sim::destroy_rtklib_nav_store(store);
+}
+
+TEST(NavOutputWriter, RealGalileoFnavWithInavCompanionDoesNotEmitAmbiguousOrbit) {
+    gnss_sim::RtklibNavStore* store = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(store, nullptr);
+    std::string error_message;
+    ASSERT_TRUE(
+        gnss_sim::load_rinex_nav_file(store, data_path("brd400dlr_rinex4_acceptance_nav.rnx").c_str(), &error_message))
+        << error_message;
+
+    // Loading applies RTKLIB uniqnav(), so each satellite keeps only its latest record
+    // and no real fixture presents an FNAV record whose store also holds an INAV
+    // companion. Prove both real cases stay serializable: INAV-source records (E02, E05,
+    // ...) and FNAV-only records (E23, and E25 whose latest record is FNAV).
+    gnss_sim::NavOutputRecord real_fnav_record{};
+    int inav_emitted = 0;
+    int fnav_only_emitted = 0;
+    const int count = gnss_sim::rtklib_nav_output_record_count(store);
+    for (int index = 0; index < count; ++index) {
+        gnss_sim::NavOutputRecord record{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(store, index, &record, &error_message)) << error_message;
+        if (record.kind != gnss_sim::RtklibNavRecordKind::kEphemeris ||
+            record.ephemeris.system != gnss_sim::NavOutputSystem::kGalileo) {
+            continue;
+        }
+
+        const gnss_sim::SimTime time = output_time();
+        std::string message;
+        bool supported = false;
+        ASSERT_TRUE(gnss_sim::format_novatel_nav_output_record(record, time, &message, &supported, &error_message))
+            << error_message;
+        if (record.ephemeris.message_family == gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav) {
+            ++inav_emitted;
+            EXPECT_TRUE(supported);
+            EXPECT_TRUE(valid_ascii_crc(message));
+        } else {
+            ++fnav_only_emitted;
+            EXPECT_FALSE(record.ephemeris.galileo_inav_received)
+                << "real store cannot hold an FNAV record with an INAV companion";
+            EXPECT_TRUE(supported);
+            EXPECT_TRUE(valid_ascii_crc(message));
+            real_fnav_record = record;
+        }
+    }
+
+    EXPECT_GT(inav_emitted, 0) << "real BRD400DLR fixture must contain Galileo INAV records";
+    EXPECT_GT(fnav_only_emitted, 0) << "real BRD400DLR fixture must contain Galileo FNAV records";
+
+    // Exercise the ambiguous store state the writer itself can produce when a store does
+    // hold both families: copy the real FNAV record values unchanged and set only the
+    // companion flag the adapter fills when an INAV ephemeris exists for the satellite.
+    // The FNAV orbit must not masquerade as an INAV ephemeris through the common orbit
+    // block, so the writer must reject it.
+    ASSERT_TRUE(gnss_sim::finalize_nav_output_record_metadata(&real_fnav_record));
+    real_fnav_record.ephemeris.galileo_inav_received = true;
+    const gnss_sim::SimTime time = output_time();
+    std::string message;
+    bool supported = false;
+    ASSERT_TRUE(
+        gnss_sim::format_novatel_nav_output_record(real_fnav_record, time, &message, &supported, &error_message))
+        << error_message;
+    EXPECT_FALSE(supported) << "FNAV orbit with an INAV companion must not masquerade as an INAV ephemeris";
+    EXPECT_TRUE(message.empty());
+    gnss_sim::destroy_rtklib_nav_store(store);
+}
+
+TEST(NavOutputWriter, RealGalileoInavSerializedRecordRoundTripsPositionAndClock) {
+    gnss_sim::RtklibNavStore* store = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(store, nullptr);
+    std::string error_message;
+    ASSERT_TRUE(
+        gnss_sim::load_rinex_nav_file(store, data_path("brd400dlr_rinex4_acceptance_nav.rnx").c_str(), &error_message))
+        << error_message;
+
+    bool verified_inav_record = false;
+    const int count = gnss_sim::rtklib_nav_output_record_count(store);
+    for (int index = 0; index < count && !verified_inav_record; ++index) {
+        gnss_sim::NavOutputRecord record{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(store, index, &record, &error_message)) << error_message;
+        if (record.kind != gnss_sim::RtklibNavRecordKind::kEphemeris ||
+            record.ephemeris.system != gnss_sim::NavOutputSystem::kGalileo ||
+            record.ephemeris.message_family != gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav) {
+            continue;
+        }
+
+        const gnss_sim::SimTime time = output_time();
+        std::string message;
+        bool supported = false;
+        ASSERT_TRUE(gnss_sim::format_novatel_nav_output_record(record, time, &message, &supported, &error_message))
+            << error_message;
+        ASSERT_TRUE(supported);
+        ASSERT_TRUE(valid_ascii_crc(message));
+
+        const std::vector<std::string> fields = split_body_fields(body_between_semicolon_and_crc(message));
+        ASSERT_EQ(fields.size(), 38u) << "GALEPHEMERISA body layout changed";
+        EXPECT_EQ(fields[2], "TRUE") << "serialized INAV-source record must flag INAV received";
+
+        const eph_t serialized =
+            ephemeris_from_galileo_body_fields(fields, record.ephemeris.toe_week, record.ephemeris.satellite_number);
+        const eph_t source = ephemeris_from_keplerian_record(record.ephemeris);
+        const gtime_t eval_time = timeadd(source.toe, 3600.0);
+        double source_position[6] = {0};
+        double serialized_position[6] = {0};
+        double source_clock[2] = {0};
+        double serialized_clock[2] = {0};
+        double source_variance = 0.0;
+        double serialized_variance = 0.0;
+        eph2pos(eval_time, &source, source_position, source_clock, &source_variance);
+        eph2pos(eval_time, &serialized, serialized_position, serialized_clock, &serialized_variance);
+        for (int axis = 0; axis < 3; ++axis) {
+            EXPECT_LT(std::fabs(source_position[axis] - serialized_position[axis]), 1e-6)
+                << "serialized INAV orbit must round-trip to the same satellite position";
+        }
+        EXPECT_LT(std::fabs((source_clock[0] - serialized_clock[0]) * CLIGHT), 1e-6)
+            << "serialized INAV clock must round-trip to the same satellite clock";
+        verified_inav_record = true;
+    }
+
+    EXPECT_TRUE(verified_inav_record) << "real BRD400DLR fixture must contain a serializable Galileo INAV record";
     gnss_sim::destroy_rtklib_nav_store(store);
 }
 

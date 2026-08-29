@@ -169,7 +169,17 @@ bool append_keplerian(RtklibNavStore* store, const KeplerianNavOutputData& sourc
     eph.cus = source.cus_rad;
     eph.cic = source.cic_rad;
     eph.cis = source.cis_rad;
+    // Serialized BD2EPHEMA Toe is GPST by the receiver-log contract, while
+    // RTKLIB keeps eph.toes in native BDT seconds-of-week for BeiDou's
+    // Earth-rotation term. Keep eph.toe as the absolute GPST epoch and only
+    // restore the raw Toe SOW field to BDT here.
     eph.toes = source.toe_sow_sec;
+    if (system == SYS_CMP) {
+        eph.toes -= 14.0;
+        if (eph.toes < 0.0) {
+            eph.toes += 604800.0;
+        }
+    }
     eph.fit = source.fit_hours;
     eph.f0 = source.clock_bias_sec;
     eph.f1 = source.clock_drift_sec_per_sec;

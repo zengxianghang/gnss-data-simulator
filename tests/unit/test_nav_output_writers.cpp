@@ -224,7 +224,7 @@ gnss_sim::SimTime ephemeris_output_time(const gnss_sim::NavOutputRecord& record)
     return result;
 }
 
-TEST(NavOutputWriter, LegacyMixedRinexCoversFiveEphemerisFamilies) {
+TEST(NavOutputWriter, LegacyMixedRinexCoversSupportedNovatelAndFiveSystemUnicoreFamilies) {
     gnss_sim::RtklibNavStore* store = gnss_sim::create_rtklib_nav_store();
     ASSERT_NE(store, nullptr);
     std::string error_message;
@@ -238,9 +238,12 @@ TEST(NavOutputWriter, LegacyMixedRinexCoversFiveEphemerisFamilies) {
 
     EXPECT_TRUE(novatel_names.count("GPSEPHEMA"));
     EXPECT_TRUE(novatel_names.count("GLOEPHEMERISA"));
-    EXPECT_TRUE(novatel_names.count("GALEPHEMERISA"));
     EXPECT_TRUE(novatel_names.count("BD2EPHEMA"));
     EXPECT_TRUE(novatel_names.count("QZSSEPHEMERISA"));
+    // The mixed RINEX 3 fixture's Galileo records carry no INAV/FNAV message family, and
+    // GALEPHEMERISA cannot represent their clocks without relabeling them, so the NovAtel
+    // writer must not emit them.
+    EXPECT_FALSE(novatel_names.count("GALEPHEMERISA"));
     EXPECT_TRUE(unicore_names.count("GPSEPHA"));
     EXPECT_TRUE(unicore_names.count("GLOEPHA"));
     EXPECT_TRUE(unicore_names.count("GALEPHA"));

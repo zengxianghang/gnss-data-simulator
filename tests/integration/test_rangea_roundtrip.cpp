@@ -1,8 +1,13 @@
+#include "gnss/nav_output_record.h"
+#include "gnss/rtklib_adapter.h"
 #include "gnss_sim/sim_config.h"
 #include "gnss_sim/sim_time.h"
 #include "gnss_sim/simulator.h"
+#include "output/novatel_nav_writer.h"
 #include "rangea_roundtrip.h"
+#include "serialized_nav_parser.h"
 
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -41,8 +46,8 @@ gnss_sim::SimConfig config() {
     return value;
 }
 
-bool run_simulator(const std::filesystem::path& directory, gnss_sim::SimulatorRunSummary* summary,
-                   std::string* error_message) {
+bool run_simulator_with_config(const std::filesystem::path& directory, const gnss_sim::SimConfig& sim_config,
+                               gnss_sim::SimulatorRunSummary* summary, std::string* error_message) {
     std::error_code error;
     std::filesystem::remove_all(directory, error);
     error.clear();
@@ -56,7 +61,12 @@ bool run_simulator(const std::filesystem::path& directory, gnss_sim::SimulatorRu
     const std::string log_text = log_path.string();
     const std::string nav_text = brd4_nav_path();
     const gnss_sim::SimulatorRunOptions options{nav_text.c_str(), log_text.c_str(), start_time()};
-    return gnss_sim::run_simulator(config(), options, summary, error_message);
+    return gnss_sim::run_simulator(sim_config, options, summary, error_message);
+}
+
+bool run_simulator(const std::filesystem::path& directory, gnss_sim::SimulatorRunSummary* summary,
+                   std::string* error_message) {
+    return run_simulator_with_config(directory, config(), summary, error_message);
 }
 
 std::string read_file(const std::filesystem::path& path) {
@@ -147,6 +157,104 @@ TEST(RangeaRoundtripIntegration, LowElevationRangeIsRetainedWhileSppUsesFiveDegr
     cleanup(directory);
 }
 
+TEST(RangeaRoundtripIntegration, SerializedRangeAndEphemerisPositionWithoutOriginalRinexNavAndParsesIon) {
+    const std::filesystem::path directory = "gnss_sim_serialized_nav_roundtrip_real_whu";
+    gnss_sim::SimulatorRunSummary simulator_summary{};
+    std::string error_message;
+    gnss_sim::SimConfig self_contained_config = config();
+    self_contained_config.atmosphere_mode = gnss_sim::AtmosphereMode::NONE;
+    ASSERT_TRUE(run_simulator_with_config(directory, self_contained_config, &simulator_summary, &error_message))
+        << error_message;
+    ASSERT_GT(simulator_summary.range_messages, 0U);
+    ASSERT_GT(simulator_summary.nav_messages, 0U);
+
+    gnss_sim::SerializedNavRoundtripSummary roundtrip{};
+    const std::string log_path = (directory / "simulated.log").string();
+    ASSERT_TRUE(gnss_sim::validate_serialized_navigation_roundtrip_file(log_path.c_str(), 20.0, 120.0, 100.0, 5.0,
+                                                                        false, &roundtrip, &error_message))
+        << error_message;
+    EXPECT_EQ(roundtrip.position.range_epochs, simulator_summary.range_messages);
+    EXPECT_GT(roundtrip.parsed_nav_records, 0U);
+    EXPECT_GT(roundtrip.parsed_ionosphere_records, 0U);
+    EXPECT_GT(roundtrip.gps_ephemeris_records, 0U);
+    EXPECT_GT(roundtrip.glonass_ephemeris_records, 0U);
+    EXPECT_GT(roundtrip.galileo_ephemeris_records, 0U);
+    EXPECT_GT(roundtrip.beidou_ephemeris_records, 0U);
+    EXPECT_GT(roundtrip.qzss_ephemeris_records, 0U);
+    EXPECT_GT(roundtrip.position.valid_position_epochs, 0U);
+    EXPECT_GT(roundtrip.skipped_position_observations_without_nav, 0U)
+        << "real receiver-visible NAV timing should leave some early observations without a usable ephemeris";
+    std::cout << "serialized_nav_roundtrip_skipped_without_nav=" << roundtrip.skipped_position_observations_without_nav
+              << '\n';
+    std::cout << "serialized_nav_roundtrip_max_3d_error_m=" << roundtrip.position.max_position_error_m << '\n';
+    std::cout << "serialized_nav_roundtrip_valid_position_epochs=" << roundtrip.position.valid_position_epochs << '\n';
+    EXPECT_LT(roundtrip.position.max_position_error_m, 0.1)
+        << "serialized EPHA/IONA precision should preserve survey-grade compact SPP without source RINEX NAV";
+
+    cleanup(directory);
+}
+
+TEST(RangeaRoundtripIntegration, SerializedNavigationDoesNotUseFutureNavBeforeItAppearsInLog) {
+    const std::filesystem::path directory = "gnss_sim_serialized_nav_causal_order";
+    gnss_sim::SimulatorRunSummary simulator_summary{};
+    std::string error_message;
+    gnss_sim::SimConfig self_contained_config = config();
+    self_contained_config.atmosphere_mode = gnss_sim::AtmosphereMode::NONE;
+    ASSERT_TRUE(run_simulator_with_config(directory, self_contained_config, &simulator_summary, &error_message))
+        << error_message;
+
+    const std::string original_log = read_file(directory / "simulated.log");
+    std::istringstream input(original_log);
+    std::string line;
+    std::string first_valid_range;
+    while (std::getline(input, line)) {
+        if (line.rfind("#RANGEA,", 0) != 0) {
+            continue;
+        }
+        gnss_sim::ParsedRangeEpoch epoch{};
+        std::string parse_error;
+        ASSERT_TRUE(gnss_sim::parse_rangea_line_independent(line, &epoch, &parse_error)) << parse_error;
+        bool has_valid_pseudorange = false;
+        for (const gnss_sim::ParsedRangeObservation& observation : epoch.observations) {
+            if (observation.pseudorange_valid) {
+                has_valid_pseudorange = true;
+                break;
+            }
+        }
+        if (has_valid_pseudorange) {
+            first_valid_range = line;
+            break;
+        }
+    }
+    ASSERT_FALSE(first_valid_range.empty());
+
+    // Put a valid observation epoch before the complete original log. All of
+    // the real serialized EPHA/IONA records still exist later in the same
+    // stream. A causal validator must skip that early observation rather than
+    // looking ahead; once the original log later delivers NAV, normal epochs
+    // can still position successfully.
+    std::istringstream reordered(first_valid_range + "\n" + original_log);
+    gnss_sim::SerializedNavRoundtripSummary summary{};
+    error_message.clear();
+    ASSERT_TRUE(gnss_sim::validate_serialized_navigation_roundtrip_stream(&reordered, 20.0, 120.0, 100.0, 5.0, false,
+                                                                          &summary, &error_message))
+        << error_message;
+    EXPECT_GT(summary.skipped_position_observations_without_nav, 0U);
+    EXPECT_GT(summary.position.valid_position_epochs, 0U);
+
+    cleanup(directory);
+}
+
+TEST(RangeaRoundtripIntegration, MalformedSerializedNavigationCrcFailsExplicitly) {
+    std::istringstream malformed("#IONUTCA,COM1,0,0.0,FINE,2347,436500.000,00000000,0,0;"
+                                 "0,0,0,0,0,0,0,0,2347,0,0,0,2347,0,18,18,0*00000000\r\n");
+    gnss_sim::SerializedNavRoundtripSummary summary{};
+    std::string error_message;
+    EXPECT_FALSE(gnss_sim::validate_serialized_navigation_roundtrip_stream(&malformed, 20.0, 120.0, 100.0, 5.0, true,
+                                                                           &summary, &error_message));
+    EXPECT_NE(error_message.find("CRC"), std::string::npos);
+}
+
 TEST(RangeaRoundtripIntegration, MalformedSerializedRangeaFailsExplicitly) {
     std::istringstream malformed(
         "#RANGEA,COM1,0,0.0,FINE,2347,436500.000,00000000,0,0;1,1,0,20000000.000*00000000\r\n");
@@ -190,6 +298,233 @@ TEST(RangeaRoundtripIntegration, SameInputProducesIdenticalRoundtripResult) {
 
     cleanup(first_directory);
     cleanup(second_directory);
+}
+
+TEST(RangeaRoundtripIntegration, RealBeidouLegacyAsciiRestoresRtklibBroadcastState) {
+    gnss_sim::RtklibNavStore* full = gnss_sim::create_rtklib_nav_store();
+    gnss_sim::RtklibNavStore* source_record = gnss_sim::create_rtklib_nav_store();
+    gnss_sim::RtklibNavStore* rebuilt = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(full, nullptr);
+    ASSERT_NE(source_record, nullptr);
+    ASSERT_NE(rebuilt, nullptr);
+
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(full, brd4_nav_path().c_str(), &error_message)) << error_message;
+
+    bool compared = false;
+    const int output_count = gnss_sim::rtklib_nav_output_record_count(full);
+    for (int index = 0; index < output_count; ++index) {
+        gnss_sim::NavOutputRecord source{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(full, index, &source, &error_message)) << error_message;
+        if (source.kind != gnss_sim::RtklibNavRecordKind::kEphemeris ||
+            source.ephemeris.system != gnss_sim::NavOutputSystem::kBeidou ||
+            source.ephemeris.message_family != gnss_sim::RtklibBroadcastMessageFamily::kLegacy) {
+            continue;
+        }
+
+        ASSERT_TRUE(gnss_sim::rtklib_copy_nav_record(full, index, source_record, &error_message)) << error_message;
+        gnss_sim::SimTime output_time{};
+        ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(source.ephemeris.transmit_week, source.ephemeris.transmit_sow_sec,
+                                                     &output_time));
+
+        std::string message;
+        bool supported = false;
+        ASSERT_TRUE(
+            gnss_sim::format_novatel_nav_output_record(source, output_time, &message, &supported, &error_message))
+            << error_message;
+        ASSERT_TRUE(supported);
+        ASSERT_EQ(message.rfind("#BD2EPHEMA,", 0), 0U);
+
+        gnss_sim::ParsedSerializedNavRecord parsed{};
+        bool recognized = false;
+        ASSERT_TRUE(
+            gnss_sim::parse_serialized_novatel_nav_line_independent(message, &parsed, &recognized, &error_message))
+            << error_message;
+        ASSERT_TRUE(recognized);
+        ASSERT_TRUE(gnss_sim::rtklib_append_nav_output_record(rebuilt, parsed.record, &error_message)) << error_message;
+
+        int observation_code = 0;
+        int frequency_index = 0;
+        ASSERT_TRUE(gnss_sim::rtklib_observation_code("2I", &observation_code, &frequency_index));
+        static_cast<void>(frequency_index);
+
+        int state_week = parsed.output_gps_week;
+        double state_sow = parsed.output_sow_sec + 60.0;
+        if (state_sow >= 604800.0) {
+            state_sow -= 604800.0;
+            ++state_week;
+        }
+        gnss_sim::RtklibSatelliteState expected{};
+        gnss_sim::RtklibSatelliteState actual{};
+        ASSERT_TRUE(gnss_sim::get_rtklib_signal_satellite_state(
+            source_record, state_week, state_sow, source.ephemeris.satellite_number, observation_code,
+            gnss_sim::RtklibBroadcastMessageFamily::kLegacy, &expected, &error_message))
+            << error_message;
+        ASSERT_TRUE(gnss_sim::get_rtklib_signal_satellite_state(
+            rebuilt, state_week, state_sow, source.ephemeris.satellite_number, observation_code,
+            gnss_sim::RtklibBroadcastMessageFamily::kLegacy, &actual, &error_message))
+            << error_message;
+
+        const double dx = expected.position_ecef_m[0] - actual.position_ecef_m[0];
+        const double dy = expected.position_ecef_m[1] - actual.position_ecef_m[1];
+        const double dz = expected.position_ecef_m[2] - actual.position_ecef_m[2];
+        const double position_difference_m = std::sqrt(dx * dx + dy * dy + dz * dz);
+        const double clock_difference_m = std::abs(expected.clock_bias_sec - actual.clock_bias_sec) * 299792458.0;
+        EXPECT_LT(position_difference_m, 1.0e-3);
+        EXPECT_LT(clock_difference_m, 1.0e-6);
+        EXPECT_EQ(expected.health, actual.health);
+        compared = true;
+        break;
+    }
+
+    EXPECT_TRUE(compared) << "real BRD400 fixture must contain a NovAtel-serializable BeiDou legacy ephemeris";
+    gnss_sim::destroy_rtklib_nav_store(rebuilt);
+    gnss_sim::destroy_rtklib_nav_store(source_record);
+    gnss_sim::destroy_rtklib_nav_store(full);
+}
+
+TEST(RangeaRoundtripIntegration, BroadcastAtmosphereRequiresSerializedGpsIonBeforePositioning) {
+    const std::filesystem::path directory = "gnss_sim_serialized_nav_no_gps_ion";
+    gnss_sim::SimulatorRunSummary simulator_summary{};
+    std::string error_message;
+    ASSERT_TRUE(run_simulator(directory, &simulator_summary, &error_message)) << error_message;
+
+    std::istringstream input(read_file(directory / "simulated.log"));
+    std::ostringstream stripped;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.rfind("#IONUTCA,", 0) != 0) {
+            stripped << line << '\n';
+        }
+    }
+
+    std::istringstream validation_input(stripped.str());
+    gnss_sim::SerializedNavRoundtripSummary summary{};
+    error_message.clear();
+    EXPECT_FALSE(gnss_sim::validate_serialized_navigation_roundtrip_stream(&validation_input, 20.0, 120.0, 100.0, 5.0,
+                                                                           true, &summary, &error_message));
+    EXPECT_NE(error_message.find("GPS IONUTCA"), std::string::npos)
+        << "serialized-NAV validation must not use RTKLIB's built-in default Klobuchar coefficients";
+
+    cleanup(directory);
+}
+
+TEST(RangeaRoundtripIntegration, RealBeidouLegacyIonRestoresRtklibGpsUtcLeapMetadata) {
+    gnss_sim::RtklibNavStore* full = gnss_sim::create_rtklib_nav_store();
+    gnss_sim::RtklibNavStore* rebuilt = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(full, nullptr);
+    ASSERT_NE(rebuilt, nullptr);
+
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(full, brd4_nav_path().c_str(), &error_message)) << error_message;
+
+    bool compared = false;
+    const int output_count = gnss_sim::rtklib_nav_output_record_count(full);
+    for (int index = 0; index < output_count; ++index) {
+        gnss_sim::NavOutputRecord source{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(full, index, &source, &error_message)) << error_message;
+        if (source.kind != gnss_sim::RtklibNavRecordKind::kIonosphere ||
+            source.ionosphere.system != gnss_sim::NavOutputSystem::kBeidou || !source.ionosphere.legacy_metadata) {
+            continue;
+        }
+
+        std::string message;
+        bool supported = false;
+        ASSERT_TRUE(
+            gnss_sim::format_novatel_nav_output_record(source, start_time(), &message, &supported, &error_message))
+            << error_message;
+        ASSERT_TRUE(supported);
+        ASSERT_EQ(message.rfind("#BD2IONUTCA,", 0), 0U);
+
+        gnss_sim::ParsedSerializedNavRecord parsed{};
+        bool recognized = false;
+        ASSERT_TRUE(
+            gnss_sim::parse_serialized_novatel_nav_line_independent(message, &parsed, &recognized, &error_message))
+            << error_message;
+        ASSERT_TRUE(recognized);
+        EXPECT_EQ(parsed.record.ionosphere.leap_seconds, source.ionosphere.leap_seconds);
+        ASSERT_TRUE(gnss_sim::rtklib_append_nav_output_record(rebuilt, parsed.record, &error_message)) << error_message;
+
+        const int rebuilt_count = gnss_sim::rtklib_nav_output_record_count(rebuilt);
+        for (int rebuilt_index = 0; rebuilt_index < rebuilt_count; ++rebuilt_index) {
+            gnss_sim::NavOutputRecord restored{};
+            ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(rebuilt, rebuilt_index, &restored, &error_message))
+                << error_message;
+            if (restored.kind == gnss_sim::RtklibNavRecordKind::kIonosphere &&
+                restored.ionosphere.system == gnss_sim::NavOutputSystem::kBeidou) {
+                EXPECT_EQ(restored.ionosphere.leap_seconds, source.ionosphere.leap_seconds);
+                compared = true;
+                break;
+            }
+        }
+        break;
+    }
+
+    EXPECT_TRUE(compared) << "real BRD400 fixture must preserve BDS legacy ion leap metadata through ASCII NAV";
+    gnss_sim::destroy_rtklib_nav_store(rebuilt);
+    gnss_sim::destroy_rtklib_nav_store(full);
+}
+
+TEST(RangeaRoundtripIntegration, RealGpsLegacyIonAsciiRestoresRtklibBroadcastMetadata) {
+    const std::string ion_path = std::string(GNSS_SIM_TEST_DATA_DIR) + "/ionosphere_nav_2019.rnx";
+    gnss_sim::RtklibNavStore* full = gnss_sim::create_rtklib_nav_store();
+    gnss_sim::RtklibNavStore* rebuilt = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(full, nullptr);
+    ASSERT_NE(rebuilt, nullptr);
+
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(full, ion_path.c_str(), &error_message)) << error_message;
+
+    bool compared = false;
+    const int output_count = gnss_sim::rtklib_nav_output_record_count(full);
+    for (int index = 0; index < output_count; ++index) {
+        gnss_sim::NavOutputRecord source{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(full, index, &source, &error_message)) << error_message;
+        if (source.kind != gnss_sim::RtklibNavRecordKind::kIonosphere ||
+            source.ionosphere.system != gnss_sim::NavOutputSystem::kGps || !source.ionosphere.legacy_metadata) {
+            continue;
+        }
+
+        std::string message;
+        bool supported = false;
+        ASSERT_TRUE(
+            gnss_sim::format_novatel_nav_output_record(source, start_time(), &message, &supported, &error_message))
+            << error_message;
+        ASSERT_TRUE(supported);
+        ASSERT_EQ(message.rfind("#IONUTCA,", 0), 0U);
+
+        gnss_sim::ParsedSerializedNavRecord parsed{};
+        bool recognized = false;
+        ASSERT_TRUE(
+            gnss_sim::parse_serialized_novatel_nav_line_independent(message, &parsed, &recognized, &error_message))
+            << error_message;
+        ASSERT_TRUE(recognized);
+        ASSERT_TRUE(gnss_sim::rtklib_append_nav_output_record(rebuilt, parsed.record, &error_message)) << error_message;
+
+        const int rebuilt_count = gnss_sim::rtklib_nav_output_record_count(rebuilt);
+        for (int rebuilt_index = 0; rebuilt_index < rebuilt_count; ++rebuilt_index) {
+            gnss_sim::NavOutputRecord restored{};
+            ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(rebuilt, rebuilt_index, &restored, &error_message))
+                << error_message;
+            if (restored.kind != gnss_sim::RtklibNavRecordKind::kIonosphere ||
+                restored.ionosphere.system != gnss_sim::NavOutputSystem::kGps || !restored.ionosphere.legacy_metadata) {
+                continue;
+            }
+            ASSERT_EQ(restored.ionosphere.coefficient_count, source.ionosphere.coefficient_count);
+            for (int coefficient = 0; coefficient < source.ionosphere.coefficient_count; ++coefficient) {
+                EXPECT_DOUBLE_EQ(restored.ionosphere.coefficients[coefficient],
+                                 source.ionosphere.coefficients[coefficient]);
+            }
+            EXPECT_EQ(restored.ionosphere.leap_seconds, source.ionosphere.leap_seconds);
+            compared = true;
+            break;
+        }
+        break;
+    }
+
+    EXPECT_TRUE(compared) << "real RINEX3 fixture must preserve GPS legacy ion metadata through IONUTCA";
+    gnss_sim::destroy_rtklib_nav_store(rebuilt);
+    gnss_sim::destroy_rtklib_nav_store(full);
 }
 
 } // namespace

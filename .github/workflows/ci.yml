@@ -60,3 +60,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: ./build/gnss_sim_integration_tests --gtest_filter=RangeaRoundtripIntegration.LowElevationRangeIsRetainedWhileSppUsesFiveDegreeMask
+      - name: Report self-contained serialized NAV positioning error
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./build/gnss_sim_integration_tests --gtest_filter=RangeaRoundtripIntegration.SerializedRangeAndEphemerisPositionWithoutOriginalRinexNavAndParsesIon

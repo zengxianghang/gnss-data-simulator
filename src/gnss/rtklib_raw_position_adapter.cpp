@@ -101,6 +101,29 @@ bool validate_raw_observation(const RtklibRawCodeObservation& source, int index,
 
 } // namespace
 
+bool rtklib_raw_code_observation_navigation_available(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
+                                                      const RtklibRawCodeObservation* observation, bool* available,
+                                                      std::string* error_message) {
+    if (receiver_nav == nullptr || observation == nullptr || available == nullptr || !valid_time(gps_week, sow_sec)) {
+        set_error(error_message, "raw observation navigation-availability request has invalid arguments");
+        return false;
+    }
+
+    int message_mask = 0;
+    if (!validate_raw_observation(*observation, 0, &message_mask, error_message)) {
+        return false;
+    }
+    double code_bias_m = 0.0;
+    const int status =
+        signal_bias_status(receiver_nav, gpst2time(gps_week, sow_sec), *observation, message_mask, &code_bias_m);
+    if (status < 0) {
+        set_error(error_message, "raw observation navigation-availability lookup failed");
+        return false;
+    }
+    *available = status == 1 && std::isfinite(code_bias_m);
+    return true;
+}
+
 bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
                                       const RtklibRawCodeObservation* observations, int observation_count,
                                       double elevation_mask_deg, bool broadcast_atmosphere,
@@ -112,10 +135,9 @@ bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gp
         return false;
     }
 
-    // The current black-box accuracy gate intentionally uses every ephemeris
-    // available in the real RINEX NAV input. Receiver acquisition/update order
-    // is out of scope until the serialized RANGEA positioning error is first
-    // characterized with unrestricted real broadcast navigation.
+    // This boundary accepts any receiver navigation store. The existing
+    // RINEX-backed validator and the serialized-NAV validator intentionally
+    // exercise the same raw-observation positioning path.
     const gtime_t epoch_time = gpst2time(gps_week, sow_sec);
     RtklibSolutionObservation converted[MAXOBS]{};
     bool seen_satellite[MAXSAT]{};
@@ -143,7 +165,7 @@ bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gp
             if (error_message != nullptr) {
                 char message[224]{};
                 std::snprintf(message, sizeof(message),
-                              "raw RANGEA observation %d has no matching real-RINEX ephemeris/code bias: "
+                              "raw RANGEA observation %d has no matching receiver ephemeris/code bias: "
                               "sat=%d code=%d mask=%d status=%d",
                               index, source.satellite_number, source.observation_code, message_mask, bias_status);
                 *error_message = message;

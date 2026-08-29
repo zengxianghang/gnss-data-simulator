@@ -6,6 +6,7 @@
 namespace gnss_sim {
 
 struct RtklibNavStore;
+struct NavOutputRecord;
 
 enum class RtklibNavRecordKind {
     kEphemeris,
@@ -140,6 +141,7 @@ RtklibNavStore* create_rtklib_nav_store();
 void destroy_rtklib_nav_store(RtklibNavStore* store);
 
 bool load_rinex_nav_file(RtklibNavStore* store, const char* file_path, std::string* error_message);
+bool rtklib_append_nav_output_record(RtklibNavStore* store, const NavOutputRecord& record, std::string* error_message);
 bool get_rtklib_nav_counts(const RtklibNavStore* store, RtklibNavCounts* counts);
 int rtklib_nav_record_count(const RtklibNavStore* store);
 bool rtklib_nav_record_info(const RtklibNavStore* store, int record_index, RtklibNavRecordInfo* info);
@@ -173,6 +175,10 @@ bool rtklib_solve_single_position(const RtklibNavStore* receiver_nav, int gps_we
                                   const RtklibSolutionObservation* observations, int observation_count,
                                   double elevation_mask_deg, bool broadcast_atmosphere,
                                   RtklibPositionSolution* solution, std::string* error_message);
+bool rtklib_raw_code_observation_navigation_available(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
+                                                      const RtklibRawCodeObservation* observation, bool* available,
+                                                      std::string* error_message);
+
 bool rtklib_solve_raw_single_position(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
                                       const RtklibRawCodeObservation* observations, int observation_count,
                                       double elevation_mask_deg, bool broadcast_atmosphere,

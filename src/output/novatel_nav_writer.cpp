@@ -140,12 +140,15 @@ bool format_novatel_nav_output_record(const NavOutputRecord& source, const SimTi
                 }
                 break;
             case NavOutputSystem::kGalileo:
-                // GALEPHEMERISA carries one common orbit block with no family discriminator.
-                // When an INAV-source ephemeris exists for the satellite (inav_received),
-                // only that record may own the reversible orbit; emitting an FNAV-source
-                // record too would let a downstream parser reconstruct an INAV ephemeris
-                // whose orbit was never broadcast.
-                if (eph.message_family != RtklibBroadcastMessageFamily::kGalileoFnav || !eph.galileo_inav_received) {
+                // GALEPHEMERISA carries one common orbit block with no family discriminator,
+                // and clock blocks that only INAV/FNAV-source records populate. When an
+                // INAV-source ephemeris exists for the satellite (inav_received), only that
+                // record may own the reversible orbit; emitting an FNAV-source record too
+                // would let a downstream parser reconstruct an INAV ephemeris whose orbit
+                // was never broadcast. Records of any other family are unsupported because
+                // the receiver log cannot represent their clock without relabeling them.
+                if (eph.message_family == RtklibBroadcastMessageFamily::kGalileoInav ||
+                    (eph.message_family == RtklibBroadcastMessageFamily::kGalileoFnav && !eph.galileo_inav_received)) {
                     log_name = "GALEPHEMERISA";
                     body = galileo_body(eph);
                 }

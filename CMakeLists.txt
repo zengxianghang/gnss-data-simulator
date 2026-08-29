@@ -96,6 +96,7 @@ add_library(gnss_sim_core STATIC
     src/gnss/rtklib_adapter.cpp
     src/gnss/rtklib_atmosphere_adapter.cpp
     src/gnss/rtklib_bias_adapter.cpp
+    src/gnss/rtklib_nav_input_adapter.cpp
     src/gnss/rtklib_nav_output_adapter.cpp
     src/gnss/rtklib_output_adapter.cpp
     src/gnss/rtklib_raw_position_adapter.cpp
@@ -177,6 +178,7 @@ gnss_sim_set_project_warnings(validate-residuals)
 
 add_library(rangea_roundtrip_core STATIC
     tools/rangea_roundtrip/rangea_roundtrip.cpp
+    tools/rangea_roundtrip/serialized_nav_parser.cpp
 )
 target_include_directories(rangea_roundtrip_core
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/tools/rangea_roundtrip"

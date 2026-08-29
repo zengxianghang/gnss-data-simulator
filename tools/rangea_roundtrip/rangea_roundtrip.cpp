@@ -19,27 +19,11 @@ namespace gnss_sim {
 namespace {
 
 constexpr unsigned int kPseudorangeValidBit = 1U << 12U;
+constexpr unsigned int kAdrValidMask = (1U << 10U) | (1U << 11U);
 constexpr unsigned int kConstellationShift = 16U;
 constexpr unsigned int kConstellationMask = 0x7U;
 constexpr unsigned int kSignalTypeShift = 21U;
 constexpr unsigned int kSignalTypeMask = 0x1FU;
-
-struct ParsedRangeObservation {
-    int satellite_number;
-    const SignalDefinition* definition;
-    double pseudorange_m;
-    double doppler_hz;
-    double cn0_dbhz;
-    double lock_time_sec;
-    unsigned int tracking_status;
-    bool pseudorange_valid;
-};
-
-struct ParsedRangeEpoch {
-    int gps_week;
-    double sow_sec;
-    std::vector<ParsedRangeObservation> observations;
-};
 
 struct SelectedObservation {
     int satellite_number;
@@ -202,7 +186,7 @@ RtklibBroadcastMessageFamily rtklib_message_family(NavMessageFamily family) {
     return RtklibBroadcastMessageFamily::kUnknown;
 }
 
-bool parse_rangea_line(const std::string& raw_line, ParsedRangeEpoch* epoch, std::string* error_message) {
+bool parse_rangea_line_impl(const std::string& raw_line, ParsedRangeEpoch* epoch, std::string* error_message) {
     if (epoch == nullptr) {
         set_error(error_message, "RANGEA parser output is null");
         return false;
@@ -283,7 +267,6 @@ bool parse_rangea_line(const std::string& raw_line, ParsedRangeEpoch* epoch, std
                       "RANGEA observation contains malformed numeric fields at index " + std::to_string(index));
             return false;
         }
-        static_cast<void>(adr_cycles);
 
         GnssConstellation constellation{};
         char satellite_prefix = '\0';
@@ -328,13 +311,15 @@ bool parse_rangea_line(const std::string& raw_line, ParsedRangeEpoch* epoch, std
 
         ParsedRangeObservation observation{};
         observation.satellite_number = satellite_number;
-        observation.definition = definition;
+        observation.signal_id = static_cast<int>(definition->signal_id);
         observation.pseudorange_m = pseudorange_m;
+        observation.adr_cycles = adr_cycles;
         observation.doppler_hz = doppler_hz;
         observation.cn0_dbhz = cn0_dbhz;
         observation.lock_time_sec = lock_time_sec;
         observation.tracking_status = status;
         observation.pseudorange_valid = pseudorange_valid;
+        observation.adr_valid = (status & kAdrValidMask) == kAdrValidMask;
         result.observations.push_back(observation);
     }
 
@@ -364,19 +349,24 @@ bool select_position_observations(const ParsedRangeEpoch& epoch, std::vector<Rtk
         if (!source.pseudorange_valid) {
             continue;
         }
-        const int priority = signal_single_point_priority(source.definition->signal_id);
+        const SignalId signal_id = static_cast<SignalId>(source.signal_id);
+        const SignalDefinition* definition = find_signal_definition(signal_id);
+        if (definition == nullptr) {
+            set_error(error_message, "RANGEA selected observation has no signal definition");
+            return false;
+        }
+        const int priority = signal_single_point_priority(signal_id);
         if (priority < 0) {
             continue;
         }
         int observation_code = 0;
         int frequency_index = 0;
-        if (!signal_rtklib_observation_code(*source.definition, &observation_code, &frequency_index)) {
-            set_error(error_message,
-                      std::string("cannot map RANGEA signal to RTKLIB code: ") + source.definition->name);
+        if (!signal_rtklib_observation_code(*definition, &observation_code, &frequency_index)) {
+            set_error(error_message, std::string("cannot map RANGEA signal to RTKLIB code: ") + definition->name);
             return false;
         }
         static_cast<void>(frequency_index);
-        const RtklibBroadcastMessageFamily family = rtklib_message_family(source.definition->nav_message_family);
+        const RtklibBroadcastMessageFamily family = rtklib_message_family(definition->nav_message_family);
         if (family == RtklibBroadcastMessageFamily::kUnknown) {
             continue;
         }
@@ -416,6 +406,10 @@ bool select_position_observations(const ParsedRangeEpoch& epoch, std::vector<Rtk
 }
 
 } // namespace
+
+bool parse_rangea_line_independent(const std::string& raw_line, ParsedRangeEpoch* epoch, std::string* error_message) {
+    return parse_rangea_line_impl(raw_line, epoch, error_message);
+}
 
 bool validate_rangea_roundtrip_stream(std::istream* input, const char* rinex_nav_path, double truth_latitude_deg,
                                       double truth_longitude_deg, double truth_height_m, double elevation_mask_deg,
@@ -457,7 +451,7 @@ bool validate_rangea_roundtrip_stream(std::istream* input, const char* rinex_nav
 
         ParsedRangeEpoch epoch{};
         std::string parse_error;
-        if (!parse_rangea_line(line, &epoch, &parse_error)) {
+        if (!parse_rangea_line_independent(line, &epoch, &parse_error)) {
             destroy_rtklib_nav_store(nav);
             set_error(error_message, "RANGEA line " + std::to_string(line_number) + ": " + parse_error);
             return false;
@@ -500,6 +494,9 @@ bool validate_rangea_roundtrip_stream(std::istream* input, const char* rinex_nav
             return false;
         }
         ++result.valid_position_epochs;
+        result.final_position_error_m = error_m;
+        result.final_position_gps_week = epoch.gps_week;
+        result.final_position_sow_sec = epoch.sow_sec;
         if (error_m > result.max_position_error_m) {
             result.max_position_error_m = error_m;
             result.max_error_gps_week = epoch.gps_week;

@@ -108,6 +108,9 @@ int main(int argc, char** argv) {
               << "selected_position_observations=" << summary.selected_position_observations << '\n'
               << "valid_position_epochs=" << summary.valid_position_epochs << '\n'
               << std::fixed << std::setprecision(6) << "max_position_error_m=" << summary.max_position_error_m << '\n'
-              << "max_error_gpst=" << summary.max_error_gps_week << '/' << summary.max_error_sow_sec << '\n';
+              << "max_error_gpst=" << summary.max_error_gps_week << '/' << summary.max_error_sow_sec << '\n'
+              << "final_position_error_m=" << summary.final_position_error_m << '\n'
+              << "final_position_gpst=" << summary.final_position_gps_week << '/' << summary.final_position_sow_sec
+              << '\n';
     return 0;
 }

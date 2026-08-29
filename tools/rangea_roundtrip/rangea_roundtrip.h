@@ -4,8 +4,30 @@
 #include <cstdint>
 #include <istream>
 #include <string>
+#include <vector>
 
 namespace gnss_sim {
+
+struct ParsedRangeObservation {
+    int satellite_number;
+    int signal_id;
+    double pseudorange_m;
+    double adr_cycles;
+    double doppler_hz;
+    double cn0_dbhz;
+    double lock_time_sec;
+    unsigned int tracking_status;
+    bool pseudorange_valid;
+    bool adr_valid;
+};
+
+struct ParsedRangeEpoch {
+    int gps_week;
+    double sow_sec;
+    std::vector<ParsedRangeObservation> observations;
+};
+
+bool parse_rangea_line_independent(const std::string& raw_line, ParsedRangeEpoch* epoch, std::string* error_message);
 
 struct RangeaRoundtripSummary {
     std::uint64_t range_epochs;
@@ -15,6 +37,9 @@ struct RangeaRoundtripSummary {
     double max_position_error_m;
     int max_error_gps_week;
     double max_error_sow_sec;
+    double final_position_error_m;
+    int final_position_gps_week;
+    double final_position_sow_sec;
 };
 
 bool validate_rangea_roundtrip_stream(std::istream* input, const char* rinex_nav_path, double truth_latitude_deg,

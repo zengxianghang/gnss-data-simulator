@@ -193,6 +193,23 @@ add_executable(validate-rangea-roundtrip
 target_link_libraries(validate-rangea-roundtrip PRIVATE rangea_roundtrip_core)
 gnss_sim_set_project_warnings(validate-rangea-roundtrip)
 
+add_library(transient_validator_core STATIC
+    tools/transient_validator/transient_validator.cpp
+)
+target_include_directories(transient_validator_core
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/tools/transient_validator"
+)
+target_link_libraries(transient_validator_core
+    PUBLIC rangea_roundtrip_core
+)
+gnss_sim_set_project_warnings(transient_validator_core)
+
+add_executable(validate-transient-observations
+    tools/transient_validator/main.cpp
+)
+target_link_libraries(validate-transient-observations PRIVATE transient_validator_core)
+gnss_sim_set_project_warnings(validate-transient-observations)
+
 if(BUILD_TESTING)
     include(FetchContent)
 
@@ -250,6 +267,7 @@ if(BUILD_TESTING)
         tests/integration/test_measurement_noise_integration.cpp
         tests/integration/test_rea_fade.cpp
         tests/integration/test_rangea_roundtrip.cpp
+        tests/integration/test_transient_validator.cpp
         tests/integration/test_residual_validator.cpp
         tests/integration/test_truth_outputs.cpp
         tests/integration/test_v1_acceptance.cpp
@@ -263,6 +281,7 @@ if(BUILD_TESTING)
         gnss_sim::rtklib
         residual_validator_core
         rangea_roundtrip_core
+        transient_validator_core
         GTest::gtest_main
     )
     gnss_sim_set_project_warnings(gnss_sim_integration_tests)

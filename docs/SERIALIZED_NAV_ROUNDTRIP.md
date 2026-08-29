@@ -33,6 +33,12 @@ Modern GPS/QZSS CNAV/CNAV2 records are not relabeled as legacy EPHA. Unsupported
 
 RINEX 4 can contain multiple GPS ionosphere message families. Only GPS LNAV Klobuchar records are eligible for `IONUTCA`; CNVX ionosphere records are not masqueraded as the legacy message.
 
+### BeiDou time semantics
+
+The simulator's `BD2EPHEMA` receiver-log contract serializes the ephemeris week and Toe as GPST. RTKLIB, however, stores the absolute `eph.toe` epoch in GPST while retaining `eph.toes` as the native BeiDou BDT seconds-of-week used by the BeiDou Earth-rotation term in `eph2pos()`.
+
+The serialized-NAV import adapter therefore keeps the parsed absolute Toe epoch unchanged and converts only the internal raw Toe SOW from GPST to BDT by subtracting 14 seconds, with week wrap handling. Omitting this conversion rotates BeiDou broadcast positions by roughly 16–43 km in the compact real-NAV case. This conversion is an RTKLIB internal representation requirement; it is not a change to the serialized `BD2EPHEMA` fields.
+
 ## Causality
 
 Navigation records are applied to an initially empty RTKLIB navigation store as they appear in the generated log. A `RANGEA` epoch can use only navigation that appeared earlier in the stream. The validator never scans ahead for future EPH/ION records.

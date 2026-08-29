@@ -185,6 +185,36 @@ std::string config_json(const SimConfig& config, int indent) {
     output << inner << "  \"signal_on_ns\": " << config.rea.signal_on_ns << ",\n";
     output << inner << "  \"signal_off_ns\": " << config.rea.signal_off_ns << "\n";
     output << inner << "},\n";
+    output << inner << "\"measurement_error\": {\n";
+    output << inner << "  \"psr_sigma_m\": " << config.measurement_error.psr_sigma_m << ",\n";
+    output << inner << "  \"doppler_sigma_mps\": " << config.measurement_error.doppler_sigma_mps << ",\n";
+    output << inner << "  \"adr_sigma_m\": " << config.measurement_error.adr_sigma_m << ",\n";
+    output << inner << "  \"cn0_sigma_dbhz\": " << config.measurement_error.cn0_sigma_dbhz << ",\n";
+    output << inner << "  \"psr_correlation_tau_sec\": " << config.measurement_error.psr_correlation_tau_sec << ",\n";
+    output << inner << "  \"ttff_hot\": {\"psr_extra_sigma_m\": " << config.measurement_error.ttff_hot.psr_extra_sigma_m
+           << ", \"doppler_extra_sigma_mps\": " << config.measurement_error.ttff_hot.doppler_extra_sigma_mps
+           << ", \"cn0_extra_sigma_dbhz\": " << config.measurement_error.ttff_hot.cn0_extra_sigma_dbhz
+           << ", \"decay_tau_sec\": " << config.measurement_error.ttff_hot.decay_tau_sec << "},\n";
+    output << inner
+           << "  \"ttff_warm\": {\"psr_extra_sigma_m\": " << config.measurement_error.ttff_warm.psr_extra_sigma_m
+           << ", \"doppler_extra_sigma_mps\": " << config.measurement_error.ttff_warm.doppler_extra_sigma_mps
+           << ", \"cn0_extra_sigma_dbhz\": " << config.measurement_error.ttff_warm.cn0_extra_sigma_dbhz
+           << ", \"decay_tau_sec\": " << config.measurement_error.ttff_warm.decay_tau_sec << "},\n";
+    output << inner
+           << "  \"ttff_cold\": {\"psr_extra_sigma_m\": " << config.measurement_error.ttff_cold.psr_extra_sigma_m
+           << ", \"doppler_extra_sigma_mps\": " << config.measurement_error.ttff_cold.doppler_extra_sigma_mps
+           << ", \"cn0_extra_sigma_dbhz\": " << config.measurement_error.ttff_cold.cn0_extra_sigma_dbhz
+           << ", \"decay_tau_sec\": " << config.measurement_error.ttff_cold.decay_tau_sec << "},\n";
+    output << inner << "  \"rea_reacquisition\": {\"psr_extra_sigma_m\": "
+           << config.measurement_error.rea_reacquisition.psr_extra_sigma_m
+           << ", \"doppler_extra_sigma_mps\": " << config.measurement_error.rea_reacquisition.doppler_extra_sigma_mps
+           << ", \"cn0_extra_sigma_dbhz\": " << config.measurement_error.rea_reacquisition.cn0_extra_sigma_dbhz
+           << ", \"decay_tau_sec\": " << config.measurement_error.rea_reacquisition.decay_tau_sec << "},\n";
+    output << inner << "  \"rea_fade\": {\"duration_sec\": " << config.measurement_error.rea_fade.duration_sec
+           << ", \"psr_extra_sigma_m\": " << config.measurement_error.rea_fade.psr_extra_sigma_m
+           << ", \"doppler_extra_sigma_mps\": " << config.measurement_error.rea_fade.doppler_extra_sigma_mps
+           << ", \"cn0_drop_db\": " << config.measurement_error.rea_fade.cn0_drop_db << "}\n";
+    output << inner << "},\n";
     output << inner << "\"seed\": " << config.seed << "\n";
     output << pad << '}';
     return output.str();

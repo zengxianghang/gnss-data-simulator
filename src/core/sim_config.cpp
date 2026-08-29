@@ -402,10 +402,6 @@ bool validate_sim_config(const SimConfig& config, std::string* error_message) {
         set_error(error_message, "measurement_error configuration is invalid");
         return false;
     }
-    if (config.measurement_noise_enabled) {
-        set_error(error_message, "measurement noise is not supported in V1");
-        return false;
-    }
     if (config.multipath_enabled) {
         set_error(error_message, "multipath is not supported in V1");
         return false;
@@ -494,18 +490,24 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
     const char* scenario_name = scenario_type_name(parsed.scenario);
     const char* atmosphere_name = atmosphere_mode_name(parsed.atmosphere_mode);
     if (success) {
+        success = read_optional_int(root, "schema_version", &parsed.schema_version, error_message) &&
+                  read_optional_string(root, "scenario", &scenario_name, error_message) &&
+                  parse_scenario(scenario_name, &parsed.scenario, error_message) &&
+                  read_optional_number(root, "duration_sec", &duration_sec, error_message) &&
+                  seconds_to_ns(duration_sec, "duration_sec", &parsed.duration_ns, error_message) &&
+                  read_optional_int(root, "sampling_rate_hz", &parsed.sampling_rate_hz, error_message) &&
+                  read_optional_number(root, "elevation_mask_deg", &parsed.elevation_mask_deg, error_message) &&
+                  read_optional_number(root, "solution_elevation_mask_deg", &parsed.solution_elevation_mask_deg,
+                                       error_message) &&
+                  read_optional_bool(root, "output_eph", &parsed.output_eph, error_message) &&
+                  read_optional_bool(root, "output_ion", &parsed.output_ion, error_message);
+    }
+    if (success && cJSON_GetObjectItemCaseSensitive(root, "measurement_noise_enabled") == nullptr) {
+        parsed.measurement_noise_enabled =
+            parsed.scenario == ScenarioType::TTFF || parsed.scenario == ScenarioType::REA;
+    }
+    if (success) {
         success =
-            read_optional_int(root, "schema_version", &parsed.schema_version, error_message) &&
-            read_optional_string(root, "scenario", &scenario_name, error_message) &&
-            parse_scenario(scenario_name, &parsed.scenario, error_message) &&
-            read_optional_number(root, "duration_sec", &duration_sec, error_message) &&
-            seconds_to_ns(duration_sec, "duration_sec", &parsed.duration_ns, error_message) &&
-            read_optional_int(root, "sampling_rate_hz", &parsed.sampling_rate_hz, error_message) &&
-            read_optional_number(root, "elevation_mask_deg", &parsed.elevation_mask_deg, error_message) &&
-            read_optional_number(root, "solution_elevation_mask_deg", &parsed.solution_elevation_mask_deg,
-                                 error_message) &&
-            read_optional_bool(root, "output_eph", &parsed.output_eph, error_message) &&
-            read_optional_bool(root, "output_ion", &parsed.output_ion, error_message) &&
             read_optional_bool(root, "measurement_noise_enabled", &parsed.measurement_noise_enabled, error_message) &&
             read_optional_bool(root, "multipath_enabled", &parsed.multipath_enabled, error_message) &&
             read_optional_number(root, "receiver_clock_bias_m", &parsed.receiver_clock_bias_m, error_message) &&

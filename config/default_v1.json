@@ -6,7 +6,6 @@
   "elevation_mask_deg": 3.0,
   "output_eph": true,
   "output_ion": true,
-  "measurement_noise_enabled": false,
   "multipath_enabled": false,
   "receiver_clock_bias_m": 0.0,
   "receiver_clock_drift_mps": 0.0,

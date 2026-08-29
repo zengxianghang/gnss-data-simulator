@@ -11,6 +11,7 @@
 #include "gnss_sim/sim_time.h"
 #include "model/atmosphere_model.h"
 #include "model/cn0_model.h"
+#include "model/measurement_error_model.h"
 #include "model/measurement_model.h"
 #include "model/receiver_truth.h"
 #include "model/signal_tracking.h"
@@ -45,6 +46,7 @@ constexpr double kRadiansToDegrees = 180.0 / 3.141592653589793238462643383279502
 struct SignalRuntime {
     SignalTracker tracker;
     CarrierAmbiguityState ambiguity;
+    MeasurementErrorState measurement_error;
     bool ever_scheduled;
 };
 
@@ -433,6 +435,34 @@ AcquisitionContext startup_context(StartupMode mode) {
     return AcquisitionContext::kHot;
 }
 
+MeasurementErrorContext measurement_error_context(const SimConfig& config, const SignalTracker& tracker) {
+    MeasurementErrorContext context{};
+    context.phase = MeasurementErrorPhase::kStable;
+    context.rea_fade_progress = 0.0;
+    if (config.scenario == ScenarioType::REA && tracker.acquisition_context == AcquisitionContext::kReacquisition) {
+        context.phase = MeasurementErrorPhase::kReaReacquisition;
+        return context;
+    }
+    if (config.scenario != ScenarioType::TTFF) {
+        return context;
+    }
+    switch (tracker.acquisition_context) {
+        case AcquisitionContext::kHot:
+            context.phase = MeasurementErrorPhase::kTtffHot;
+            break;
+        case AcquisitionContext::kWarm:
+            context.phase = MeasurementErrorPhase::kTtffWarm;
+            break;
+        case AcquisitionContext::kCold:
+            context.phase = MeasurementErrorPhase::kTtffCold;
+            break;
+        case AcquisitionContext::kReacquisition:
+            context.phase = MeasurementErrorPhase::kStable;
+            break;
+    }
+    return context;
+}
+
 bool receiver_power_on(RuntimeState* runtime, const SimConfig& config, const SimTime& power_on_time,
                        std::ofstream* output, SimulatorRunSummary* summary, std::string* error_message) {
     runtime->startup_mode = scenario_startup_mode(config);
@@ -450,6 +480,7 @@ bool receiver_power_on(RuntimeState* runtime, const SimConfig& config, const Sim
         for (SignalRuntime& signal : satellite.signals) {
             reset_signal_tracker(&signal.tracker, signal.tracker.signal_id, power_on_time);
             reset_carrier_ambiguity_state(&signal.ambiguity);
+            reset_measurement_error_state(&signal.measurement_error);
             signal.ever_scheduled = false;
         }
         for (ColdFamilyRuntime& family : satellite.cold_families) {
@@ -472,6 +503,7 @@ void receiver_power_off(RuntimeState* runtime, const SimTime& time) {
         for (SignalRuntime& signal : satellite.signals) {
             reset_signal_tracker(&signal.tracker, signal.tracker.signal_id, time);
             reset_carrier_ambiguity_state(&signal.ambiguity);
+            reset_measurement_error_state(&signal.measurement_error);
         }
     }
 }
@@ -481,6 +513,7 @@ void receiver_signal_off(RuntimeState* runtime, const SimTime& time) {
         for (SignalRuntime& signal : satellite.signals) {
             static_cast<void>(update_signal_tracker(&signal.tracker, time, false, 0.0, runtime->cn0_model, nullptr));
             reset_carrier_ambiguity_state(&signal.ambiguity);
+            reset_measurement_error_state(&signal.measurement_error);
         }
     }
 }
@@ -799,6 +832,7 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
             }
             if (signal.tracker.phase != SignalTrackingPhase::kTracking) {
                 reset_carrier_ambiguity_state(&signal.ambiguity);
+                reset_measurement_error_state(&signal.measurement_error);
                 continue;
             }
             satellite_tracking = true;
@@ -822,7 +856,14 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                                                                    signal.tracker, observation, error_message)) {
                 return false;
             }
-            measurements->push_back(observation);
+            MeasurementObservation reported_observation = observation;
+            if (config.measurement_noise_enabled &&
+                !apply_measurement_error(config.measurement_error, config.seed,
+                                         measurement_error_context(config, signal.tracker), signal.tracker, observation,
+                                         &signal.measurement_error, &reported_observation, error_message)) {
+                return false;
+            }
+            measurements->push_back(reported_observation);
         }
         if (satellite_tracking) {
             ++(*tracked_satellites);

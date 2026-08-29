@@ -175,13 +175,49 @@ TEST_F(SimConfigTest, RejectsInvalidMeasurementErrorConfiguration) {
     EXPECT_NE(error_message.find("measurement_error"), std::string::npos);
 }
 
-TEST_F(SimConfigTest, MeasurementNoiseMasterSwitchRemainsRejectedUntilIntegration) {
+TEST_F(SimConfigTest, MeasurementNoiseMasterSwitchIsAcceptedAfterIntegration) {
     write_test_config(R"json({"measurement_noise_enabled":true})json");
 
     gnss_sim::SimConfig config{};
     std::string error_message;
-    EXPECT_FALSE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message));
-    EXPECT_NE(error_message.find("measurement noise is not supported"), std::string::npos);
+    ASSERT_TRUE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message)) << error_message;
+    EXPECT_TRUE(config.measurement_noise_enabled);
+}
+
+TEST_F(SimConfigTest, TtffDefaultsMeasurementNoiseOnWhenFlagIsOmitted) {
+    write_test_config(R"json({"scenario":"TTFF"})json");
+
+    gnss_sim::SimConfig config{};
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message)) << error_message;
+    EXPECT_TRUE(config.measurement_noise_enabled);
+}
+
+TEST_F(SimConfigTest, ReaDefaultsMeasurementNoiseOnWhenFlagIsOmitted) {
+    write_test_config(R"json({"scenario":"REA"})json");
+
+    gnss_sim::SimConfig config{};
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message)) << error_message;
+    EXPECT_TRUE(config.measurement_noise_enabled);
+}
+
+TEST_F(SimConfigTest, KsKeepsMeasurementNoiseOffWhenFlagIsOmitted) {
+    write_test_config(R"json({"scenario":"KS"})json");
+
+    gnss_sim::SimConfig config{};
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message)) << error_message;
+    EXPECT_FALSE(config.measurement_noise_enabled);
+}
+
+TEST_F(SimConfigTest, ExplicitFalseOverridesTtffMeasurementNoiseDefault) {
+    write_test_config(R"json({"scenario":"TTFF","measurement_noise_enabled":false})json");
+
+    gnss_sim::SimConfig config{};
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message)) << error_message;
+    EXPECT_FALSE(config.measurement_noise_enabled);
 }
 
 } // namespace

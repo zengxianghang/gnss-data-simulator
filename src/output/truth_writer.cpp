@@ -185,6 +185,13 @@ std::string config_json(const SimConfig& config, int indent) {
     output << inner << "  \"signal_on_ns\": " << config.rea.signal_on_ns << ",\n";
     output << inner << "  \"signal_off_ns\": " << config.rea.signal_off_ns << "\n";
     output << inner << "},\n";
+    output << inner << "\"bestpos_rtk\": {\n";
+    output << inner << "  \"enabled\": " << bool_json(config.bestpos_rtk.enabled) << ",\n";
+    output << inner << "  \"stable_duration_ns\": " << config.bestpos_rtk.stable_duration_ns << ",\n";
+    output << inner << "  \"min_used_satellites\": " << config.bestpos_rtk.min_used_satellites << ",\n";
+    output << inner << "  \"horizontal_std_m\": " << config.bestpos_rtk.horizontal_std_m << ",\n";
+    output << inner << "  \"height_std_m\": " << config.bestpos_rtk.height_std_m << "\n";
+    output << inner << "},\n";
     output << inner << "\"measurement_error\": {\n";
     output << inner << "  \"psr_sigma_m\": " << config.measurement_error.psr_sigma_m << ",\n";
     output << inner << "  \"doppler_sigma_mps\": " << config.measurement_error.doppler_sigma_mps << ",\n";

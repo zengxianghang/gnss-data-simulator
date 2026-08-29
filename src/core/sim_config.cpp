@@ -232,6 +232,27 @@ bool parse_rea(const cJSON* root, SimConfig* config, std::string* error_message)
            seconds_to_ns(signal_off_sec, "rea.signal_off_sec", &config->rea.signal_off_ns, error_message);
 }
 
+bool parse_bestpos_rtk(const cJSON* root, SimConfig* config, std::string* error_message) {
+    const cJSON* object = cJSON_GetObjectItemCaseSensitive(root, "bestpos_rtk");
+    if (object == nullptr) {
+        return true;
+    }
+    const char* const allowed_keys[] = {"enabled", "stable_duration_sec", "min_used_satellites", "horizontal_std_m",
+                                        "height_std_m"};
+    if (!validate_object_keys(object, "bestpos_rtk", allowed_keys, 5U, error_message)) {
+        return false;
+    }
+    double stable_duration_sec = static_cast<double>(config->bestpos_rtk.stable_duration_ns) /
+                                 static_cast<double>(NANOSECONDS_PER_SECOND);
+    return read_optional_bool(object, "enabled", &config->bestpos_rtk.enabled, error_message) &&
+           read_optional_number(object, "stable_duration_sec", &stable_duration_sec, error_message) &&
+           read_optional_int(object, "min_used_satellites", &config->bestpos_rtk.min_used_satellites, error_message) &&
+           read_optional_number(object, "horizontal_std_m", &config->bestpos_rtk.horizontal_std_m, error_message) &&
+           read_optional_number(object, "height_std_m", &config->bestpos_rtk.height_std_m, error_message) &&
+           seconds_to_ns(stable_duration_sec, "bestpos_rtk.stable_duration_sec",
+                         &config->bestpos_rtk.stable_duration_ns, error_message);
+}
+
 bool parse_measurement_transient(const cJSON* parent, const char* key, MeasurementTransientErrorConfig* config,
                                  std::string* error_message) {
     const cJSON* object = cJSON_GetObjectItemCaseSensitive(parent, key);
@@ -321,6 +342,12 @@ bool valid_measurement_fade(const MeasurementFadeErrorConfig& config) {
            finite_nonnegative(config.doppler_extra_sigma_mps) && finite_nonnegative(config.cn0_drop_db);
 }
 
+bool valid_bestpos_rtk_config(const BestposRtkConfig& config) {
+    return config.stable_duration_ns >= 0 && config.min_used_satellites >= 4 &&
+           config.min_used_satellites <= 64 && finite_nonnegative(config.horizontal_std_m) &&
+           finite_nonnegative(config.height_std_m);
+}
+
 bool valid_measurement_error_config(const MeasurementErrorConfig& config) {
     return finite_nonnegative(config.psr_sigma_m) && finite_nonnegative(config.doppler_sigma_mps) &&
            finite_nonnegative(config.adr_sigma_m) && finite_nonnegative(config.cn0_sigma_dbhz) &&
@@ -360,6 +387,7 @@ SimConfig default_sim_config() {
     config.receiver = {20.0, 120.0, 100.0};
     config.ttff = {StartupMode::HOT, 300LL * NANOSECONDS_PER_SECOND, 30LL * NANOSECONDS_PER_SECOND};
     config.rea = {300LL * NANOSECONDS_PER_SECOND, 10LL * NANOSECONDS_PER_SECOND};
+    config.bestpos_rtk = {true, 5LL * NANOSECONDS_PER_SECOND, 6, 0.01, 0.02};
     config.measurement_error = {0.08,
                                 0.03,
                                 0.001,
@@ -396,6 +424,10 @@ bool validate_sim_config(const SimConfig& config, std::string* error_message) {
     if (!std::isfinite(config.solution_elevation_mask_deg) || config.solution_elevation_mask_deg < 0.0 ||
         config.solution_elevation_mask_deg > 90.0) {
         set_error(error_message, "solution_elevation_mask_deg must be within [0, 90]");
+        return false;
+    }
+    if (!valid_bestpos_rtk_config(config.bestpos_rtk)) {
+        set_error(error_message, "bestpos_rtk configuration is invalid");
         return false;
     }
     if (!valid_measurement_error_config(config.measurement_error)) {
@@ -473,6 +505,7 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                                         "output_eph",
                                         "output_ion",
                                         "measurement_noise_enabled",
+                                        "bestpos_rtk",
                                         "measurement_error",
                                         "multipath_enabled",
                                         "receiver_clock_bias_m",
@@ -484,7 +517,7 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                                         "seed"};
 
     SimConfig parsed = default_sim_config();
-    bool success = validate_object_keys(root, "root", allowed_keys, 18U, error_message);
+    bool success = validate_object_keys(root, "root", allowed_keys, 19U, error_message);
 
     double duration_sec = static_cast<double>(parsed.duration_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
     const char* scenario_name = scenario_type_name(parsed.scenario);
@@ -515,7 +548,8 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
             read_optional_string(root, "atmosphere_mode", &atmosphere_name, error_message) &&
             parse_atmosphere_mode(atmosphere_name, &parsed.atmosphere_mode, error_message) &&
             parse_receiver(root, &parsed, error_message) && parse_ttff(root, &parsed, error_message) &&
-            parse_rea(root, &parsed, error_message) && parse_measurement_error(root, &parsed, error_message) &&
+            parse_rea(root, &parsed, error_message) && parse_bestpos_rtk(root, &parsed, error_message) &&
+            parse_measurement_error(root, &parsed, error_message) &&
             parse_seed(root, &parsed, error_message) && validate_sim_config(parsed, error_message);
     }
 

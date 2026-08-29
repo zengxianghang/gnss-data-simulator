@@ -10,6 +10,7 @@
 #include "gnss/signal_definitions.h"
 #include "gnss_sim/sim_time.h"
 #include "model/atmosphere_model.h"
+#include "model/bestpos_rtk_model.h"
 #include "model/cn0_model.h"
 #include "model/measurement_error_model.h"
 #include "model/measurement_model.h"
@@ -81,6 +82,7 @@ struct RuntimeState {
     Cn0Model cn0_model;
     SignalTrackingModelConfig tracking_config;
     SolutionEngineState solution_state;
+    BestposRtkState bestpos_rtk_state;
     StartupMode startup_mode;
     SimTime startup_search_ready_time;
     std::vector<SatelliteRuntime> satellites;
@@ -485,6 +487,7 @@ bool receiver_power_on(RuntimeState* runtime, const SimConfig& config, const Sim
         return false;
     }
     reset_solution_engine_state(&runtime->solution_state);
+    reset_bestpos_rtk_state(&runtime->bestpos_rtk_state);
     ReceiverStartupTiming timing{};
     if (!sample_receiver_startup_timing(runtime->startup_mode, runtime->tracking_config, &runtime->rng, &timing) ||
         !add_time_ns(power_on_time, timing.total_search_ready_delay_ns, &runtime->startup_search_ready_time)) {
@@ -514,6 +517,7 @@ bool receiver_power_on(RuntimeState* runtime, const SimConfig& config, const Sim
 
 void receiver_power_off(RuntimeState* runtime, const SimTime& time) {
     reset_solution_engine_state(&runtime->solution_state);
+    reset_bestpos_rtk_state(&runtime->bestpos_rtk_state);
     for (SatelliteRuntime& satellite : runtime->satellites) {
         for (SignalRuntime& signal : satellite.signals) {
             reset_signal_tracker(&signal.tracker, signal.tracker.signal_id, time);
@@ -524,6 +528,7 @@ void receiver_power_off(RuntimeState* runtime, const SimTime& time) {
 }
 
 void receiver_signal_off(RuntimeState* runtime, const SimTime& time) {
+    reset_bestpos_rtk_state(&runtime->bestpos_rtk_state);
     for (SatelliteRuntime& satellite : runtime->satellites) {
         for (SignalRuntime& signal : satellite.signals) {
             static_cast<void>(update_signal_tracker(&signal.tracker, time, false, 0.0, runtime->cn0_model, nullptr));
@@ -889,7 +894,8 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
 
 bool emit_epoch_logs(const SimConfig& config, const ScenarioEpochState& scenario,
                      const std::vector<MeasurementObservation>& measurements, int tracked_satellites,
-                     const SolutionEpoch& solution, const ReceiverTruth& receiver, std::ofstream* output,
+                     const SolutionEpoch& solution, const ReceiverTruth& receiver, bool bestpos_rtk_fixed,
+                     std::ofstream* output,
                      SimulatorRunSummary* summary, std::string* error_message) {
     std::string message;
     const MeasurementObservation* data = measurements.empty() ? nullptr : measurements.data();
@@ -910,7 +916,8 @@ bool emit_epoch_logs(const SimConfig& config, const ScenarioEpochState& scenario
     }
     ++summary->psrvel_messages;
 
-    if (!format_novatel_bestposa(scenario.time, receiver, &message, error_message) ||
+    if (!format_novatel_bestposa(solution, tracked_satellites, receiver, bestpos_rtk_fixed, config.bestpos_rtk,
+                                &message, error_message) ||
         !write_message(output, message, error_message)) {
         return false;
     }
@@ -1080,9 +1087,11 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         if (!solve_receiver_epoch(receiver_navigation_store(runtime.navigation), current_time, data,
                                   static_cast<int>(measurements.size()), config.solution_elevation_mask_deg,
                                   config.atmosphere_mode, &runtime.solution_state, &solution, error_message) ||
+            !update_bestpos_rtk_state(config.bestpos_rtk, current_time, solution.position,
+                                      &runtime.bestpos_rtk_state, error_message) ||
             !truth_writer_write_solution(truth_writer, solution, tracked_satellites, error_message) ||
-            !emit_epoch_logs(config, scenario, measurements, tracked_satellites, solution, runtime.receiver, &output,
-                             &result, error_message)) {
+            !emit_epoch_logs(config, scenario, measurements, tracked_satellites, solution, runtime.receiver,
+                             runtime.bestpos_rtk_state.fixed, &output, &result, error_message)) {
             ok = false;
             break;
         }

@@ -23,5 +23,12 @@
     "signal_on_sec": 300.0,
     "signal_off_sec": 10.0
   },
+  "bestpos_rtk": {
+    "enabled": true,
+    "stable_duration_sec": 5.0,
+    "min_used_satellites": 6,
+    "horizontal_std_m": 0.01,
+    "height_std_m": 0.02
+  },
   "seed": 1
 }

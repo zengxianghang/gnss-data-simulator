@@ -22,6 +22,15 @@ int satellite_number(const char* satellite_id) {
     return number;
 }
 
+std::string ascii_body(const std::string& message) {
+    const std::size_t semicolon = message.find(';');
+    const std::size_t star = message.rfind('*');
+    if (semicolon == std::string::npos || star == std::string::npos || star <= semicolon) {
+        return std::string();
+    }
+    return message.substr(semicolon + 1, star - semicolon - 1);
+}
+
 gnss_sim::MeasurementObservation observation(const char* satellite_id, gnss_sim::SignalId signal_id, int glonass_fcn,
                                              double pseudorange_m, double adr_cycles, double doppler_hz,
                                              double cn0_dbhz, double lock_time_sec) {
@@ -81,19 +90,80 @@ TEST(NovatelRangeWriter, ReaSignalOffEmitsZeroObservationGoldenRecord) {
     EXPECT_EQ(message, "#RANGEA,COM1,0,0.0,FINE,2300,12345.678,00000000,0,0;0*a633981e\r\n");
 }
 
-TEST(NovatelSolutionWriter, BestPosATruthIsByteStableAndDailyAnalysisCompatible) {
+TEST(NovatelSolutionWriter, BestPosAMirrorsPsrPosBeforeRtkFix) {
+    gnss_sim::SolutionEpoch solution{};
+    solution.time = writer_time();
+    solution.position.valid = true;
+    solution.position.status = gnss_sim::ReceiverSolutionStatus::kSolComputed;
+    solution.position.type = gnss_sim::ReceiverSolutionType::kSingle;
+    solution.position.latitude_deg = 20.1;
+    solution.position.longitude_deg = 120.1;
+    solution.position.height_m = 101.0;
+    solution.position.latitude_std_m = 0.25;
+    solution.position.longitude_std_m = 0.30;
+    solution.position.height_std_m = 0.50;
+    solution.position.used_satellites = 6;
     gnss_sim::ReceiverTruth truth{};
     truth.latitude_deg = 20.0;
     truth.longitude_deg = 120.0;
     truth.height_m = 100.0;
+    const gnss_sim::BestposRtkConfig config{true, 5000000000LL, 6, 0.01, 0.02};
+
+    std::string bestpos;
+    std::string psrpos;
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::format_novatel_bestposa(solution, 8, truth, false, config, &bestpos, &error_message))
+        << error_message;
+    ASSERT_TRUE(gnss_sim::format_novatel_psrposa(solution, 8, &psrpos, &error_message)) << error_message;
+    EXPECT_EQ(ascii_body(bestpos), ascii_body(psrpos));
+}
+
+TEST(NovatelSolutionWriter, BestPosAFixedEpochUsesTruthAndNarrowInt) {
+    gnss_sim::SolutionEpoch solution{};
+    solution.time = writer_time();
+    solution.position.valid = true;
+    solution.position.status = gnss_sim::ReceiverSolutionStatus::kSolComputed;
+    solution.position.type = gnss_sim::ReceiverSolutionType::kSingle;
+    solution.position.latitude_deg = 20.1;
+    solution.position.longitude_deg = 120.1;
+    solution.position.height_m = 101.0;
+    solution.position.latitude_std_m = 0.25;
+    solution.position.longitude_std_m = 0.30;
+    solution.position.height_std_m = 0.50;
+    solution.position.used_satellites = 6;
+    gnss_sim::ReceiverTruth truth{};
+    truth.latitude_deg = 20.0;
+    truth.longitude_deg = 120.0;
+    truth.height_m = 100.0;
+    const gnss_sim::BestposRtkConfig config{true, 5000000000LL, 6, 0.01, 0.02};
 
     std::string message;
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::format_novatel_bestposa(writer_time(), truth, &message, &error_message)) << error_message;
-    EXPECT_EQ(message, "#BESTPOSA,COM1,0,0.0,FINE,2300,12345.678,00000000,0,0;"
-                       "SOL_COMPUTED,NARROW_INT,20.00000000000,120.00000000000,100.0000,0.0000,WGS84,"
-                       "0.0010,0.0010,0.0010,\"\",0.000,0.000,0,0,0,0,00,00,00,00*923a3330\r\n");
-    EXPECT_NE(message.find(";SOL_COMPUTED,NARROW_INT,"), std::string::npos);
+    ASSERT_TRUE(gnss_sim::format_novatel_bestposa(solution, 8, truth, true, config, &message, &error_message))
+        << error_message;
+    EXPECT_EQ(ascii_body(message),
+              "SOL_COMPUTED,NARROW_INT,20.00000000000,120.00000000000,100.0000,0.0000,WGS84,"
+              "0.0100,0.0100,0.0200,\"\",0.000,0.000,8,6,0,0,00,00,00,00");
+}
+
+TEST(NovatelSolutionWriter, InvalidBestPosMatchesInvalidPsrPosInsteadOfTruth) {
+    gnss_sim::SolutionEpoch solution{};
+    solution.time = writer_time();
+    solution.position.status = gnss_sim::ReceiverSolutionStatus::kInsufficientObs;
+    solution.position.type = gnss_sim::ReceiverSolutionType::kNone;
+    gnss_sim::ReceiverTruth truth{};
+    truth.latitude_deg = 20.0;
+    truth.longitude_deg = 120.0;
+    truth.height_m = 100.0;
+    const gnss_sim::BestposRtkConfig config{true, 5000000000LL, 6, 0.01, 0.02};
+
+    std::string bestpos;
+    std::string psrpos;
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::format_novatel_bestposa(solution, 3, truth, false, config, &bestpos, &error_message))
+        << error_message;
+    ASSERT_TRUE(gnss_sim::format_novatel_psrposa(solution, 3, &psrpos, &error_message)) << error_message;
+    EXPECT_EQ(ascii_body(bestpos), ascii_body(psrpos));
 }
 
 TEST(NovatelSolutionWriter, ValidPsrPosAIsByteStable) {

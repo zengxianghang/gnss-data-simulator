@@ -37,6 +37,14 @@ struct ReaConfig {
     std::int64_t signal_off_ns;
 };
 
+struct BestposRtkConfig {
+    bool enabled;
+    std::int64_t stable_duration_ns;
+    int min_used_satellites;
+    double horizontal_std_m;
+    double height_std_m;
+};
+
 struct MeasurementTransientErrorConfig {
     double psr_extra_sigma_m;
     double doppler_extra_sigma_mps;
@@ -81,6 +89,7 @@ struct SimConfig {
     ReceiverConfig receiver;
     TtffConfig ttff;
     ReaConfig rea;
+    BestposRtkConfig bestpos_rtk;
     MeasurementErrorConfig measurement_error;
     std::uint64_t seed;
 };

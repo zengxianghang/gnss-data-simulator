@@ -1,0 +1,29 @@
+name: tmp-issue81-fix
+on:
+  push:
+    branches:
+      - issue-81-serialized-nav-roundtrip
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-81-serialized-nav-roundtrip
+      - name: Apply fix
+        run: python3 .github/issue81_fix.py
+      - name: Format changed C++
+        run: |
+          clang-format -i src/gnss/rtklib_nav_output_adapter.cpp tests/unit/test_nav_output_writers.cpp tools/rangea_roundtrip/serialized_nav_parser.cpp tools/rangea_roundtrip/rangea_roundtrip.cpp src/gnss/rtklib_nav_input_adapter.cpp
+      - name: Remove temporary files
+        run: rm .github/issue81_fix.py .github/workflows/tmp-issue81-fix.yml
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Fix legacy GPS ion serialization for round-trip validation"
+          git push origin HEAD:issue-81-serialized-nav-roundtrip

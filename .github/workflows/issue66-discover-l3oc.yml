@@ -28,13 +28,13 @@ jobs:
             url="https://igs.bkg.bund.de/root_ftp/IGS/BRDC/${rel}"
             echo "PROBE ${url}"
             rm -f candidate.rnx.gz candidate.rnx
-            if ! curl --retry 3 --retry-delay 2 -fsSL "${url}" -o candidate.rnx.gz; then
+            if ! curl --connect-timeout 10 --max-time 30 --retry 1 -fsSL "${url}" -o candidate.rnx.gz; then
               echo "DOWNLOAD_FAILED ${url}"
               continue
             fi
-            sha256sum candidate.rnx.gz
+            echo "GZIP_SHA256 $(sha256sum candidate.rnx.gz | awk '{print $1}')"
             gzip -dc candidate.rnx.gz > candidate.rnx
-            sha256sum candidate.rnx
+            echo "RINEX_SHA256 $(sha256sum candidate.rnx | awk '{print $1}')"
             echo "RINEX_VERSION $(head -n 1 candidate.rnx)"
             count=$(grep -cE '^> EPH R[0-9][0-9] L3OC([[:space:]]|$)' candidate.rnx || true)
             echo "L3OC_COUNT ${count}"

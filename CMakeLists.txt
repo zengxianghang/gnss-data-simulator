@@ -182,7 +182,7 @@ add_library(rangea_roundtrip_core STATIC
 )
 target_include_directories(rangea_roundtrip_core
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/tools/rangea_roundtrip"
-    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+           "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 target_link_libraries(rangea_roundtrip_core
     PUBLIC gnss_sim::core
@@ -269,6 +269,7 @@ if(BUILD_TESTING)
         tests/integration/test_scenarios.cpp
         tests/integration/test_all_signal_residuals.cpp
         tests/integration/test_measurement_noise_integration.cpp
+        tests/integration/test_nav_equivalence.cpp
         tests/integration/test_rea_fade.cpp
         tests/integration/test_rangea_roundtrip.cpp
         tests/integration/test_transient_validator.cpp

@@ -412,6 +412,12 @@ bool parse_rangea_line_independent(const std::string& raw_line, ParsedRangeEpoch
     return parse_rangea_line_impl(raw_line, epoch, error_message);
 }
 
+bool select_rangea_position_observations(const ParsedRangeEpoch& epoch,
+                                         std::vector<RtklibRawCodeObservation>* observations,
+                                         std::string* error_message) {
+    return select_position_observations(epoch, observations, error_message);
+}
+
 bool validate_rangea_roundtrip_stream(std::istream* input, const char* rinex_nav_path, double truth_latitude_deg,
                                       double truth_longitude_deg, double truth_height_m, double elevation_mask_deg,
                                       bool broadcast_atmosphere, RangeaRoundtripSummary* summary,

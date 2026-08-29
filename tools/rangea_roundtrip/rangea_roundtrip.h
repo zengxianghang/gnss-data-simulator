@@ -1,6 +1,8 @@
 #ifndef GNSS_SIM_TOOLS_RANGEA_ROUNDTRIP_RANGEA_ROUNDTRIP_H_
 #define GNSS_SIM_TOOLS_RANGEA_ROUNDTRIP_RANGEA_ROUNDTRIP_H_
 
+#include "gnss/rtklib_adapter.h"
+
 #include <cstdint>
 #include <istream>
 #include <string>
@@ -28,6 +30,10 @@ struct ParsedRangeEpoch {
 };
 
 bool parse_rangea_line_independent(const std::string& raw_line, ParsedRangeEpoch* epoch, std::string* error_message);
+
+bool select_rangea_position_observations(const ParsedRangeEpoch& epoch,
+                                         std::vector<RtklibRawCodeObservation>* observations,
+                                         std::string* error_message);
 
 struct RangeaRoundtripSummary {
     std::uint64_t range_epochs;

@@ -80,40 +80,55 @@ void collect_supported_names(const gnss_sim::RtklibNavStore* store, bool unicore
     }
 }
 
-gnss_sim::NavOutputRecord synthetic_ephemeris(gnss_sim::NavOutputSystem system,
-                                              gnss_sim::RtklibBroadcastMessageFamily family) {
-    gnss_sim::NavOutputRecord record{};
-    record.kind = gnss_sim::RtklibNavRecordKind::kEphemeris;
-    record.ephemeris.system = system;
-    record.ephemeris.message_family = family;
-    record.ephemeris.prn = 2;
-    record.ephemeris.iode = 3;
-    record.ephemeris.iodc = 4;
-    record.ephemeris.sva = 1.0;
-    record.ephemeris.toe_week = 2041;
-    record.ephemeris.toc_week = 2041;
-    record.ephemeris.transmit_week = 2041;
-    record.ephemeris.toe_sow_sec = 180000.0;
-    record.ephemeris.toc_sow_sec = 180000.0;
-    record.ephemeris.transmit_sow_sec = 180006.0;
-    record.ephemeris.semi_major_axis_m = 26560000.0;
-    record.ephemeris.eccentricity = 0.01;
-    record.ephemeris.inclination_rad = 0.95;
-    record.ephemeris.omega0_rad = 1.0;
-    record.ephemeris.argument_of_perigee_rad = 0.2;
-    record.ephemeris.mean_anomaly_rad = 0.3;
-    record.ephemeris.delta_mean_motion_radps = 1.0e-9;
-    record.ephemeris.omega_dot_radps = -8.0e-9;
-    record.ephemeris.inclination_dot_radps = 1.0e-10;
-    record.ephemeris.clock_bias_sec = 1.0e-4;
-    record.ephemeris.clock_drift_sec_per_sec = 2.0e-12;
-    record.ephemeris.tgd_sec[0] = 1.0e-9;
-    record.ephemeris.tgd_sec[1] = 2.0e-9;
-    record.ephemeris.galileo_fnav_received = true;
-    record.ephemeris.galileo_inav_received = true;
-    record.ephemeris.galileo_fnav_toc_sow_sec = 180000.0;
-    record.ephemeris.galileo_inav_toc_sow_sec = 180000.0;
-    return record;
+bool load_real_ephemeris_record(const char* fixture_name, gnss_sim::NavOutputSystem system,
+                                gnss_sim::RtklibBroadcastMessageFamily family, gnss_sim::NavOutputRecord* record,
+                                std::string* error_message) {
+    if (fixture_name == nullptr || record == nullptr) {
+        if (error_message != nullptr) {
+            *error_message = "real ephemeris test helper received invalid arguments";
+        }
+        return false;
+    }
+    gnss_sim::RtklibNavStore* store = gnss_sim::create_rtklib_nav_store();
+    if (store == nullptr) {
+        if (error_message != nullptr) {
+            *error_message = "cannot allocate real ephemeris test NAV store";
+        }
+        return false;
+    }
+    if (!gnss_sim::load_rinex_nav_file(store, data_path(fixture_name).c_str(), error_message)) {
+        gnss_sim::destroy_rtklib_nav_store(store);
+        return false;
+    }
+
+    const int count = gnss_sim::rtklib_nav_output_record_count(store);
+    for (int index = 0; index < count; ++index) {
+        gnss_sim::NavOutputRecord candidate{};
+        if (!gnss_sim::rtklib_nav_output_record(store, index, &candidate, error_message)) {
+            gnss_sim::destroy_rtklib_nav_store(store);
+            return false;
+        }
+        if (candidate.kind == gnss_sim::RtklibNavRecordKind::kEphemeris && candidate.ephemeris.system == system &&
+            candidate.ephemeris.message_family == family) {
+            *record = candidate;
+            gnss_sim::destroy_rtklib_nav_store(store);
+            return true;
+        }
+    }
+
+    gnss_sim::destroy_rtklib_nav_store(store);
+    if (error_message != nullptr) {
+        *error_message = "requested real RINEX ephemeris family is absent from fixture";
+    }
+    return false;
+}
+
+gnss_sim::SimTime ephemeris_output_time(const gnss_sim::NavOutputRecord& record) {
+    gnss_sim::SimTime result{};
+    EXPECT_EQ(record.kind, gnss_sim::RtklibNavRecordKind::kEphemeris);
+    EXPECT_TRUE(
+        gnss_sim::sim_time_from_week_sow(record.ephemeris.transmit_week, record.ephemeris.transmit_sow_sec, &result));
+    return result;
 }
 
 TEST(NavOutputWriter, LegacyMixedRinexCoversFiveEphemerisFamilies) {
@@ -236,26 +251,32 @@ TEST(NavOutputWriter, HotAndWarmRestoreTheSameDeterministicReceiverNavBytes) {
     EXPECT_FALSE(baseline.empty());
 }
 
-TEST(NavOutputWriter, SyntheticModernBdsAndNavicStayWithinFrozenOutputScope) {
+TEST(NavOutputWriter, RealModernBdsAndNavicStayWithinFrozenOutputScope) {
     std::string message;
     std::string error_message;
     bool supported = false;
 
-    gnss_sim::NavOutputRecord bds =
-        synthetic_ephemeris(gnss_sim::NavOutputSystem::kBeidou, gnss_sim::RtklibBroadcastMessageFamily::kBeidouBcnav1);
-    ASSERT_TRUE(gnss_sim::format_unicore_nav_output_record(bds, output_time(), &message, &supported, &error_message))
+    gnss_sim::NavOutputRecord bds{};
+    ASSERT_TRUE(load_real_ephemeris_record("brd400dlr_rinex4_acceptance_nav.rnx", gnss_sim::NavOutputSystem::kBeidou,
+                                           gnss_sim::RtklibBroadcastMessageFamily::kBeidouBcnav1, &bds, &error_message))
+        << error_message;
+    const gnss_sim::SimTime bds_time = ephemeris_output_time(bds);
+    ASSERT_TRUE(gnss_sim::format_unicore_nav_output_record(bds, bds_time, &message, &supported, &error_message))
         << error_message;
     EXPECT_TRUE(supported);
     EXPECT_EQ(log_name(message), "BD3EPHA");
     EXPECT_TRUE(valid_ascii_crc(message));
-    ASSERT_TRUE(gnss_sim::format_novatel_nav_output_record(bds, output_time(), &message, &supported, &error_message))
+    ASSERT_TRUE(gnss_sim::format_novatel_nav_output_record(bds, bds_time, &message, &supported, &error_message))
         << error_message;
     EXPECT_FALSE(supported);
     EXPECT_TRUE(message.empty());
 
-    gnss_sim::NavOutputRecord navic =
-        synthetic_ephemeris(gnss_sim::NavOutputSystem::kNavic, gnss_sim::RtklibBroadcastMessageFamily::kLegacy);
-    ASSERT_TRUE(gnss_sim::format_unicore_nav_output_record(navic, output_time(), &message, &supported, &error_message))
+    gnss_sim::NavOutputRecord navic{};
+    ASSERT_TRUE(load_real_ephemeris_record("multi_gnss_acceptance_nav.rnx", gnss_sim::NavOutputSystem::kNavic,
+                                           gnss_sim::RtklibBroadcastMessageFamily::kLegacy, &navic, &error_message))
+        << error_message;
+    const gnss_sim::SimTime navic_time = ephemeris_output_time(navic);
+    ASSERT_TRUE(gnss_sim::format_unicore_nav_output_record(navic, navic_time, &message, &supported, &error_message))
         << error_message;
     EXPECT_TRUE(supported);
     EXPECT_EQ(log_name(message), "IRNSSEPHA");
@@ -285,17 +306,42 @@ TEST(NavOutputWriter, Bd3IonHasByteLevelGoldenRecord) {
                        "0.000000000000000e+00,0.000000000000000e+00,0.000000000000000e+00,0*bdf5809e\r\n");
 }
 
-TEST(NavOutputWriter, GalileoHealthBitsAreDecodedBeforeSerialization) {
-    gnss_sim::NavOutputRecord record =
-        synthetic_ephemeris(gnss_sim::NavOutputSystem::kGalileo, gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav);
-    record.ephemeris.svh = (1 << 0) | (2 << 1) | (1 << 3) | (3 << 4) | (0 << 6) | (1 << 7);
-    ASSERT_TRUE(gnss_sim::finalize_nav_output_record_metadata(&record));
-    EXPECT_EQ(record.ephemeris.galileo_e1b_dvs, 1);
-    EXPECT_EQ(record.ephemeris.galileo_e1b_health, 2);
-    EXPECT_EQ(record.ephemeris.galileo_e5a_dvs, 1);
-    EXPECT_EQ(record.ephemeris.galileo_e5a_health, 3);
-    EXPECT_EQ(record.ephemeris.galileo_e5b_dvs, 0);
-    EXPECT_EQ(record.ephemeris.galileo_e5b_health, 1);
+TEST(NavOutputWriter, GalileoHealthBitsAreDecodedFromRealRinexBeforeSerialization) {
+    gnss_sim::RtklibNavStore* store = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(store, nullptr);
+    std::string error_message;
+    ASSERT_TRUE(
+        gnss_sim::load_rinex_nav_file(store, data_path("brd400dlr_rinex4_acceptance_nav.rnx").c_str(), &error_message))
+        << error_message;
+
+    int galileo_records = 0;
+    int nonzero_health_records = 0;
+    const int count = gnss_sim::rtklib_nav_output_record_count(store);
+    for (int index = 0; index < count; ++index) {
+        gnss_sim::NavOutputRecord record{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(store, index, &record, &error_message)) << error_message;
+        if (record.kind != gnss_sim::RtklibNavRecordKind::kEphemeris ||
+            record.ephemeris.system != gnss_sim::NavOutputSystem::kGalileo) {
+            continue;
+        }
+        ++galileo_records;
+        const int svh = record.ephemeris.svh;
+        if (svh != 0) {
+            ++nonzero_health_records;
+        }
+        ASSERT_TRUE(gnss_sim::finalize_nav_output_record_metadata(&record));
+        EXPECT_EQ(record.ephemeris.galileo_e1b_dvs, (svh >> 0) & 0x1);
+        EXPECT_EQ(record.ephemeris.galileo_e1b_health, (svh >> 1) & 0x3);
+        EXPECT_EQ(record.ephemeris.galileo_e5a_dvs, (svh >> 3) & 0x1);
+        EXPECT_EQ(record.ephemeris.galileo_e5a_health, (svh >> 4) & 0x3);
+        EXPECT_EQ(record.ephemeris.galileo_e5b_dvs, (svh >> 6) & 0x1);
+        EXPECT_EQ(record.ephemeris.galileo_e5b_health, (svh >> 7) & 0x3);
+    }
+
+    EXPECT_GT(galileo_records, 0);
+    EXPECT_GT(nonzero_health_records, 0)
+        << "real BRD400 fixture must retain at least one nonzero Galileo health-status record";
+    gnss_sim::destroy_rtklib_nav_store(store);
 }
 
 } // namespace

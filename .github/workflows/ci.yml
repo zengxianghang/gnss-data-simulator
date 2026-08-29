@@ -36,6 +36,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Extended validation harness self-test
         run: python3 tools/extended_validation/run_extended.py --self-test
+      - name: Galileo identity scanner self-test
+        run: python3 tools/download_igs/scan_galileo_nav_identities.py --self-test
 
   build-test:
     strategy:

@@ -57,9 +57,11 @@ a real same-IODnav/different-Toe pair (IODnav 87, INAV at Toe 433200 vs FNAV at
 Toe 509400). The retained Toe SOW values are GPS week 2347 epochs and map to
 2025-01-03 UTC wall-clock times via the 18 s GPS/GST-UTC leap (e.g. Toe 457800
 is 07:09:42Z). A real same-Toe/different-IODnav case was searched with
-`tools/download_igs/scan_galileo_nav_identities.py` over one continuous GPS week
-of BRD400DLR daily products (2025-001 through 2025-007, 41897 Galileo records,
-29 satellites): 20605 matching pairs and 52678 same-IODnav/different-Toe pairs
-exist, but zero same-Toe/different-IODnav pairs occur. The case is documented as
-absent and was not fabricated; per-product hashes and counts are frozen in
-`brd400dlr_rinex4_galileo_companion_nav.meta.json`.
+`tools/download_igs/scan_galileo_nav_identities.py` over seven consecutive
+BRD400DLR daily products (2025-001 through 2025-007, spanning GPS weeks 2347
+and 2348; 41897 Galileo INAV/FNAV records, 29 satellites) using week-aware
+navigation identities: 20605 matching pairs and 25199 same-IODnav/
+different-Toe pairs exist, but zero same-Toe/different-IODnav pairs occur. The
+case is documented as absent and was not fabricated; per-product hashes and
+counts are frozen in `brd400dlr_rinex4_galileo_companion_nav.meta.json`, and
+the scanner carries a deterministic self-test in the tooling CI job.

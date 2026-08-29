@@ -7,15 +7,16 @@
   "schema_version": 1,
   "searched_absent_real_cases": {
     "same_toe_different_iodnav": {
-      "conclusion": "the case is absent across the searched real week; the IODnav predicate term cannot currently be isolated with a provenance-compliant full-ephemeris fixture, no case was fabricated, and the production predicate is unchanged",
+      "conclusion": "the case is absent across the searched real interval under week-aware identity; the IODnav predicate term cannot currently be isolated with a provenance-compliant full-ephemeris fixture, no case was fabricated, and the production predicate is unchanged",
       "description": "same satellite, same Toe, different IODnav across INAV/FNAV",
       "galileo_records_scanned": 41897,
+      "identity": "week-aware Galileo navigation identity (satellite, message family, IODnav, broadcast week, Toe SOW); the broadcast week is the same record field RTKLIB decodes into eph.week (data[21], rinex.c decode \"gal week = gps week\"), so equal Toe SOW values from different weeks are never conflated",
       "matching_pairs_found": 20605,
-      "same_iodnav_different_toe_pairs_found": 52678,
+      "same_iodnav_different_toe_pairs_found": 25199,
       "same_toe_different_iodnav_matches_found": 0,
       "search_command": "python3 tools/download_igs/scan_galileo_nav_identities.py brd400dlr_001.rnx ... brd400dlr_007.rnx (one uncompressed day file per argument)",
       "search_tool": "tools/download_igs/scan_galileo_nav_identities.py",
-      "searched_interval": "continuous GPS week 2347, 7 consecutive BRD400DLR daily products",
+      "searched_interval": "seven consecutive BRD400DLR daily products (2025-001 through 2025-007) spanning GPS weeks 2347 and 2348",
       "searched_products": [
         {
           "compressed_sha256": "0d878a727a1c4f453a0de5ab04abd7723f01feade471be89d3ce41f769c824b9",

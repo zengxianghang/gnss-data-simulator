@@ -1,6 +1,7 @@
 #include "gnss_sim/sim_config.h"
 #include "gnss_sim/sim_time.h"
 #include "gnss_sim/simulator.h"
+#include "rangea_roundtrip.h"
 #include "serialized_nav_roundtrip.h"
 
 #include <filesystem>

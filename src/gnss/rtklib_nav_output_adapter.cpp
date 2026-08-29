@@ -108,10 +108,18 @@ int legacy_ion_systems(const nav_t& nav, int systems[4]) {
     return count;
 }
 
-void fill_galileo_companion_clocks(const nav_t& nav, int satellite_number, KeplerianNavOutputData* output) {
+bool same_galileo_navigation_instance(const eph_t& source, const eph_t& candidate) {
+    // Galileo broadcast navigation identity: same satellite, same IODnav (RTKLIB stores
+    // the Galileo IODnav in iode), and the exact same Toe epoch. INAV and FNAV update
+    // asynchronously, so a historical record of one family must never pair with a newer
+    // instance of the other family, and no looser Toe proximity may substitute here.
+    return source.sat == candidate.sat && source.iode == candidate.iode && timediff(source.toe, candidate.toe) == 0.0;
+}
+
+void fill_galileo_companion_clocks(const nav_t& nav, const eph_t& source, KeplerianNavOutputData* output) {
     for (int index = 0; index < nav.n; ++index) {
         const eph_t& candidate = nav.eph[index];
-        if (candidate.sat != satellite_number) {
+        if (!same_galileo_navigation_instance(source, candidate)) {
             continue;
         }
         const RtklibBroadcastMessageFamily family = message_family(SYS_GAL, candidate.hdr.msg_type);
@@ -179,7 +187,7 @@ bool fill_ephemeris(const nav_t& nav, int index, NavOutputRecord* record) {
     std::memcpy(output.isc_sec, eph.isc, sizeof(output.isc_sec));
     output.fit_hours = eph.fit;
     if (system == SYS_GAL) {
-        fill_galileo_companion_clocks(nav, eph.sat, &output);
+        fill_galileo_companion_clocks(nav, eph, &output);
         if (!output.galileo_fnav_received && output.message_family == RtklibBroadcastMessageFamily::kGalileoFnav) {
             output.galileo_fnav_received = true;
             output.galileo_fnav_toc_sow_sec = output.toc_sow_sec;

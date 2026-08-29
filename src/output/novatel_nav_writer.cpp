@@ -154,7 +154,7 @@ bool format_novatel_nav_output_record(const NavOutputRecord& source, const SimTi
         }
     } else if (record.kind == RtklibNavRecordKind::kIonosphere) {
         const IonosphereNavOutputData& ion = record.ionosphere;
-        if (ion.system == NavOutputSystem::kGps && ion.coefficient_count >= 8) {
+        if (ion.system == NavOutputSystem::kGps && ion.coefficient_count >= 8 && ion.legacy_metadata) {
             log_name = "IONUTCA";
             body = ionutc_body(ion, false);
         } else if (ion.system == NavOutputSystem::kBeidou && ion.coefficient_count >= 8 && ion.legacy_metadata) {

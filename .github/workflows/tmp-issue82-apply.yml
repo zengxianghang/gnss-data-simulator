@@ -1,0 +1,25 @@
+name: tmp issue82 apply
+on:
+  push:
+    branches:
+      - issue-82-novatel-legacy-eph-only
+jobs:
+  apply:
+    if: "!contains(github.event.head_commit.message, 'Apply issue 82 patch')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply patch
+        run: |
+          python3 .github/issue82_apply.py
+          clang-format -i src/output/novatel_nav_writer.cpp tests/unit/test_nav_output_writers.cpp
+          rm .github/issue82_apply.py .github/workflows/tmp-issue82-apply.yml
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Apply issue 82 patch"
+          git push

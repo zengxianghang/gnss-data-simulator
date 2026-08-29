@@ -252,7 +252,9 @@ bool parse_generic_kepler(const std::string& name, int output_week, double outpu
         return false;
     }
     eph.flag = data_flag ? 1 : 0;
-    eph.transmit_week = week_near_sow(eph.toe_week, eph.toe_sow_sec, eph.transmit_sow_sec);
+    // The ASCII body carries transmit SOW but not its week. Anchor the week to the log header
+    // (the receiver delivery time), not Toe, so week-boundary delivery remains causal.
+    eph.transmit_week = week_near_sow(output_week, output_sow, eph.transmit_sow_sec);
     eph.toc_week = week_near_sow(eph.toe_week, eph.toe_sow_sec, eph.toc_sow_sec);
     eph.sqrt_semi_major_axis_sqrt_m = std::sqrt(eph.semi_major_axis_m);
     eph.message_type = 0;
@@ -277,8 +279,6 @@ bool parse_generic_kepler(const std::string& name, int output_week, double outpu
         set_error(error_message, name + " ephemeris time/orbit fields are out of range");
         return false;
     }
-    static_cast<void>(output_week);
-    static_cast<void>(output_sow);
     record->kind = RtklibNavRecordKind::kEphemeris;
     record->ephemeris = eph;
     return true;

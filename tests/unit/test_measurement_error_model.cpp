@@ -1,6 +1,5 @@
-#include "model/measurement_error_model.h"
-
 #include "gnss_sim/sim_time.h"
+#include "model/measurement_error_model.h"
 
 #include <cmath>
 #include <gtest/gtest.h>
@@ -10,7 +9,7 @@ namespace {
 
 constexpr std::int64_t kSecondNs = gnss_sim::NANOSECONDS_PER_SECOND;
 
- gnss_sim::SimTime make_time(std::int64_t tow_ns) {
+gnss_sim::SimTime make_time(std::int64_t tow_ns) {
     gnss_sim::SimTime time{};
     time.gps_week = 2300;
     time.tow_ns = tow_ns;
@@ -62,8 +61,8 @@ TEST(MeasurementErrorModel, FrozenSurveyGradeEnvelopeDecaysFromTtffHotToStable) 
     std::string error_message;
     ASSERT_TRUE(gnss_sim::compute_measurement_error_sigmas(config, context, 0, &initial, &error_message))
         << error_message;
-    ASSERT_TRUE(gnss_sim::compute_measurement_error_sigmas(config, context, 2 * kSecondNs, &after_two_seconds,
-                                                           &error_message))
+    ASSERT_TRUE(
+        gnss_sim::compute_measurement_error_sigmas(config, context, 2 * kSecondNs, &after_two_seconds, &error_message))
         << error_message;
 
     EXPECT_NEAR(initial.psr_sigma_m, std::hypot(0.08, 0.40), 1e-12);
@@ -81,8 +80,7 @@ TEST(MeasurementErrorModel, ReaFadeUsesNormalizedProgressAndCn0Drop) {
 
     gnss_sim::MeasurementErrorSigmas sigmas{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::compute_measurement_error_sigmas(config, context, 10 * kSecondNs, &sigmas,
-                                                           &error_message))
+    ASSERT_TRUE(gnss_sim::compute_measurement_error_sigmas(config, context, 10 * kSecondNs, &sigmas, &error_message))
         << error_message;
 
     EXPECT_NEAR(sigmas.psr_sigma_m, std::hypot(0.08, 0.40), 1e-12);
@@ -127,8 +125,8 @@ TEST(MeasurementErrorModel, DifferentRunSeedChangesMeasurementSequence) {
     gnss_sim::MeasurementObservation second_reported{};
     std::string error_message;
 
-    ASSERT_TRUE(gnss_sim::apply_measurement_error(config, 1U, stable_context(), tracker, truth, &first,
-                                                  &first_reported, &error_message))
+    ASSERT_TRUE(gnss_sim::apply_measurement_error(config, 1U, stable_context(), tracker, truth, &first, &first_reported,
+                                                  &error_message))
         << error_message;
     ASSERT_TRUE(gnss_sim::apply_measurement_error(config, 2U, stable_context(), tracker, truth, &second,
                                                   &second_reported, &error_message))
@@ -162,10 +160,10 @@ TEST(MeasurementErrorModel, PerSignalStreamsDoNotCoupleUnrelatedSignals) {
     ASSERT_TRUE(gnss_sim::apply_measurement_error(config, 99U, stable_context(), a1, truth_a, &interleaved_a,
                                                   &interleaved_a1, &error_message));
 
-    ASSERT_TRUE(gnss_sim::apply_measurement_error(config, 99U, stable_context(), a0, truth_a, &isolated_a,
-                                                  &isolated_a0, &error_message));
-    ASSERT_TRUE(gnss_sim::apply_measurement_error(config, 99U, stable_context(), a1, truth_a, &isolated_a,
-                                                  &isolated_a1, &error_message));
+    ASSERT_TRUE(gnss_sim::apply_measurement_error(config, 99U, stable_context(), a0, truth_a, &isolated_a, &isolated_a0,
+                                                  &error_message));
+    ASSERT_TRUE(gnss_sim::apply_measurement_error(config, 99U, stable_context(), a1, truth_a, &isolated_a, &isolated_a1,
+                                                  &error_message));
 
     EXPECT_DOUBLE_EQ(interleaved_a0.pseudorange_m, isolated_a0.pseudorange_m);
     EXPECT_DOUBLE_EQ(interleaved_a1.pseudorange_m, isolated_a1.pseudorange_m);
@@ -186,8 +184,8 @@ TEST(MeasurementErrorModel, NewTrackingStartResetsStateToIndependentLockStream) 
     gnss_sim::MeasurementObservation reused_new{};
     gnss_sim::MeasurementObservation fresh_new{};
 
-    ASSERT_TRUE(gnss_sim::apply_measurement_error(config, 7U, stable_context(), old_lock, truth, &reused,
-                                                  &old_reported, &error_message));
+    ASSERT_TRUE(gnss_sim::apply_measurement_error(config, 7U, stable_context(), old_lock, truth, &reused, &old_reported,
+                                                  &error_message));
     ASSERT_TRUE(gnss_sim::apply_measurement_error(config, 7U, stable_context(), new_lock, truth, &reused, &reused_new,
                                                   &error_message));
     ASSERT_TRUE(gnss_sim::apply_measurement_error(config, 7U, stable_context(), new_lock, truth, &fresh, &fresh_new,

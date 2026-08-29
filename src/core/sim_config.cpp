@@ -232,6 +232,65 @@ bool parse_rea(const cJSON* root, SimConfig* config, std::string* error_message)
            seconds_to_ns(signal_off_sec, "rea.signal_off_sec", &config->rea.signal_off_ns, error_message);
 }
 
+bool parse_measurement_transient(const cJSON* parent, const char* key, MeasurementTransientErrorConfig* config,
+                                 std::string* error_message) {
+    const cJSON* object = cJSON_GetObjectItemCaseSensitive(parent, key);
+    if (object == nullptr) {
+        return true;
+    }
+    const char* const allowed_keys[] = {"psr_extra_sigma_m", "doppler_extra_sigma_mps", "cn0_extra_sigma_dbhz",
+                                        "decay_tau_sec"};
+    const std::string section_name = std::string("measurement_error.") + key;
+    if (!validate_object_keys(object, section_name.c_str(), allowed_keys, 4U, error_message)) {
+        return false;
+    }
+    return read_optional_number(object, "psr_extra_sigma_m", &config->psr_extra_sigma_m, error_message) &&
+           read_optional_number(object, "doppler_extra_sigma_mps", &config->doppler_extra_sigma_mps, error_message) &&
+           read_optional_number(object, "cn0_extra_sigma_dbhz", &config->cn0_extra_sigma_dbhz, error_message) &&
+           read_optional_number(object, "decay_tau_sec", &config->decay_tau_sec, error_message);
+}
+
+bool parse_measurement_fade(const cJSON* parent, MeasurementFadeErrorConfig* config, std::string* error_message) {
+    const cJSON* object = cJSON_GetObjectItemCaseSensitive(parent, "rea_fade");
+    if (object == nullptr) {
+        return true;
+    }
+    const char* const allowed_keys[] = {"duration_sec", "psr_extra_sigma_m", "doppler_extra_sigma_mps", "cn0_drop_db"};
+    if (!validate_object_keys(object, "measurement_error.rea_fade", allowed_keys, 4U, error_message)) {
+        return false;
+    }
+    return read_optional_number(object, "duration_sec", &config->duration_sec, error_message) &&
+           read_optional_number(object, "psr_extra_sigma_m", &config->psr_extra_sigma_m, error_message) &&
+           read_optional_number(object, "doppler_extra_sigma_mps", &config->doppler_extra_sigma_mps, error_message) &&
+           read_optional_number(object, "cn0_drop_db", &config->cn0_drop_db, error_message);
+}
+
+bool parse_measurement_error(const cJSON* root, SimConfig* config, std::string* error_message) {
+    const cJSON* object = cJSON_GetObjectItemCaseSensitive(root, "measurement_error");
+    if (object == nullptr) {
+        return true;
+    }
+    const char* const allowed_keys[] = {
+        "psr_sigma_m", "doppler_sigma_mps", "adr_sigma_m", "cn0_sigma_dbhz",    "psr_correlation_tau_sec",
+        "ttff_hot",    "ttff_warm",         "ttff_cold",   "rea_reacquisition", "rea_fade"};
+    if (!validate_object_keys(object, "measurement_error", allowed_keys, 10U, error_message)) {
+        return false;
+    }
+    return read_optional_number(object, "psr_sigma_m", &config->measurement_error.psr_sigma_m, error_message) &&
+           read_optional_number(object, "doppler_sigma_mps", &config->measurement_error.doppler_sigma_mps,
+                                error_message) &&
+           read_optional_number(object, "adr_sigma_m", &config->measurement_error.adr_sigma_m, error_message) &&
+           read_optional_number(object, "cn0_sigma_dbhz", &config->measurement_error.cn0_sigma_dbhz, error_message) &&
+           read_optional_number(object, "psr_correlation_tau_sec", &config->measurement_error.psr_correlation_tau_sec,
+                                error_message) &&
+           parse_measurement_transient(object, "ttff_hot", &config->measurement_error.ttff_hot, error_message) &&
+           parse_measurement_transient(object, "ttff_warm", &config->measurement_error.ttff_warm, error_message) &&
+           parse_measurement_transient(object, "ttff_cold", &config->measurement_error.ttff_cold, error_message) &&
+           parse_measurement_transient(object, "rea_reacquisition", &config->measurement_error.rea_reacquisition,
+                                       error_message) &&
+           parse_measurement_fade(object, &config->measurement_error.rea_fade, error_message);
+}
+
 bool parse_seed(const cJSON* root, SimConfig* config, std::string* error_message) {
     const cJSON* seed = cJSON_GetObjectItemCaseSensitive(root, "seed");
     if (seed == nullptr) {
@@ -245,6 +304,30 @@ bool parse_seed(const cJSON* root, SimConfig* config, std::string* error_message
     }
     config->seed = static_cast<std::uint64_t>(seed->valuedouble);
     return true;
+}
+
+bool finite_nonnegative(double value) {
+    return std::isfinite(value) && value >= 0.0;
+}
+
+bool valid_measurement_transient(const MeasurementTransientErrorConfig& config) {
+    return finite_nonnegative(config.psr_extra_sigma_m) && finite_nonnegative(config.doppler_extra_sigma_mps) &&
+           finite_nonnegative(config.cn0_extra_sigma_dbhz) && std::isfinite(config.decay_tau_sec) &&
+           config.decay_tau_sec > 0.0;
+}
+
+bool valid_measurement_fade(const MeasurementFadeErrorConfig& config) {
+    return finite_nonnegative(config.duration_sec) && finite_nonnegative(config.psr_extra_sigma_m) &&
+           finite_nonnegative(config.doppler_extra_sigma_mps) && finite_nonnegative(config.cn0_drop_db);
+}
+
+bool valid_measurement_error_config(const MeasurementErrorConfig& config) {
+    return finite_nonnegative(config.psr_sigma_m) && finite_nonnegative(config.doppler_sigma_mps) &&
+           finite_nonnegative(config.adr_sigma_m) && finite_nonnegative(config.cn0_sigma_dbhz) &&
+           std::isfinite(config.psr_correlation_tau_sec) && config.psr_correlation_tau_sec > 0.0 &&
+           valid_measurement_transient(config.ttff_hot) && valid_measurement_transient(config.ttff_warm) &&
+           valid_measurement_transient(config.ttff_cold) && valid_measurement_transient(config.rea_reacquisition) &&
+           valid_measurement_fade(config.rea_fade);
 }
 
 bool valid_atmosphere_mode(AtmosphereMode atmosphere_mode) {
@@ -277,6 +360,16 @@ SimConfig default_sim_config() {
     config.receiver = {20.0, 120.0, 100.0};
     config.ttff = {StartupMode::HOT, 300LL * NANOSECONDS_PER_SECOND, 30LL * NANOSECONDS_PER_SECOND};
     config.rea = {300LL * NANOSECONDS_PER_SECOND, 10LL * NANOSECONDS_PER_SECOND};
+    config.measurement_error = {0.08,
+                                0.03,
+                                0.001,
+                                0.5,
+                                1.5,
+                                {0.40, 0.10, 1.5, 1.0},
+                                {0.50, 0.12, 2.0, 1.5},
+                                {0.70, 0.15, 2.5, 2.0},
+                                {0.40, 0.10, 1.5, 0.8},
+                                {0.25, 0.80, 0.20, 4.5}};
     config.seed = 1U;
     return config;
 }
@@ -303,6 +396,10 @@ bool validate_sim_config(const SimConfig& config, std::string* error_message) {
     if (!std::isfinite(config.solution_elevation_mask_deg) || config.solution_elevation_mask_deg < 0.0 ||
         config.solution_elevation_mask_deg > 90.0) {
         set_error(error_message, "solution_elevation_mask_deg must be within [0, 90]");
+        return false;
+    }
+    if (!valid_measurement_error_config(config.measurement_error)) {
+        set_error(error_message, "measurement_error configuration is invalid");
         return false;
     }
     if (config.measurement_noise_enabled) {
@@ -380,6 +477,7 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                                         "output_eph",
                                         "output_ion",
                                         "measurement_noise_enabled",
+                                        "measurement_error",
                                         "multipath_enabled",
                                         "receiver_clock_bias_m",
                                         "receiver_clock_drift_mps",
@@ -390,7 +488,7 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                                         "seed"};
 
     SimConfig parsed = default_sim_config();
-    bool success = validate_object_keys(root, "root", allowed_keys, 17U, error_message);
+    bool success = validate_object_keys(root, "root", allowed_keys, 18U, error_message);
 
     double duration_sec = static_cast<double>(parsed.duration_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
     const char* scenario_name = scenario_type_name(parsed.scenario);
@@ -415,8 +513,8 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
             read_optional_string(root, "atmosphere_mode", &atmosphere_name, error_message) &&
             parse_atmosphere_mode(atmosphere_name, &parsed.atmosphere_mode, error_message) &&
             parse_receiver(root, &parsed, error_message) && parse_ttff(root, &parsed, error_message) &&
-            parse_rea(root, &parsed, error_message) && parse_seed(root, &parsed, error_message) &&
-            validate_sim_config(parsed, error_message);
+            parse_rea(root, &parsed, error_message) && parse_measurement_error(root, &parsed, error_message) &&
+            parse_seed(root, &parsed, error_message) && validate_sim_config(parsed, error_message);
     }
 
     cJSON_Delete(root);

@@ -31,6 +31,15 @@ TEST_F(SimConfigTest, FrozenDefaultsAreCentralized) {
     EXPECT_TRUE(config.output_eph);
     EXPECT_TRUE(config.output_ion);
     EXPECT_FALSE(config.measurement_noise_enabled);
+    EXPECT_DOUBLE_EQ(config.measurement_error.psr_sigma_m, 0.08);
+    EXPECT_DOUBLE_EQ(config.measurement_error.doppler_sigma_mps, 0.03);
+    EXPECT_DOUBLE_EQ(config.measurement_error.adr_sigma_m, 0.001);
+    EXPECT_DOUBLE_EQ(config.measurement_error.cn0_sigma_dbhz, 0.5);
+    EXPECT_DOUBLE_EQ(config.measurement_error.psr_correlation_tau_sec, 1.5);
+    EXPECT_DOUBLE_EQ(config.measurement_error.ttff_hot.psr_extra_sigma_m, 0.40);
+    EXPECT_DOUBLE_EQ(config.measurement_error.ttff_cold.psr_extra_sigma_m, 0.70);
+    EXPECT_DOUBLE_EQ(config.measurement_error.rea_reacquisition.decay_tau_sec, 0.8);
+    EXPECT_DOUBLE_EQ(config.measurement_error.rea_fade.duration_sec, 0.25);
     EXPECT_FALSE(config.multipath_enabled);
     EXPECT_DOUBLE_EQ(config.receiver_clock_bias_m, 0.0);
     EXPECT_DOUBLE_EQ(config.receiver_clock_drift_mps, 0.0);
@@ -117,6 +126,62 @@ TEST_F(SimConfigTest, RejectsUnsupportedRateAndV1Noise) {
     gnss_sim::SimConfig config{};
     std::string error_message;
     EXPECT_FALSE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message));
+}
+
+TEST_F(SimConfigTest, LoadsMeasurementErrorOverridesWhileNoiseRemainsDisabled) {
+    write_test_config(R"json({
+        "measurement_error": {
+            "psr_sigma_m": 0.12,
+            "doppler_sigma_mps": 0.04,
+            "adr_sigma_m": 0.002,
+            "cn0_sigma_dbhz": 0.7,
+            "psr_correlation_tau_sec": 2.5,
+            "ttff_hot": {
+                "psr_extra_sigma_m": 0.6,
+                "doppler_extra_sigma_mps": 0.2,
+                "cn0_extra_sigma_dbhz": 2.2,
+                "decay_tau_sec": 1.2
+            },
+            "rea_fade": {
+                "duration_sec": 0.4,
+                "psr_extra_sigma_m": 0.9,
+                "doppler_extra_sigma_mps": 0.25,
+                "cn0_drop_db": 5.0
+            }
+        }
+    })json");
+
+    gnss_sim::SimConfig config{};
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message)) << error_message;
+    EXPECT_FALSE(config.measurement_noise_enabled);
+    EXPECT_DOUBLE_EQ(config.measurement_error.psr_sigma_m, 0.12);
+    EXPECT_DOUBLE_EQ(config.measurement_error.doppler_sigma_mps, 0.04);
+    EXPECT_DOUBLE_EQ(config.measurement_error.adr_sigma_m, 0.002);
+    EXPECT_DOUBLE_EQ(config.measurement_error.cn0_sigma_dbhz, 0.7);
+    EXPECT_DOUBLE_EQ(config.measurement_error.psr_correlation_tau_sec, 2.5);
+    EXPECT_DOUBLE_EQ(config.measurement_error.ttff_hot.psr_extra_sigma_m, 0.6);
+    EXPECT_DOUBLE_EQ(config.measurement_error.ttff_hot.decay_tau_sec, 1.2);
+    EXPECT_DOUBLE_EQ(config.measurement_error.rea_fade.duration_sec, 0.4);
+    EXPECT_DOUBLE_EQ(config.measurement_error.rea_fade.cn0_drop_db, 5.0);
+}
+
+TEST_F(SimConfigTest, RejectsInvalidMeasurementErrorConfiguration) {
+    write_test_config(R"json({"measurement_error":{"psr_sigma_m":-0.1}})json");
+
+    gnss_sim::SimConfig config{};
+    std::string error_message;
+    EXPECT_FALSE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message));
+    EXPECT_NE(error_message.find("measurement_error"), std::string::npos);
+}
+
+TEST_F(SimConfigTest, MeasurementNoiseMasterSwitchRemainsRejectedUntilIntegration) {
+    write_test_config(R"json({"measurement_noise_enabled":true})json");
+
+    gnss_sim::SimConfig config{};
+    std::string error_message;
+    EXPECT_FALSE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message));
+    EXPECT_NE(error_message.find("measurement noise is not supported"), std::string::npos);
 }
 
 } // namespace

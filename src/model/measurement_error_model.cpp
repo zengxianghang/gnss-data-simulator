@@ -36,8 +36,8 @@ bool same_lock(const MeasurementErrorState& state, const SignalTracker& tracker,
 
 std::uint64_t lock_seed(std::uint64_t run_seed, const SignalTracker& tracker, int satellite_number) {
     std::uint64_t value = mix64(run_seed ^ UINT64_C(0x6a09e667f3bcc909));
-    value ^= mix64(static_cast<std::uint64_t>(static_cast<unsigned int>(satellite_number)) +
-                   UINT64_C(0x9e3779b97f4a7c15));
+    value ^=
+        mix64(static_cast<std::uint64_t>(static_cast<unsigned int>(satellite_number)) + UINT64_C(0x9e3779b97f4a7c15));
     value ^= mix64(static_cast<std::uint64_t>(static_cast<unsigned int>(tracker.signal_id) + 1U) << 17U);
     value ^= mix64(static_cast<std::uint64_t>(static_cast<unsigned int>(tracker.tracking_start_time.gps_week)) << 32U);
     value ^= mix64(static_cast<std::uint64_t>(tracker.tracking_start_time.tow_ns));
@@ -76,7 +76,7 @@ double gaussian(MeasurementErrorState* state) {
 }
 
 const MeasurementTransientErrorConfig* transient_config(const MeasurementErrorConfig& config,
-                                                         MeasurementErrorPhase phase) {
+                                                        MeasurementErrorPhase phase) {
     switch (phase) {
         case MeasurementErrorPhase::kTtffHot:
             return &config.ttff_hot;
@@ -149,8 +149,7 @@ bool compute_measurement_error_sigmas(const MeasurementErrorConfig& config, cons
         const double elapsed_sec = static_cast<double>(lock_time_ns) / kNanosecondsPerSecond;
         const double decay = std::exp(-elapsed_sec / transient->decay_tau_sec);
         result.psr_sigma_m = std::hypot(result.psr_sigma_m, transient->psr_extra_sigma_m * decay);
-        result.doppler_sigma_mps =
-            std::hypot(result.doppler_sigma_mps, transient->doppler_extra_sigma_mps * decay);
+        result.doppler_sigma_mps = std::hypot(result.doppler_sigma_mps, transient->doppler_extra_sigma_mps * decay);
         result.cn0_sigma_dbhz = std::hypot(result.cn0_sigma_dbhz, transient->cn0_extra_sigma_dbhz * decay);
     }
 

@@ -1,11 +1,10 @@
 #include "gnss/nav_output_record.h"
 
+#include <cmath>
+
 extern "C" {
 #include <rtklib.h>
 }
-
-#include <cmath>
-
 namespace gnss_sim {
 namespace {
 

@@ -1,9 +1,5 @@
 #include "gnss/galileo_has_adapter.h"
 
-extern "C" {
-#include <rtklib.h>
-}
-
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -13,6 +9,9 @@ extern "C" {
 #include <utility>
 #include <vector>
 
+extern "C" {
+#include <rtklib.h>
+}
 namespace gnss_sim {
 namespace {
 

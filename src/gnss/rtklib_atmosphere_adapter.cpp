@@ -1,11 +1,10 @@
 #include "gnss/rtklib_adapter.h"
 
+#include <cmath>
+
 extern "C" {
 #include <rtklib.h>
 }
-
-#include <cmath>
-
 namespace gnss_sim {
 
 struct RtklibNavStore {

@@ -1,13 +1,12 @@
 #include "gnss/rtklib_adapter.h"
 
+#include <cmath>
+#include <cstdio>
+
 extern "C" {
 #include <rtklib.h>
 #include <rtklib_signal_bias_ext.h>
 }
-
-#include <cmath>
-#include <cstdio>
-
 namespace gnss_sim {
 
 struct RtklibNavStore {

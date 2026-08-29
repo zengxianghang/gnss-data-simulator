@@ -2,11 +2,6 @@
 
 #include "gnss/signal_definitions.h"
 
-extern "C" {
-#include <rtklib.h>
-#include <rtklib_residual_ext.h>
-}
-
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -20,6 +15,10 @@ extern "C" {
 #include <utility>
 #include <vector>
 
+extern "C" {
+#include <rtklib.h>
+#include <rtklib_residual_ext.h>
+}
 namespace gnss_sim::residual_validator {
 namespace {
 

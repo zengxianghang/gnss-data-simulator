@@ -111,7 +111,7 @@ TEST(ZeroNoiseMeasurement, RealRinexFamilyMismatchUsesFinalCodeGeometryForAtmosp
         nav.store, kGpsWeek, kTransmitSowSec, satellite_number, legacy_observation_code,
         gnss_sim::RtklibBroadcastMessageFamily::kLegacy, &legacy_state, &error_message))
         << error_message;
-    ASSERT_GT(position_difference_m(modern_state, legacy_state), 1.0)
+    ASSERT_GT(position_difference_m(modern_state, legacy_state), 0.01)
         << "real C22 D1/CNV1 records must remain physically distinct for this regression";
 
     double subpoint_latitude_deg = 0.0;

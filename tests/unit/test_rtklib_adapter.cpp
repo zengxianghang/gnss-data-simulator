@@ -1,3 +1,4 @@
+#include "gnss/nav_output_record.h"
 #include "gnss/rtklib_adapter.h"
 #include "gnss_sim/simulator.h"
 
@@ -203,6 +204,153 @@ TEST(RtklibAdapterErrors, MissingAndInvalidNavigationFilesFailClearly) {
     EXPECT_FALSE(error_message.empty());
 
     gnss_sim::destroy_rtklib_nav_store(store);
+}
+
+bool find_projected_ephemeris(const gnss_sim::RtklibNavStore* store, gnss_sim::NavOutputSystem system, int prn,
+                              gnss_sim::RtklibBroadcastMessageFamily family, gnss_sim::NavOutputRecord* result,
+                              std::string* error_message) {
+    const int count = gnss_sim::rtklib_nav_output_record_count(store);
+    for (int index = 0; index < count; ++index) {
+        gnss_sim::NavOutputRecord record{};
+        if (!gnss_sim::rtklib_nav_output_record(store, index, &record, error_message)) {
+            return false;
+        }
+        if (record.kind == gnss_sim::RtklibNavRecordKind::kEphemeris && record.ephemeris.system == system &&
+            record.ephemeris.prn == prn && record.ephemeris.message_family == family) {
+            *result = record;
+            return true;
+        }
+    }
+    return false;
+}
+
+TEST_F(RtklibAdapterTest, SelectedEphemerisIdentityCoversFamiliesAndToeInstances) {
+    std::string error_message;
+    const std::string companion_path =
+        std::string(GNSS_SIM_TEST_DATA_DIR) + "/brd400dlr_rinex4_galileo_companion_nav.rnx";
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(store_, companion_path.c_str(), &error_message)) << error_message;
+
+    struct InstanceQuery {
+        gnss_sim::NavOutputSystem system;
+        int prn;
+        gnss_sim::RtklibBroadcastMessageFamily family;
+    };
+    const InstanceQuery queries[] = {
+        {gnss_sim::NavOutputSystem::kGalileo, 2, gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav},
+        {gnss_sim::NavOutputSystem::kGalileo, 2, gnss_sim::RtklibBroadcastMessageFamily::kGalileoFnav},
+        {gnss_sim::NavOutputSystem::kGalileo, 5, gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav},
+        {gnss_sim::NavOutputSystem::kGalileo, 5, gnss_sim::RtklibBroadcastMessageFamily::kGalileoFnav},
+    };
+    for (const InstanceQuery& query : queries) {
+        gnss_sim::NavOutputRecord record{};
+        if (!find_projected_ephemeris(store_, query.system, query.prn, query.family, &record, &error_message)) {
+            FAIL() << "no projected record for prn " << query.prn << " family " << static_cast<int>(query.family)
+                   << ": " << error_message;
+        }
+        gnss_sim::RtklibSatelliteState state{};
+        gnss_sim::RtklibSelectedEphemerisInfo identity{};
+        const int toe_week = record.ephemeris.toe_week;
+        const double toe_sow = record.ephemeris.toe_sow_sec;
+        ASSERT_TRUE(gnss_sim::get_rtklib_signal_satellite_state(store_, toe_week, toe_sow,
+                                                                record.ephemeris.satellite_number, 1, query.family,
+                                                                &state, &error_message, &identity))
+            << error_message;
+        EXPECT_EQ(identity.satellite_number, record.ephemeris.satellite_number);
+        EXPECT_EQ(identity.message_family, query.family);
+        EXPECT_EQ(identity.iode, record.ephemeris.iode);
+        EXPECT_EQ(identity.toe_week, toe_week);
+        EXPECT_DOUBLE_EQ(identity.toe_sow_sec, toe_sow);
+        EXPECT_EQ(identity.iodc, record.ephemeris.iodc);
+        EXPECT_EQ(identity.toc_week, record.ephemeris.toc_week);
+        EXPECT_DOUBLE_EQ(identity.toc_sow_sec, record.ephemeris.toc_sow_sec);
+    }
+
+    // Same satellite + family, different real Toe instance: the selection must return
+    // the identity of the instance whose Toe matches the queried epoch, proving Toe is
+    // part of the selected identity.
+    gnss_sim::NavOutputRecord first{};
+    gnss_sim::NavOutputRecord second{};
+    ASSERT_TRUE(find_projected_ephemeris(store_, gnss_sim::NavOutputSystem::kGalileo, 2,
+                                         gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav, &first, &error_message))
+        << error_message;
+    const int first_index = static_cast<int>(&first - &first);
+    static_cast<void>(first_index);
+    int second_found = 0;
+    for (int index = 0; index < gnss_sim::rtklib_nav_output_record_count(store_); ++index) {
+        gnss_sim::NavOutputRecord record{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(store_, index, &record, &error_message)) << error_message;
+        if (record.kind == gnss_sim::RtklibNavRecordKind::kEphemeris &&
+            record.ephemeris.system == gnss_sim::NavOutputSystem::kGalileo && record.ephemeris.prn == 2 &&
+            record.ephemeris.message_family == gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav &&
+            record.ephemeris.iode != first.ephemeris.iode) {
+            second = record;
+            ++second_found;
+        }
+    }
+    ASSERT_EQ(second_found, 1) << "the fixture must hold two E02 INAV instances with distinct IODnav";
+    gnss_sim::RtklibSatelliteState state{};
+    gnss_sim::RtklibSelectedEphemerisInfo identity{};
+    ASSERT_TRUE(gnss_sim::get_rtklib_signal_satellite_state(
+        store_, second.ephemeris.toe_week, second.ephemeris.toe_sow_sec, second.ephemeris.satellite_number, 1,
+        gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav, &state, &error_message, &identity))
+        << error_message;
+    EXPECT_EQ(identity.iode, second.ephemeris.iode);
+    EXPECT_EQ(identity.toe_week, second.ephemeris.toe_week);
+    EXPECT_DOUBLE_EQ(identity.toe_sow_sec, second.ephemeris.toe_sow_sec);
+    EXPECT_FALSE(identity.toe_week == first.ephemeris.toe_week && identity.toe_sow_sec == first.ephemeris.toe_sow_sec)
+        << "the two real instances must be distinguishable by selected Toe identity";
+
+    // Family coverage over the five-system fixture: GPS/QZSS legacy, GLONASS FDMA, and
+    // BeiDou legacy records must all report their real selected identity.
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(store_, rinex4_acceptance_nav_path().c_str(), &error_message))
+        << error_message;
+    const InstanceQuery family_queries[] = {
+        {gnss_sim::NavOutputSystem::kGps, 1, gnss_sim::RtklibBroadcastMessageFamily::kLegacy},
+        {gnss_sim::NavOutputSystem::kQzss, 196, gnss_sim::RtklibBroadcastMessageFamily::kLegacy},
+        {gnss_sim::NavOutputSystem::kBeidou, 6, gnss_sim::RtklibBroadcastMessageFamily::kLegacy},
+    };
+    for (const InstanceQuery& query : family_queries) {
+        gnss_sim::NavOutputRecord record{};
+        if (!find_projected_ephemeris(store_, query.system, query.prn, query.family, &record, &error_message)) {
+            FAIL() << "no projected record for system " << static_cast<int>(query.system) << " prn " << query.prn
+                   << ": " << error_message;
+        }
+        gnss_sim::RtklibSatelliteState state{};
+        gnss_sim::RtklibSelectedEphemerisInfo identity{};
+        const int observation_code = query.system == gnss_sim::NavOutputSystem::kBeidou ? 40 : 1;
+        ASSERT_TRUE(gnss_sim::get_rtklib_signal_satellite_state(
+            store_, record.ephemeris.toe_week, record.ephemeris.toe_sow_sec, record.ephemeris.satellite_number,
+            observation_code, query.family, &state, &error_message, &identity))
+            << "family query failed for system " << static_cast<int>(query.system) << " prn " << query.prn << ": "
+            << error_message;
+        EXPECT_EQ(identity.iode, record.ephemeris.iode);
+        EXPECT_EQ(identity.toe_week, record.ephemeris.toe_week);
+        EXPECT_DOUBLE_EQ(identity.toe_sow_sec, record.ephemeris.toe_sow_sec);
+    }
+
+    // GLONASS FDMA identity through the GLONASS ephemeris path.
+    gnss_sim::NavOutputRecord glonass_record{};
+    bool found_glonass = false;
+    for (int index = 0; index < gnss_sim::rtklib_nav_output_record_count(store_); ++index) {
+        gnss_sim::NavOutputRecord record{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(store_, index, &record, &error_message)) << error_message;
+        if (record.kind == gnss_sim::RtklibNavRecordKind::kGlonassEphemeris) {
+            glonass_record = record;
+            found_glonass = true;
+            break;
+        }
+    }
+    ASSERT_TRUE(found_glonass) << "the fixture must contain a GLONASS record";
+    gnss_sim::RtklibSatelliteState glonass_state{};
+    gnss_sim::RtklibSelectedEphemerisInfo glonass_identity{};
+    ASSERT_TRUE(gnss_sim::get_rtklib_signal_satellite_state(
+        store_, glonass_record.glonass.toe_week, glonass_record.glonass.toe_sow_sec,
+        glonass_record.glonass.satellite_number, 1, gnss_sim::RtklibBroadcastMessageFamily::kGlonassFdma,
+        &glonass_state, &error_message, &glonass_identity))
+        << error_message;
+    EXPECT_EQ(glonass_identity.iode, glonass_record.glonass.iode);
+    EXPECT_EQ(glonass_identity.toe_week, glonass_record.glonass.toe_week);
+    EXPECT_DOUBLE_EQ(glonass_identity.toe_sow_sec, glonass_record.glonass.toe_sow_sec);
 }
 
 } // namespace

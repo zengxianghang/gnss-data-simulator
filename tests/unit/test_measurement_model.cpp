@@ -228,13 +228,14 @@ TEST(ZeroNoiseMeasurement, ComponentsMatchReferenceEquationsAndAtmosphereSigns) 
     atmosphere.troposphere_delay_m = 2.1;
     gnss_sim::CarrierAmbiguityState ambiguity{};
     gnss_sim::MeasurementObservation observation{};
-    ASSERT_TRUE(gnss_sim::generate_zero_noise_measurement(nav.store, geometry, receiver, tracker, atmosphere,
-                                                          &ambiguity, &observation, &error_message))
+    constexpr double kExplicitCodeBiasM = 1.25;
+    ASSERT_TRUE(gnss_sim::generate_zero_noise_measurement_with_explicit_code_bias(
+        geometry, receiver, tracker, atmosphere, kExplicitCodeBiasM, &ambiguity, &observation, &error_message))
         << error_message;
 
     const double expected_clock_m = kSpeedOfLightMps * geometry.satellite_state.clock_bias_sec;
     const double expected_clock_drift_mps = kSpeedOfLightMps * geometry.satellite_state.clock_drift_sec_per_sec;
-    const double expected_pr = geometry.geometric_range_m - expected_clock_m + observation.code_bias_m + 6.25 + 2.1;
+    const double expected_pr = geometry.geometric_range_m - expected_clock_m + kExplicitCodeBiasM + 6.25 + 2.1;
     const double expected_doppler = -(geometry.range_rate_mps - expected_clock_drift_mps) / observation.wavelength_m;
     const double expected_adr =
         (geometry.geometric_range_m - expected_clock_m - 6.25 + 2.1) / observation.wavelength_m +
@@ -242,6 +243,7 @@ TEST(ZeroNoiseMeasurement, ComponentsMatchReferenceEquationsAndAtmosphereSigns) 
     EXPECT_NEAR(observation.pseudorange_m, expected_pr, 1.0e-9);
     EXPECT_NEAR(observation.doppler_hz, expected_doppler, 1.0e-12);
     EXPECT_NEAR(observation.adr_cycles, expected_adr, 1.0e-8);
+    EXPECT_DOUBLE_EQ(observation.code_bias_m, kExplicitCodeBiasM);
     EXPECT_TRUE(observation.pseudorange_valid);
     EXPECT_TRUE(observation.doppler_valid);
     EXPECT_TRUE(observation.adr_valid);

@@ -326,6 +326,7 @@ bool finish_zero_noise_measurement(const SignalDefinition& signal, const Satelli
     result.doppler_valid = measurement_geometry_usable && tracker.doppler_valid;
     result.adr_valid = measurement_geometry_usable && tracker.adr_valid && ambiguity_state->initialized;
 
+    static_cast<void>(receiver);
     *observation = result;
     return true;
 }
@@ -364,6 +365,7 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
         return false;
     }
 
+    AtmosphereCorrection final_atmosphere = atmosphere;
     const bool family_code_bias_available =
         signal_family_bias_available &&
         code_model.code_bias_status != BroadcastCodeBiasStatus::kUnavailableForMessageFamily;
@@ -371,18 +373,26 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
         int observation_code = 0;
         int frequency_index = 0;
         double code_line_of_sight_ecef[3]{};
+        double code_azimuth_rad = 0.0;
+        double code_elevation_rad = 0.0;
         if (!signal_rtklib_observation_code(*signal, &observation_code, &frequency_index) ||
             !get_rtklib_signal_satellite_state(nav_store, geometry.transmit_gps_week, geometry.transmit_sow_sec,
                                                geometry.satellite_number, observation_code, bias_data.message_family,
                                                &code_model.satellite_state, error_message) ||
             !rtklib_geometric_distance(code_model.satellite_state.position_ecef_m, receiver.position_ecef_m,
-                                       &code_model.geometric_range_m, code_line_of_sight_ecef)) {
+                                       &code_model.geometric_range_m, code_line_of_sight_ecef) ||
+            !rtklib_azimuth_elevation(receiver.position_ecef_m, code_line_of_sight_ecef, &code_azimuth_rad,
+                                      &code_elevation_rad) ||
+            !compute_atmosphere_correction(atmosphere.mode, nav_store, geometry.receive_time, tracker.signal_id,
+                                           bias_data.glonass_fcn, receiver.position_ecef_m, code_azimuth_rad,
+                                           code_elevation_rad, &final_atmosphere, error_message)) {
             return false;
         }
+        static_cast<void>(frequency_index);
     }
 
-    return finish_zero_noise_measurement(*signal, geometry, receiver, tracker, atmosphere, code_model, ambiguity_state,
-                                         observation, error_message);
+    return finish_zero_noise_measurement(*signal, geometry, receiver, tracker, final_atmosphere, code_model,
+                                         ambiguity_state, observation, error_message);
 }
 
 bool generate_zero_noise_measurement_with_explicit_code_bias(

@@ -26,6 +26,17 @@ extern "C" {
 #include <string>
 #include <vector>
 
+namespace gnss_sim {
+
+// Mirrors the identical RtklibNavStore definition shared by the adapter translation
+// units so these tests can retarget broadcast-identity fields of appended real records
+// in place; every orbital and clock value stays real RINEX-derived data.
+struct RtklibNavStore {
+    nav_t nav;
+};
+
+} // namespace gnss_sim
+
 namespace {
 
 std::string data_path(const char* name) {
@@ -682,6 +693,260 @@ TEST(NavOutputWriter, RealGalileoInavSerializedRecordRoundTripsPositionAndClock)
 
     EXPECT_TRUE(verified_inav_record) << "real BRD400DLR fixture must contain a serializable Galileo INAV record";
     gnss_sim::destroy_rtklib_nav_store(store);
+}
+
+int find_real_galileo_record_index(const gnss_sim::RtklibNavStore* store, int prn,
+                                   gnss_sim::RtklibBroadcastMessageFamily family, std::string* error_message) {
+    const int count = gnss_sim::rtklib_nav_output_record_count(store);
+    for (int index = 0; index < count; ++index) {
+        gnss_sim::NavOutputRecord record{};
+        if (!gnss_sim::rtklib_nav_output_record(store, index, &record, error_message)) {
+            return -1;
+        }
+        if (record.kind == gnss_sim::RtklibNavRecordKind::kEphemeris &&
+            record.ephemeris.system == gnss_sim::NavOutputSystem::kGalileo && record.ephemeris.prn == prn &&
+            record.ephemeris.message_family == family) {
+            return index;
+        }
+    }
+    return -1;
+}
+
+// Appends the real record at source_index into destination and retargets only the
+// broadcast-identity fields (satellite, IODnav, Toe) so the copy represents one Galileo
+// navigation instance of one satellite. Every orbital and clock value stays the real
+// RINEX-derived value of the copied record; nothing is synthesized or interpolated.
+bool append_galileo_instance(const gnss_sim::RtklibNavStore* source, int source_index,
+                             gnss_sim::RtklibNavStore* destination, int satellite_number, int iode, gtime_t toe,
+                             std::string* error_message) {
+    if (!gnss_sim::rtklib_copy_nav_record(source, source_index, destination, error_message)) {
+        return false;
+    }
+    eph_t& appended = destination->nav.eph[destination->nav.n - 1];
+    appended.sat = satellite_number;
+    appended.iode = iode;
+    appended.toe = toe;
+    return true;
+}
+
+bool format_store_record(const gnss_sim::RtklibNavStore* store, int index, gnss_sim::NavOutputRecord* record,
+                         std::string* message, bool* supported, std::string* error_message) {
+    if (!gnss_sim::rtklib_nav_output_record(store, index, record, error_message)) {
+        return false;
+    }
+    const gnss_sim::SimTime time = output_time();
+    return gnss_sim::format_novatel_nav_output_record(*record, time, message, supported, error_message);
+}
+
+void expect_serialized_galileo_clock(const std::vector<std::string>& fields, int first_index, const eph_t& expected,
+                                     const char* label) {
+    const double expected_clock[3] = {expected.f0, expected.f1, expected.f2};
+    for (int axis = 0; axis < 3; ++axis) {
+        EXPECT_NEAR(std::stod(fields[first_index + axis]), expected_clock[axis],
+                    1e-12 * (std::fabs(expected_clock[axis]) + 1e-30))
+            << label << " clock coefficient " << axis << " must come from the matching navigation instance";
+    }
+}
+
+TEST(NavOutputWriter, RealGalileoMatchingInstanceInavFnavSerializesOneCombinedRecord) {
+    gnss_sim::RtklibNavStore* base = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(base, nullptr);
+    std::string error_message;
+    ASSERT_TRUE(
+        gnss_sim::load_rinex_nav_file(base, data_path("brd400dlr_rinex4_acceptance_nav.rnx").c_str(), &error_message))
+        << error_message;
+    const int inav_index =
+        find_real_galileo_record_index(base, 2, gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav, &error_message);
+    const int fnav_index =
+        find_real_galileo_record_index(base, 23, gnss_sim::RtklibBroadcastMessageFamily::kGalileoFnav, &error_message);
+    ASSERT_GE(inav_index, 0) << error_message;
+    ASSERT_GE(fnav_index, 0) << error_message;
+    const eph_t inav_source = base->nav.eph[inav_index];
+    const eph_t fnav_source = base->nav.eph[fnav_index];
+
+    gnss_sim::RtklibNavStore* receiver = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(receiver, nullptr);
+    ASSERT_TRUE(append_galileo_instance(base, inav_index, receiver, inav_source.sat, inav_source.iode, inav_source.toe,
+                                        &error_message))
+        << error_message;
+    ASSERT_TRUE(append_galileo_instance(base, fnav_index, receiver, inav_source.sat, inav_source.iode, inav_source.toe,
+                                        &error_message))
+        << error_message;
+
+    gnss_sim::NavOutputRecord record{};
+    std::string message;
+    bool supported = false;
+    // The INAV-source record owns the reversible orbit representation (issue 90) and
+    // carries the combined clock blocks of the matching T0 instances.
+    ASSERT_TRUE(format_store_record(receiver, 0, &record, &message, &supported, &error_message)) << error_message;
+    ASSERT_TRUE(supported) << "a matching INAV/FNAV instance pair must serialize as one combined record";
+    EXPECT_TRUE(valid_ascii_crc(message));
+    EXPECT_EQ(log_name(message), "GALEPHEMERISA");
+    const std::vector<std::string> fields = split_body_fields(body_between_semicolon_and_crc(message));
+    ASSERT_EQ(fields.size(), 38u);
+    EXPECT_EQ(fields[1], "TRUE");
+    EXPECT_EQ(fields[2], "TRUE");
+    expect_serialized_galileo_clock(fields, 29, fnav_source, "FNAV");
+    expect_serialized_galileo_clock(fields, 33, inav_source, "INAV");
+    // The FNAV-source record of the same instance must not emit a second orbit
+    // representation while the INAV-source record exists for that instance.
+    ASSERT_TRUE(format_store_record(receiver, 1, &record, &message, &supported, &error_message)) << error_message;
+    EXPECT_FALSE(supported);
+    gnss_sim::destroy_rtklib_nav_store(receiver);
+    gnss_sim::destroy_rtklib_nav_store(base);
+}
+
+TEST(NavOutputWriter, RealGalileoStaleInavDoesNotSuppressDifferentInstanceFnav) {
+    gnss_sim::RtklibNavStore* base = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(base, nullptr);
+    std::string error_message;
+    ASSERT_TRUE(
+        gnss_sim::load_rinex_nav_file(base, data_path("brd400dlr_rinex4_acceptance_nav.rnx").c_str(), &error_message))
+        << error_message;
+    const int inav_index =
+        find_real_galileo_record_index(base, 2, gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav, &error_message);
+    const int fnav_index =
+        find_real_galileo_record_index(base, 23, gnss_sim::RtklibBroadcastMessageFamily::kGalileoFnav, &error_message);
+    ASSERT_GE(inav_index, 0) << error_message;
+    ASSERT_GE(fnav_index, 0) << error_message;
+    const eph_t inav_source = base->nav.eph[inav_index];
+
+    gnss_sim::RtklibNavStore* receiver = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(receiver, nullptr);
+    ASSERT_TRUE(append_galileo_instance(base, inav_index, receiver, inav_source.sat, inav_source.iode, inav_source.toe,
+                                        &error_message))
+        << error_message;
+    ASSERT_TRUE(append_galileo_instance(base, fnav_index, receiver, inav_source.sat, inav_source.iode + 1,
+                                        timeadd(inav_source.toe, 1800.0), &error_message))
+        << error_message;
+
+    gnss_sim::NavOutputRecord record{};
+    std::string message;
+    bool supported = false;
+    ASSERT_TRUE(format_store_record(receiver, 0, &record, &message, &supported, &error_message)) << error_message;
+    EXPECT_TRUE(supported);
+    const std::vector<std::string> historical = split_body_fields(body_between_semicolon_and_crc(message));
+    ASSERT_EQ(historical.size(), 38u);
+    EXPECT_EQ(historical[1], "FALSE");
+    EXPECT_EQ(historical[2], "TRUE");
+
+    ASSERT_TRUE(format_store_record(receiver, 1, &record, &message, &supported, &error_message)) << error_message;
+    EXPECT_TRUE(supported) << "a stale INAV must not suppress a newer different-instance FNAV update";
+    const std::vector<std::string> fields = split_body_fields(body_between_semicolon_and_crc(message));
+    ASSERT_EQ(fields.size(), 38u);
+    EXPECT_EQ(fields[1], "TRUE");
+    EXPECT_EQ(fields[2], "FALSE") << "an INAV of another IOD/Toe instance must not be reported as a companion";
+    gnss_sim::destroy_rtklib_nav_store(receiver);
+    gnss_sim::destroy_rtklib_nav_store(base);
+}
+
+TEST(NavOutputWriter, RealGalileoAsyncInavFnavInstancesPairByBroadcastIdentity) {
+    gnss_sim::RtklibNavStore* base = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(base, nullptr);
+    std::string error_message;
+    ASSERT_TRUE(
+        gnss_sim::load_rinex_nav_file(base, data_path("brd400dlr_rinex4_acceptance_nav.rnx").c_str(), &error_message))
+        << error_message;
+    const int inav_t0_index =
+        find_real_galileo_record_index(base, 2, gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav, &error_message);
+    const int fnav_t0_index =
+        find_real_galileo_record_index(base, 23, gnss_sim::RtklibBroadcastMessageFamily::kGalileoFnav, &error_message);
+    const int fnav_t1_index =
+        find_real_galileo_record_index(base, 25, gnss_sim::RtklibBroadcastMessageFamily::kGalileoFnav, &error_message);
+    const int inav_t1_index =
+        find_real_galileo_record_index(base, 19, gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav, &error_message);
+    ASSERT_GE(inav_t0_index, 0) << error_message;
+    ASSERT_GE(fnav_t0_index, 0) << error_message;
+    ASSERT_GE(fnav_t1_index, 0) << error_message;
+    ASSERT_GE(inav_t1_index, 0) << error_message;
+
+    // Four distinct real records carry four distinct real clock value sets, so any
+    // instance mixing in the combined record changes the serialized clock values:
+    // instance T0 = INAV E02 + FNAV E23, instance T1 = INAV E19 + FNAV E25.
+    const eph_t inav_t0 = base->nav.eph[inav_t0_index];
+    const eph_t fnav_t0 = base->nav.eph[fnav_t0_index];
+    const eph_t fnav_t1 = base->nav.eph[fnav_t1_index];
+    const eph_t inav_t1 = base->nav.eph[inav_t1_index];
+    const int satellite = inav_t0.sat;
+    const gtime_t toe_t1 = timeadd(inav_t0.toe, 1800.0);
+
+    gnss_sim::RtklibNavStore* receiver = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(receiver, nullptr);
+    ASSERT_TRUE(
+        append_galileo_instance(base, inav_t0_index, receiver, satellite, inav_t0.iode, inav_t0.toe, &error_message))
+        << error_message;
+
+    gnss_sim::NavOutputRecord record{};
+    std::string message;
+    bool supported = false;
+    // After A: the INAV T0 record is a real INAV-only record.
+    ASSERT_TRUE(format_store_record(receiver, 0, &record, &message, &supported, &error_message)) << error_message;
+    ASSERT_TRUE(supported);
+    std::vector<std::string> fields = split_body_fields(body_between_semicolon_and_crc(message));
+    ASSERT_EQ(fields.size(), 38u);
+    EXPECT_EQ(fields[1], "FALSE");
+    EXPECT_EQ(fields[2], "TRUE");
+
+    ASSERT_TRUE(
+        append_galileo_instance(base, fnav_t0_index, receiver, satellite, inav_t0.iode, inav_t0.toe, &error_message))
+        << error_message;
+
+    // After B: the matching T0 FNAV makes the INAV-source record the combined
+    // representation of instance T0; the FNAV-source record does not emit a second orbit.
+    ASSERT_TRUE(format_store_record(receiver, 0, &record, &message, &supported, &error_message)) << error_message;
+    ASSERT_TRUE(supported);
+    fields = split_body_fields(body_between_semicolon_and_crc(message));
+    ASSERT_EQ(fields.size(), 38u);
+    EXPECT_EQ(fields[1], "TRUE");
+    EXPECT_EQ(fields[2], "TRUE");
+    expect_serialized_galileo_clock(fields, 29, fnav_t0, "FNAV T0");
+    expect_serialized_galileo_clock(fields, 33, inav_t0, "INAV T0");
+    ASSERT_TRUE(format_store_record(receiver, 1, &record, &message, &supported, &error_message)) << error_message;
+    EXPECT_FALSE(supported);
+
+    ASSERT_TRUE(
+        append_galileo_instance(base, fnav_t1_index, receiver, satellite, inav_t0.iode + 1, toe_t1, &error_message))
+        << error_message;
+
+    // Step C is the key regression gate: the FNAV T1 update arrives while only the
+    // historical INAV T0 exists for this satellite. It must stay serializable and
+    // single-family instead of being suppressed or combined with the stale INAV.
+    ASSERT_TRUE(format_store_record(receiver, receiver->nav.n - 1, &record, &message, &supported, &error_message))
+        << error_message;
+    EXPECT_TRUE(supported) << "the newer FNAV update must not be lost while its INAV is still missing";
+    fields = split_body_fields(body_between_semicolon_and_crc(message));
+    ASSERT_EQ(fields.size(), 38u);
+    EXPECT_EQ(fields[1], "TRUE");
+    EXPECT_EQ(fields[2], "FALSE");
+
+    ASSERT_TRUE(
+        append_galileo_instance(base, inav_t1_index, receiver, satellite, inav_t0.iode + 1, toe_t1, &error_message))
+        << error_message;
+
+    // After D, only the matching T1 pair combines, and the combined clocks come from the
+    // T1 instances (E19 INAV, E25 FNAV), not from the historical T0 records.
+    ASSERT_TRUE(format_store_record(receiver, receiver->nav.n - 1, &record, &message, &supported, &error_message))
+        << error_message;
+    ASSERT_TRUE(supported);
+    fields = split_body_fields(body_between_semicolon_and_crc(message));
+    ASSERT_EQ(fields.size(), 38u);
+    EXPECT_EQ(fields[1], "TRUE");
+    EXPECT_EQ(fields[2], "TRUE");
+    expect_serialized_galileo_clock(fields, 29, fnav_t1, "FNAV T1");
+    expect_serialized_galileo_clock(fields, 33, inav_t1, "INAV T1");
+
+    // Historical isolation: re-project the T0 INAV record. Its companion FNAV clock must
+    // still come from the T0 FNAV (E23 values), never from the newer T1 FNAV (E25 values).
+    ASSERT_TRUE(format_store_record(receiver, 0, &record, &message, &supported, &error_message)) << error_message;
+    ASSERT_TRUE(supported);
+    fields = split_body_fields(body_between_semicolon_and_crc(message));
+    ASSERT_EQ(fields.size(), 38u);
+    EXPECT_EQ(fields[1], "TRUE");
+    EXPECT_EQ(fields[2], "TRUE");
+    expect_serialized_galileo_clock(fields, 29, fnav_t0, "historical FNAV T0");
+    expect_serialized_galileo_clock(fields, 33, inav_t0, "historical INAV T0");
+    gnss_sim::destroy_rtklib_nav_store(receiver);
+    gnss_sim::destroy_rtklib_nav_store(base);
 }
 
 } // namespace

@@ -1,4 +1,4 @@
-name: tmp-issue71-apply
+name: tmp-issue71-format
 
 on:
   push:
@@ -9,23 +9,24 @@ permissions:
   contents: write
 
 jobs:
-  apply:
-    if: github.event.head_commit.message == 'Apply Issue 71 config patch'
+  format:
+    if: github.event.head_commit.message == 'Format Issue 71 tests'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: issue-71-measurement-error-core
-      - name: Apply deterministic patch
-        run: python3 .github/issue71_apply.py
       - name: Format changed C++
         run: |
-          clang-format -i include/gnss_sim/sim_config.h src/core/sim_config.cpp src/model/measurement_error_model.h src/model/measurement_error_model.cpp tests/unit/test_sim_config.cpp
-      - name: Commit implementation edits
+          clang-format -i include/gnss_sim/sim_config.h src/core/sim_config.cpp src/model/measurement_error_model.h src/model/measurement_error_model.cpp tests/unit/test_measurement_error_model.cpp tests/unit/test_sim_config.cpp
+      - name: Commit formatting
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add CMakeLists.txt include/gnss_sim/sim_config.h src/core/sim_config.cpp src/model/measurement_error_model.h src/model/measurement_error_model.cpp tests/unit/test_sim_config.cpp
+          git add include/gnss_sim/sim_config.h src/core/sim_config.cpp src/model/measurement_error_model.h src/model/measurement_error_model.cpp tests/unit/test_measurement_error_model.cpp tests/unit/test_sim_config.cpp
           git diff --cached --check
-          git commit -m "Add measurement error configuration core"
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Format measurement error core"
           git push

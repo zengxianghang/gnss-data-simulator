@@ -151,6 +151,7 @@ gnss_sim::SimConfig rea_config(bool noise_enabled) {
     config.measurement_error.adr_sigma_m = 0.0;
     config.measurement_error.cn0_sigma_dbhz = 0.0;
     config.measurement_error.rea_reacquisition = {5.0, 0.0, 0.0, 10.0};
+    config.measurement_error.rea_fade.duration_sec = 0.0;
     config.seed = 117U;
     return config;
 }

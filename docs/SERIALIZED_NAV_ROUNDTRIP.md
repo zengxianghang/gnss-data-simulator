@@ -52,3 +52,50 @@ Navigation records are applied to an initially empty RTKLIB navigation store as 
 The existing RANGEA round-trip path remains unchanged and separately loads the original RINEX NAV. It is retained as a reference baseline. The serialized-NAV path is stricter: a generated log must be self-contained enough to produce valid broadcast SPP using only its own RANGEA/EPHA/IONA content.
 
 No synthetic ephemeris or ionosphere data is introduced by this validation path.
+
+## Navigation conversion numerical equivalence (issue 97)
+
+`tests/integration/test_nav_equivalence.cpp` validates that the production conversion path
+preserves the navigation solution numerically, not merely plausibly. Two independent
+navigation stores are built from the same authoritative real RINEX NAV fixture: the
+reference store loads the original RINEX directly, and the round-trip store is constructed
+exclusively through the production chain (projected record -> NovAtel NAV writer ->
+independent serialized-NAV parser -> production RTKLIB input adapter). The reference store
+is never consulted while building or using the round-trip store.
+
+Four deterministic regressions run on the real BRD400DLR fixture and its documented
+Galileo companion fixture:
+
+1. `SatelliteStateMatchesAcrossProductionRoundTrip` — for every serialized record of all
+   five constellations, satellite ECEF position, velocity, clock bias, clock drift, and
+   health are compared at Toe-Δ, Toe, and Toe+Δ epochs through the same RTKLIB broadcast
+   state calculation. Selection is family-restricted so both paths evaluate the same real
+   broadcast instance even when the reference store also holds modern-family records
+   outside the receiver output contract.
+2. `SatelliteStateSelectionMatchesAcrossRealEphemerisTransition` — the real consecutive
+   E02 INAV instances (IODnav 1 and 2) are sampled before, between, and after the
+   transition so older/newer record selection is exercised.
+3. `CorrectionParametersSurviveProductionRoundTrip` — TGD/BGD/ISC-class group-delay and
+   ionosphere/leap-second values are compared at the serialization boundary, and the
+   reconstructed store must hold exactly the serialized instance identity set
+   (satellite + family + IODE/IODnav).
+4. `PairedPositioningMatchesBetweenOriginalRinexAndConvertedNavigation` — the same
+   generated RANGEA epochs are solved twice with identical RTKLIB options (broadcast
+   atmosphere and TGD active on both paths): original-RINEX navigation versus converted
+   EPH/ION navigation.
+
+Measured results on the compact real fixture (frozen tolerances are roughly 75x these
+maxima; see the test constants):
+
+- satellite state: 108 compared states, max position difference 1.3e-8 m (one ulp of the
+  orbit-radius double), max velocity difference 1.3e-5 m/s (RTKLIB differentiates the
+  propagated position, amplifying that ulp over its finite-difference step), clock
+  bias/drift exactly 0;
+- corrections: TGD/BGD and ionosphere/leap-second values round-trip within 1e-12 relative;
+- paired positioning: 59 epochs, max 3D difference 3.2e-8 m, RMS 6.9e-9 m, receiver-clock
+  difference 8.9e-9 m, zero solution-status or used-satellite divergences.
+
+Thirteen records of the fixture (GPS/QZSS CNAV/CNAV2, BeiDou CNVX) are outside the frozen
+receiver output contract and are reported as such; they are not part of the equivalence
+set. No navigation value is synthesized, modified, retargeted, or interpolated anywhere in
+this validation.

@@ -135,7 +135,9 @@ std::string record_identity_key(const gnss_sim::NavOutputRecord& record) {
     key << (keplerian ? gnss_sim::nav_output_system_name(record.ephemeris.system) : "GLO") << ':'
         << (keplerian ? record.ephemeris.prn : record.glonass.prn) << ':'
         << static_cast<int>(keplerian ? record.ephemeris.message_family : record.glonass.message_family) << ':'
-        << (keplerian ? record.ephemeris.iode : record.glonass.iode);
+        << (keplerian ? record.ephemeris.iode : record.glonass.iode) << ':'
+        << (keplerian ? record.ephemeris.toe_week : record.glonass.toe_week) << ':'
+        << (keplerian ? record.ephemeris.toe_sow_sec : record.glonass.toe_sow_sec);
     return key.str();
 }
 
@@ -238,19 +240,31 @@ int kBeidouOrL1cCode(const gnss_sim::NavOutputRecord& record) {
 
 struct StateEquivalenceStats {
     std::uint64_t compared_states = 0;
+    std::uint64_t validity_skipped_samples = 0;
+    std::uint64_t availability_mismatch_samples = 0;
     double max_position_m = 0.0;
     double max_velocity_mps = 0.0;
     double max_clock_bias_s = 0.0;
     double max_clock_drift_sps = 0.0;
 };
 
+enum class StateSampleOutcome {
+    Compared,
+    BothUnavailableValiditySkip,
+    AvailabilityMismatch,
+};
+
 // Compares the family-restricted satellite state of one real broadcast instance at one
-// GPST epoch. Both stores must agree on availability; state values must agree within
-// the frozen tolerances.
-void compare_state_at_epoch(const gnss_sim::RtklibNavStore* reference, const gnss_sim::RtklibNavStore* roundtrip,
-                            int satellite_number, gnss_sim::RtklibBroadcastMessageFamily family, int toe_week,
-                            double toe_sow, int test_week, double test_sow, int observation_code,
-                            StateEquivalenceStats* stats, const char* context) {
+// GPST epoch. When expected_source is provided (the mandatory Toe sample), both stores
+// must select exactly that source record before any state value is compared. Both
+// stores must agree on availability; state values must agree within the frozen
+// tolerances.
+StateSampleOutcome compare_state_at_epoch(const gnss_sim::RtklibNavStore* reference,
+                                          const gnss_sim::RtklibNavStore* roundtrip, int satellite_number,
+                                          gnss_sim::RtklibBroadcastMessageFamily family, int toe_week, double toe_sow,
+                                          int test_week, double test_sow, int observation_code,
+                                          const int* expected_iode, const double* expected_toe_sow,
+                                          StateEquivalenceStats* stats, const char* context) {
     std::string error_message;
     gnss_sim::RtklibSatelliteState reference_state{};
     gnss_sim::RtklibSatelliteState roundtrip_state{};
@@ -263,11 +277,15 @@ void compare_state_at_epoch(const gnss_sim::RtklibNavStore* reference, const gns
         gnss_sim::get_rtklib_signal_satellite_state(roundtrip, test_week, test_sow, satellite_number, observation_code,
                                                     family, &roundtrip_state, &error_message, &roundtrip_identity);
     if (!reference_available && !roundtrip_available) {
-        return;
+        stats->validity_skipped_samples += 1;
+        return StateSampleOutcome::BothUnavailableValiditySkip;
     }
-    ASSERT_TRUE(reference_available && roundtrip_available)
-        << "satellite-state availability must agree at GPST " << test_week << "/" << test_sow << " (" << context
-        << "): " << error_message;
+    if (reference_available != roundtrip_available) {
+        stats->availability_mismatch_samples += 1;
+        ADD_FAILURE() << "one-sided satellite-state availability at GPST " << test_week << "/" << test_sow << " ("
+                      << context << "): reference=" << reference_available << " roundtrip=" << roundtrip_available;
+        return StateSampleOutcome::AvailabilityMismatch;
+    }
     // The selected broadcast instance identity must match before any state value is
     // compared; a close state from a different real ephemeris is not acceptable.
     EXPECT_EQ(reference_identity.satellite_number, roundtrip_identity.satellite_number)
@@ -292,6 +310,15 @@ void compare_state_at_epoch(const gnss_sim::RtklibNavStore* reference, const gns
     // The receiver-log contract re-stamps the transmit time with the log delivery time
     // (issue 84: week-boundary delivery causality), so transmit identity is deliberately
     // reported by the adapter but not asserted here.
+    // At the mandatory Toe sample the selected identity must also equal the current
+    // unchanged source record: this proves that the specific real ephemeris under test
+    // (not an adjacent instance) actually participated in the comparison.
+    if (expected_iode != nullptr && expected_toe_sow != nullptr) {
+        EXPECT_EQ(reference_identity.iode, *expected_iode);
+        EXPECT_DOUBLE_EQ(reference_identity.toe_sow_sec, *expected_toe_sow);
+        EXPECT_EQ(roundtrip_identity.iode, *expected_iode);
+        EXPECT_DOUBLE_EQ(roundtrip_identity.toe_sow_sec, *expected_toe_sow);
+    }
     StateDifference difference{};
     compute_state_difference(reference_state, roundtrip_state, &difference);
     stats->compared_states += 1;
@@ -307,6 +334,7 @@ void compare_state_at_epoch(const gnss_sim::RtklibNavStore* reference, const gns
         << "satellite clock drift mismatch";
     report_state_csv(satellite_number, family, toe_week, toe_sow, test_week, test_sow, reference_identity.iode,
                      roundtrip_identity.iode, difference);
+    return StateSampleOutcome::Compared;
 }
 
 TEST(NavEquivalence, SatelliteStateMatchesAcrossProductionRoundTrip) {
@@ -369,10 +397,11 @@ TEST(NavEquivalence, SatelliteStateMatchesAcrossProductionRoundTrip) {
         std::uint64_t validity_skipped = 0;
         bool toe_compared = false;
         const std::uint64_t state_count_before_toe = stats.compared_states;
-        compare_state_at_epoch(reference, roundtrip, satellite_number, family, toe_week, toe_sow, toe_week, toe_sow,
-                               kBeidouOrL1cCode(record), &stats, "five-system fixture");
+        const StateSampleOutcome toe_outcome =
+            compare_state_at_epoch(reference, roundtrip, satellite_number, family, toe_week, toe_sow, toe_week, toe_sow,
+                                   kBeidouOrL1cCode(record), &iode, &toe_sow, &stats, "five-system fixture");
         ++attempted;
-        if (stats.compared_states > state_count_before_toe) {
+        if (toe_outcome == StateSampleOutcome::Compared) {
             ++compared;
             toe_compared = true;
             ++records_with_state_comparison;
@@ -389,12 +418,12 @@ TEST(NavEquivalence, SatelliteStateMatchesAcrossProductionRoundTrip) {
                     ++test_week;
                 }
                 ++attempted;
-                const std::uint64_t state_count_before = stats.compared_states;
-                compare_state_at_epoch(reference, roundtrip, satellite_number, family, toe_week, toe_sow, test_week,
-                                       test_sow, kBeidouOrL1cCode(record), &stats, "five-system fixture");
-                if (stats.compared_states > state_count_before) {
+                const StateSampleOutcome offset_outcome = compare_state_at_epoch(
+                    reference, roundtrip, satellite_number, family, toe_week, toe_sow, test_week, test_sow,
+                    kBeidouOrL1cCode(record), nullptr, nullptr, &stats, "five-system fixture");
+                if (offset_outcome == StateSampleOutcome::Compared) {
                     ++compared;
-                } else {
+                } else if (offset_outcome == StateSampleOutcome::BothUnavailableValiditySkip) {
                     ++validity_skipped;
                 }
             }
@@ -415,10 +444,11 @@ TEST(NavEquivalence, SatelliteStateMatchesAcrossProductionRoundTrip) {
     std::cout << "NAV_EQUIV_STATE_SUMMARY,serialized_ephemeris_records=" << serialized_ephemeris_records
               << ",records_with_successful_state_comparison=" << records_with_state_comparison
               << ",attempted_state_epochs=" << attempted_epochs << ",compared_state_epochs=" << stats.compared_states
-              << ",validity_skipped_epochs=" << validity_skipped_epochs << ",rejected_records=" << rejected_count
-              << ",max_position_m=" << stats.max_position_m << ",max_velocity_mps=" << stats.max_velocity_mps
-              << ",max_clock_bias_s=" << stats.max_clock_bias_s << ",max_clock_drift_sps=" << stats.max_clock_drift_sps
-              << "\n";
+              << ",validity_skipped_epochs=" << validity_skipped_epochs
+              << ",availability_mismatch_epochs=" << stats.availability_mismatch_samples
+              << ",rejected_records=" << rejected_count << ",max_position_m=" << stats.max_position_m
+              << ",max_velocity_mps=" << stats.max_velocity_mps << ",max_clock_bias_s=" << stats.max_clock_bias_s
+              << ",max_clock_drift_sps=" << stats.max_clock_drift_sps << "\n";
     EXPECT_GT(stats.compared_states, 0U);
     EXPECT_GE(serialized_count, 55U) << "the five-system fixture must serialize its full legacy record set";
     EXPECT_EQ(systems.size(), 5U) << "every serialized constellation must be compared";
@@ -470,7 +500,8 @@ TEST(NavEquivalence, SatelliteStateSelectionMatchesAcrossRealEphemerisTransition
                              instance_toes[1], instance_toes[1] + 600.0}) {
         compare_state_at_epoch(reference, roundtrip, satellite_number,
                                gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav, toe_week, instance_toes[0],
-                               toe_week, sow, kL1CObservationCode, &stats, "real E02 instance transition");
+                               toe_week, sow, kL1CObservationCode, nullptr, nullptr, &stats,
+                               "real E02 instance transition");
     }
 
     std::cout << "NAV_EQUIV_TRANSITION_SUMMARY,compared_states=" << stats.compared_states
@@ -497,8 +528,8 @@ TEST(NavEquivalence, CorrectionParametersSurviveProductionRoundTrip) {
         << error_message;
 
     // Store-level record identity: the reconstructed store must contain exactly the
-    // serialized ephemeris instances (satellite + family + IODE/IODnav), so both
-    // positioning paths select among the same broadcast instances.
+    // serialized ephemeris instances (satellite + family + IODE/IODnav + Toe week/SOW),
+    // so both positioning paths select among the same real broadcast instances.
     std::vector<std::string> reference_keys;
     std::vector<std::string> roundtrip_keys;
     for (int index = 0; index < gnss_sim::rtklib_nav_output_record_count(reference); ++index) {
@@ -523,14 +554,13 @@ TEST(NavEquivalence, CorrectionParametersSurviveProductionRoundTrip) {
     std::sort(reference_keys.begin(), reference_keys.end());
     std::sort(roundtrip_keys.begin(), roundtrip_keys.end());
     EXPECT_EQ(reference_keys, roundtrip_keys)
-        << "the production round trip must preserve the broadcast instance identity set";
+        << "the production round trip must preserve the full broadcast instance identity set";
 
-    // Serialization-boundary correction comparison: every serialized correction value
-    // must parse back to the same real value the reference projected record carried.
     std::uint64_t compared_tgd = 0;
     std::uint64_t compared_bgd = 0;
     std::uint64_t compared_ion = 0;
     std::uint64_t stage_b_bias_compared = 0;
+    std::uint64_t stage_b_ion_compared = 0;
     std::uint64_t outside_contract = 0;
     const int record_count = gnss_sim::rtklib_nav_output_record_count(reference);
     for (int index = 0; index < record_count; ++index) {
@@ -551,51 +581,19 @@ TEST(NavEquivalence, CorrectionParametersSurviveProductionRoundTrip) {
             gnss_sim::parse_serialized_novatel_nav_line_independent(message, &parsed, &recognized, &error_message))
             << error_message;
         ASSERT_TRUE(recognized) << "every serialized NAV message must be recognized by the production parser";
-        if (is_ephemeris_record(record)) {
-            const bool keplerian = is_keplerian_ephemeris(record);
-            const double reference_delay =
-                keplerian ? record.ephemeris.tgd_sec[0] : record.glonass.differential_delay_sec;
-            const double roundtrip_delay =
-                keplerian ? parsed.record.ephemeris.tgd_sec[0] : parsed.record.glonass.differential_delay_sec;
-            EXPECT_LE(relative_diff(reference_delay, roundtrip_delay), kMaxCorrectionRelativeDiff)
-                << "TGD/BGD must survive the serialization boundary unchanged";
-            if (keplerian && record.ephemeris.system == gnss_sim::NavOutputSystem::kBeidou) {
-                EXPECT_LE(relative_diff(record.ephemeris.tgd_sec[1], parsed.record.ephemeris.tgd_sec[1]),
-                          kMaxCorrectionRelativeDiff)
-                    << "BeiDou BGD2 must survive the serialization boundary unchanged";
-                ++compared_bgd;
-            } else {
-                ++compared_tgd;
-            }
-            EXPECT_EQ(record.ephemeris.svh, parsed.record.ephemeris.svh) << "health must survive unchanged";
+        const bool keplerian = is_keplerian_ephemeris(record);
+        const int satellite_number = keplerian ? record.ephemeris.satellite_number : record.glonass.satellite_number;
+        const gnss_sim::RtklibBroadcastMessageFamily family =
+            keplerian ? record.ephemeris.message_family : record.glonass.message_family;
+        const int toe_week = keplerian ? record.ephemeris.toe_week : record.glonass.toe_week;
+        const double toe_sow = keplerian ? record.ephemeris.toe_sow_sec : record.glonass.toe_sow_sec;
 
-            // Stage B: the final reconstructed RTKLIB store must expose the same real
-            // broadcast group-delay values as the reference store for the same
-            // selected instance (queried through the production bias API at Toe).
-            gnss_sim::RtklibBroadcastBiasData reference_bias{};
-            gnss_sim::RtklibBroadcastBiasData roundtrip_bias{};
-            const int satellite_number =
-                keplerian ? record.ephemeris.satellite_number : record.glonass.satellite_number;
-            const gnss_sim::RtklibBroadcastMessageFamily family =
-                keplerian ? record.ephemeris.message_family : record.glonass.message_family;
-            const int stage_toe_week = keplerian ? record.ephemeris.toe_week : record.glonass.toe_week;
-            const double stage_toe_sow = keplerian ? record.ephemeris.toe_sow_sec : record.glonass.toe_sow_sec;
-            ASSERT_TRUE(gnss_sim::rtklib_broadcast_bias_data_for_family(
-                reference, stage_toe_week, stage_toe_sow, satellite_number, family, &reference_bias, &error_message))
-                << error_message;
-            ASSERT_TRUE(gnss_sim::rtklib_broadcast_bias_data_for_family(
-                roundtrip, stage_toe_week, stage_toe_sow, satellite_number, family, &roundtrip_bias, &error_message))
-                << error_message;
-            EXPECT_EQ(reference_bias.iode, roundtrip_bias.iode) << "stage-B selected-instance IODE mismatch";
-            for (int term = 0; term < 4; ++term) {
-                EXPECT_LE(relative_diff(reference_bias.tgd_sec[term], roundtrip_bias.tgd_sec[term]),
-                          kMaxCorrectionRelativeDiff)
-                    << "stage-B TGD/BGD term " << term << " must match in the final reconstructed store";
-            }
-            EXPECT_LE(relative_diff(reference_bias.glonass_dtaun_sec, roundtrip_bias.glonass_dtaun_sec),
-                      kMaxCorrectionRelativeDiff)
-                << "stage-B GLONASS delay must match in the final reconstructed store";
-            ++stage_b_bias_compared;
+        if (record.kind == gnss_sim::RtklibNavRecordKind::kGlonassEphemeris) {
+            const double reference_delay = record.glonass.differential_delay_sec;
+            const double roundtrip_delay = parsed.record.glonass.differential_delay_sec;
+            EXPECT_LE(relative_diff(reference_delay, roundtrip_delay), kMaxCorrectionRelativeDiff)
+                << "GLONASS delay must survive the serialization boundary unchanged";
+            ++compared_bgd;
         } else if (record.kind == gnss_sim::RtklibNavRecordKind::kIonosphere) {
             ASSERT_EQ(record.ionosphere.coefficient_count, parsed.record.ionosphere.coefficient_count);
             for (int coefficient = 0; coefficient < record.ionosphere.coefficient_count; ++coefficient) {
@@ -607,6 +605,83 @@ TEST(NavEquivalence, CorrectionParametersSurviveProductionRoundTrip) {
             EXPECT_EQ(record.ionosphere.leap_seconds, parsed.record.ionosphere.leap_seconds)
                 << "leap seconds must survive the serialization boundary unchanged";
             ++compared_ion;
+
+            // Stage B: the final reconstructed RTKLIB store must hold exactly the real
+            // serialized BeiDou ION coefficients (and the GPST-UTC leap seconds after the
+            // parser's documented BDT-UTC +14 s restoration). The reference store cannot
+            // serve as the expected side here because pinned RTKLIB never projects
+            // RINEX4 BeiDou ION into nav.ion_cmp; the unchanged real-RINEX projection is
+            // the expected truth.
+            if (record.ionosphere.system == gnss_sim::NavOutputSystem::kBeidou) {
+                gnss_sim::RtklibIonosphereModelState model{};
+                ASSERT_TRUE(gnss_sim::rtklib_broadcast_ionosphere_model_state(
+                    roundtrip, gnss_sim::RtklibIonosphereSystem::kBeidouLegacy, &model, &error_message))
+                    << error_message;
+                for (int coefficient = 0; coefficient < 8; ++coefficient) {
+                    EXPECT_LE(
+                        relative_diff(record.ionosphere.coefficients[coefficient], model.coefficients[coefficient]),
+                        kMaxCorrectionRelativeDiff)
+                        << "stage-B BeiDou ionosphere coefficient " << coefficient
+                        << " must match the real serialized record in the final store";
+                }
+                EXPECT_EQ(model.leap_seconds, record.ionosphere.leap_seconds)
+                    << "stage-B leap seconds must match the real serialized record";
+                ++stage_b_ion_compared;
+            }
+            // Stage B for the GPS legacy model state: both final stores must hold the
+            // same (zero) legacy GPS Klobuchar state, so the solver ionosphere model is
+            // identical on both positioning paths.
+            gnss_sim::RtklibIonosphereModelState reference_gps_model{};
+            gnss_sim::RtklibIonosphereModelState roundtrip_gps_model{};
+            ASSERT_TRUE(gnss_sim::rtklib_broadcast_ionosphere_model_state(
+                reference, gnss_sim::RtklibIonosphereSystem::kGps, &reference_gps_model, &error_message))
+                << error_message;
+            ASSERT_TRUE(gnss_sim::rtklib_broadcast_ionosphere_model_state(
+                roundtrip, gnss_sim::RtklibIonosphereSystem::kGps, &roundtrip_gps_model, &error_message))
+                << error_message;
+            for (int coefficient = 0; coefficient < 8; ++coefficient) {
+                EXPECT_DOUBLE_EQ(reference_gps_model.coefficients[coefficient],
+                                 roundtrip_gps_model.coefficients[coefficient])
+                    << "stage-B GPS ionosphere coefficient " << coefficient << " must match between stores";
+            }
+        } else {
+            const double reference_delay = record.ephemeris.tgd_sec[0];
+            const double roundtrip_delay = parsed.record.ephemeris.tgd_sec[0];
+            EXPECT_LE(relative_diff(reference_delay, roundtrip_delay), kMaxCorrectionRelativeDiff)
+                << "TGD must survive the serialization boundary unchanged";
+            if (record.ephemeris.system == gnss_sim::NavOutputSystem::kBeidou) {
+                EXPECT_LE(relative_diff(record.ephemeris.tgd_sec[1], parsed.record.ephemeris.tgd_sec[1]),
+                          kMaxCorrectionRelativeDiff)
+                    << "BeiDou BGD2 must survive the serialization boundary unchanged";
+                ++compared_bgd;
+            } else {
+                ++compared_tgd;
+            }
+            EXPECT_EQ(record.ephemeris.svh, parsed.record.ephemeris.svh) << "health must survive unchanged";
+        }
+
+        if (is_ephemeris_record(record)) {
+            // Stage B: the final reconstructed RTKLIB store must expose the same real
+            // broadcast group-delay values as the reference store for the same selected
+            // instance (queried through the production bias API at Toe).
+            gnss_sim::RtklibBroadcastBiasData reference_bias{};
+            gnss_sim::RtklibBroadcastBiasData roundtrip_bias{};
+            ASSERT_TRUE(gnss_sim::rtklib_broadcast_bias_data_for_family(reference, toe_week, toe_sow, satellite_number,
+                                                                        family, &reference_bias, &error_message))
+                << error_message;
+            ASSERT_TRUE(gnss_sim::rtklib_broadcast_bias_data_for_family(roundtrip, toe_week, toe_sow, satellite_number,
+                                                                        family, &roundtrip_bias, &error_message))
+                << error_message;
+            EXPECT_EQ(reference_bias.iode, roundtrip_bias.iode) << "stage-B selected-instance IODE mismatch";
+            for (int term = 0; term < 4; ++term) {
+                EXPECT_LE(relative_diff(reference_bias.tgd_sec[term], roundtrip_bias.tgd_sec[term]),
+                          kMaxCorrectionRelativeDiff)
+                    << "stage-B TGD/BGD term " << term << " must match in the final reconstructed store";
+            }
+            EXPECT_LE(relative_diff(reference_bias.glonass_dtaun_sec, roundtrip_bias.glonass_dtaun_sec),
+                      kMaxCorrectionRelativeDiff)
+                << "stage-B GLONASS delay must match in the final reconstructed store";
+            ++stage_b_bias_compared;
         }
     }
 
@@ -634,7 +709,7 @@ TEST(NavEquivalence, CorrectionParametersSurviveProductionRoundTrip) {
     std::cout << "NAV_EQUIV_CORRECTION_SUMMARY,serialized_records=" << serialized_count
               << ",outside_contract_records=" << outside_contract << ",compared_tgd=" << compared_tgd
               << ",compared_bgd=" << compared_bgd << ",compared_ion=" << compared_ion
-              << ",stage_b_bias_compared=" << stage_b_bias_compared
+              << ",stage_b_bias_compared=" << stage_b_bias_compared << ",stage_b_ion_compared=" << stage_b_ion_compared
               << ",stage_b_gps_ion_delay_ref_m=" << reference_ion.reference_delay_m
               << ",stage_b_gps_ion_delay_rt_m=" << roundtrip_ion.reference_delay_m << "\n";
     EXPECT_GT(compared_tgd, 0U) << "the real fixture must exercise broadcast group delays";

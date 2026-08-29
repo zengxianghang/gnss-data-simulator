@@ -98,6 +98,15 @@ struct RtklibIonosphereResult {
     double reference_frequency_hz;
 };
 
+// Read-only snapshot of the broadcast ionosphere model state stored in the RTKLIB
+// navigation store (8 Klobuchar-style coefficients plus the GPST-UTC leap seconds).
+// Used to verify correction values inside the final reconstructed store without
+// exposing or mutating private nav_t internals.
+struct RtklibIonosphereModelState {
+    double coefficients[8];
+    int leap_seconds;
+};
+
 struct RtklibBroadcastBiasData {
     RtklibBroadcastMessageFamily message_family;
     int system;
@@ -218,6 +227,8 @@ bool rtklib_geometric_distance(const double satellite_ecef_m[3], const double re
 bool rtklib_azimuth_elevation(const double receiver_ecef_m[3], const double line_of_sight_ecef[3], double* azimuth_rad,
                               double* elevation_rad);
 
+bool rtklib_broadcast_ionosphere_model_state(const RtklibNavStore* store, RtklibIonosphereSystem system,
+                                             RtklibIonosphereModelState* state, std::string* error_message);
 bool rtklib_broadcast_ionosphere_reference_delay(const RtklibNavStore* store, RtklibIonosphereSystem system,
                                                  int gps_week, double sow_sec, const double receiver_ecef_m[3],
                                                  double azimuth_rad, double elevation_rad,

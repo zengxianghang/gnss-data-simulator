@@ -639,6 +639,43 @@ bool get_rtklib_signal_satellite_state(const RtklibNavStore* store, int gps_week
     return true;
 }
 
+bool rtklib_broadcast_ionosphere_model_state(const RtklibNavStore* store, RtklibIonosphereSystem system,
+                                             RtklibIonosphereModelState* state, std::string* error_message) {
+    if (store == nullptr || state == nullptr) {
+        if (error_message != nullptr) {
+            *error_message = "broadcast ionosphere model-state request has invalid arguments";
+        }
+        return false;
+    }
+    const double* coefficients = nullptr;
+    switch (system) {
+        case RtklibIonosphereSystem::kGps:
+            coefficients = store->nav.ion_gps;
+            break;
+        case RtklibIonosphereSystem::kQzss:
+            coefficients = store->nav.ion_qzs;
+            break;
+        case RtklibIonosphereSystem::kBeidouLegacy:
+            coefficients = store->nav.ion_cmp;
+            break;
+        case RtklibIonosphereSystem::kGalileo:
+        case RtklibIonosphereSystem::kGlonass:
+        case RtklibIonosphereSystem::kBeidouModern:
+            break;
+    }
+    if (coefficients == nullptr) {
+        if (error_message != nullptr) {
+            *error_message = "broadcast ionosphere model is not stored for the requested system";
+        }
+        return false;
+    }
+    for (int index = 0; index < 8; ++index) {
+        state->coefficients[index] = coefficients[index];
+    }
+    state->leap_seconds = store->nav.leaps;
+    return true;
+}
+
 bool rtklib_llh_to_ecef(double latitude_deg, double longitude_deg, double height_m, double ecef_m[3]) {
     if (ecef_m == nullptr || !std::isfinite(latitude_deg) || !std::isfinite(longitude_deg) ||
         !std::isfinite(height_m) || latitude_deg < -90.0 || latitude_deg > 90.0 || longitude_deg < -180.0 ||

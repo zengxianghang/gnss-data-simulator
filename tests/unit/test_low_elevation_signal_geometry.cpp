@@ -15,9 +15,7 @@ namespace {
 
 constexpr double kSpeedOfLightMps = 299792458.0;
 constexpr double kEarthRotationRateRadPerSec = 7.2921151467e-5;
-constexpr double kEarthEquatorialRadiusM = 6378137.0;
 constexpr double kPi = 3.141592653589793238462643383279502884;
-constexpr double kDegreesToRadians = kPi / 180.0;
 constexpr double kRadiansToDegrees = 180.0 / kPi;
 
 std::string brd4_nav_path() {
@@ -44,56 +42,6 @@ gnss_sim::SignalTracker tracking_tracker(gnss_sim::SignalId signal_id, const gns
     tracker.adr_valid = true;
     tracker.observation_available = true;
     return tracker;
-}
-
-double normalize_longitude_rad(double longitude_rad) {
-    while (longitude_rad > kPi) {
-        longitude_rad -= 2.0 * kPi;
-    }
-    while (longitude_rad < -kPi) {
-        longitude_rad += 2.0 * kPi;
-    }
-    return longitude_rad;
-}
-
-bool receiver_at_target_elevation(const gnss_sim::RtklibSatelliteState& state, double target_elevation_deg,
-                                  int longitude_sign, gnss_sim::ReceiverTruth* receiver,
-                                  std::string* error_message) {
-    if (receiver == nullptr || longitude_sign == 0 || target_elevation_deg <= 0.0 ||
-        target_elevation_deg >= 5.0) {
-        return false;
-    }
-
-    const double x = state.position_ecef_m[0];
-    const double y = state.position_ecef_m[1];
-    const double z = state.position_ecef_m[2];
-    const double horizontal_m = std::hypot(x, y);
-    const double radius_squared_m2 = x * x + y * y + z * z;
-    const double sin_elevation = std::sin(target_elevation_deg * kDegreesToRadians);
-    const double sin_squared = sin_elevation * sin_elevation;
-    const double root = kEarthEquatorialRadiusM * kEarthEquatorialRadiusM * sin_squared * sin_squared +
-                        sin_squared * (radius_squared_m2 - kEarthEquatorialRadiusM * kEarthEquatorialRadiusM);
-    if (horizontal_m <= kEarthEquatorialRadiusM || root <= 0.0) {
-        return false;
-    }
-
-    const double radial_projection_m =
-        kEarthEquatorialRadiusM - kEarthEquatorialRadiusM * sin_squared + std::sqrt(root);
-    const double cosine_delta = radial_projection_m / horizontal_m;
-    if (cosine_delta <= -1.0 || cosine_delta >= 1.0) {
-        return false;
-    }
-
-    const double satellite_longitude_rad = std::atan2(y, x);
-    const double delta_rad = std::acos(cosine_delta);
-    const double receiver_longitude_rad =
-        normalize_longitude_rad(satellite_longitude_rad + static_cast<double>(longitude_sign) * delta_rad);
-
-    gnss_sim::ReceiverConfig config{};
-    config.latitude_deg = 0.0;
-    config.longitude_deg = receiver_longitude_rad * kRadiansToDegrees;
-    config.height_m = 0.0;
-    return gnss_sim::make_static_receiver_truth(config, receiver, error_message);
 }
 
 bool range_and_angles(const gnss_sim::RtklibSatelliteState& state, const gnss_sim::ReceiverTruth& receiver,
@@ -175,23 +123,25 @@ TEST(ZeroNoiseMeasurement, RealRinexFamilyMismatchUsesFinalCodeGeometryForAtmosp
     gnss_sim::AtmosphereCorrection legacy_atmosphere{};
     bool found_low_elevation_case = false;
 
-    const double target_elevations_deg[] = {0.05, 0.1, 0.2, 0.5, 1.0};
-    const int longitude_signs[] = {-1, 1};
-    for (double target_elevation_deg : target_elevations_deg) {
-        for (int longitude_sign : longitude_signs) {
+    for (double latitude_deg = -60.0; latitude_deg <= 60.0 && !found_low_elevation_case; latitude_deg += 10.0) {
+        for (double longitude_deg = -180.0; longitude_deg < 180.0; longitude_deg += 0.25) {
+            gnss_sim::ReceiverConfig candidate_config{};
+            candidate_config.latitude_deg = latitude_deg;
+            candidate_config.longitude_deg = longitude_deg;
+            candidate_config.height_m = 0.0;
             gnss_sim::ReceiverTruth candidate{};
-            if (!receiver_at_target_elevation(modern_state, target_elevation_deg, longitude_sign, &candidate,
-                                              &error_message) ||
+            if (!gnss_sim::make_static_receiver_truth(candidate_config, &candidate, &error_message) ||
                 !range_and_angles(modern_state, candidate, &modern_range_m, modern_line_of_sight,
                                   &modern_azimuth_rad, &modern_elevation_rad) ||
                 !range_and_angles(legacy_state, candidate, &legacy_range_m, legacy_line_of_sight,
                                   &legacy_azimuth_rad, &legacy_elevation_rad)) {
                 continue;
             }
+
             const double modern_elevation_deg = modern_elevation_rad * kRadiansToDegrees;
             const double legacy_elevation_deg = legacy_elevation_rad * kRadiansToDegrees;
-            if (modern_elevation_deg <= 0.0 || modern_elevation_deg > 1.5 || legacy_elevation_deg <= 0.0 ||
-                legacy_elevation_deg > 1.5) {
+            if (modern_elevation_deg <= 0.0 || modern_elevation_deg > 2.0 || legacy_elevation_deg <= 0.0 ||
+                legacy_elevation_deg > 2.0) {
                 continue;
             }
             if (!gnss_sim::compute_atmosphere_correction(
@@ -207,15 +157,14 @@ TEST(ZeroNoiseMeasurement, RealRinexFamilyMismatchUsesFinalCodeGeometryForAtmosp
             if (std::fabs(legacy_atmosphere.troposphere_delay_m - modern_atmosphere.troposphere_delay_m) <= 0.1) {
                 continue;
             }
+
             receiver = candidate;
             found_low_elevation_case = true;
             break;
         }
-        if (found_low_elevation_case) {
-            break;
-        }
     }
-    ASSERT_TRUE(found_low_elevation_case) << "real C22 D1/CNV1 records did not produce the required low-elevation case";
+    ASSERT_TRUE(found_low_elevation_case)
+        << "real C22 D1/CNV1 records did not produce a valid low-elevation family-mismatch case";
 
     gnss_sim::SatelliteGeometry generic_geometry{};
     generic_geometry.receive_time = receive_time;

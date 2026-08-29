@@ -205,7 +205,7 @@ TEST(MeasurementErrorModel, AdrNoiseIsConvertedFromMetersUsingWavelength) {
     config.adr_sigma_m = 0.001;
 
     gnss_sim::SignalTracker tracker = make_tracker(gnss_sim::SignalId::kGpsL1Ca, 100 * kSecondNs, 0);
-    tracker.pseudorange_valid = false;
+    tracker.psr_valid = false;
     tracker.doppler_valid = false;
     gnss_sim::MeasurementObservation long_wave = make_observation(gnss_sim::SignalId::kGpsL1Ca, 3, 0.20);
     gnss_sim::MeasurementObservation short_wave = make_observation(gnss_sim::SignalId::kGpsL1Ca, 3, 0.10);

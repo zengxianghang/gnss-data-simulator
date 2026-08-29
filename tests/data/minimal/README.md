@@ -11,3 +11,29 @@
 The canonical project data source for real RINEX navigation and observation material is the Wuhan University IGS Data Center (`igs.gnsswhu.cn`). The data center provides free HTTP/FTP downloads and exposes separate observation and broadcast-ephemeris searches. Normal CI must not download data at test time: source files used by deterministic regressions are reduced to small checked-in fixtures first, with provenance sufficient to reproduce the reduction. Galileo HAS precise-product acceptance additionally uses the official JRC GALILEO-HAS source documented above; normal CI likewise consumes only its checked-in compact fixtures.
 
 For V1 acceptance, the RINEX 3 and RINEX 4 mixed NAV fixtures exercise the simulator's normal pinned-RTKLIB Truth-NAV/Receiver-NAV path and prove that GPS, GLONASS, Galileo, BeiDou and QZSS observations can participate in deterministic end-to-end runs. The RINEX 4 fixture additionally verifies that modern navigation message types and RINEX 4 STO/EOP/ION records survive parsing. The JRC HAS fixture independently verifies Galileo E6 with a coherent precise state and `C6C` OSB rather than forcing an unsupported broadcast-E6 code-bias convention. CN0 parser tests use the synthetic OBS fixture only to freeze deterministic ingestion semantics. Empirical CN0 calibration under #38 must use real matching RINEX observation files from the canonical data source.
+## GLONASS L3OC real-NAV availability
+
+Issue #66 removed the former compact-test-only synthetic GLONASS L3OC overlay.
+The test suite must not manufacture L3OC ephemeris or ISC values.
+
+On 2026-08-29, the following authoritative DLR BRD400DLR products were downloaded
+from the BKG IGS BRDC archive and scanned for records matching
+`> EPH Rxx L3OC`. All files identified themselves as RINEX 4.02 and contained
+zero L3OC records:
+
+| Product day | gzip SHA256 | uncompressed RINEX SHA256 | L3OC records |
+| --- | --- | --- | ---: |
+| 2025-003 | `467f35074eb0f948df8d814ea460be8ede8daa521148d21e14be787c0c057ff0` | `ffef82cce9e3c75dbb693f8aaee67da1c5742f9f2bfeb3f723cff67dda3b32d7` | 0 |
+| 2025-100 | `41ceaf963eea65f9f715d97fc86e74a099948146b82fbc185ba727242ae9fd65` | `fdb720e57a865b79a071a43c3de5cbe8fcdbb3ab4fecb8530ede7cffb2618024` | 0 |
+| 2025-200 | `cc719286f5e414125c61f7d5189923e539fb32ac9252e34d4e44bb88b4f9843d` | `e2489163840c20f5a2497d444b6833780d36ae07b0d64973e1d662861e483a0c` | 0 |
+| 2025-300 | `8f8d2f57b380f7a7bd1366f2fb44b17a30e7df47269a79e926aac17334654665` | `ae5bcff125521b0efeb76e450f915605d9c540c4c53fe4b48d6256cf6e6de2d5` | 0 |
+| 2026-001 | `ff11082ccb87c8c678f9aa258487ec5d8e838e330f1c5e92ce289134ef15f805` | `72c0eaeb28e597244077872105c5b49372a38d1f2589de151d79f10015fdca9f` | 0 |
+| 2026-100 | `14500ce323bc7b13541fa17eb04e483879ab25159c84ee264fa5b2ac7ea32dbd` | `8b21fb009fd11d25fc5ef12839d44020da76a23a59518477721b3e72cc86d407` | 0 |
+| 2026-200 | `1bca00e827e2ed812c9fb1ad27a622b045e29f2c53374c5dfa1a0e4d5ca50f26` | `ad4820c951c89b149a0df7fd3010e6f020e0c8192b1b507f5dcfcd880b0a10cc` | 0 |
+
+Archive pattern:
+`https://igs.bkg.bund.de/root_ftp/IGS/BRDC/YYYY/DDD/BRD400DLR_S_YYYYDDD0000_01D_MN.rnx.gz`
+
+Until a provenance-traceable authoritative L3OC record is available, compact CI
+keeps GLONASS G3 observation/Doppler validation but requires its code-bias
+coverage to be reported explicitly as unavailable. A synthetic fallback is forbidden.

@@ -48,6 +48,8 @@ struct SerializedNavRoundtripSummary {
     std::uint64_t skipped_position_observations_without_nav;
     std::uint64_t parsed_ephemeris_records;
     std::uint64_t parsed_ionosphere_records;
+    std::uint64_t gps_ionosphere_records;
+    std::uint64_t skipped_position_epochs_without_ionosphere;
     std::uint64_t gps_ephemeris_records;
     std::uint64_t glonass_ephemeris_records;
     std::uint64_t galileo_ephemeris_records;

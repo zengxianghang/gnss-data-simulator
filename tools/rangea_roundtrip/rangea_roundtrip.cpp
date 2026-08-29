@@ -551,6 +551,7 @@ bool validate_serialized_navigation_roundtrip_stream(std::istream* input, double
     }
 
     SerializedNavRoundtripSummary result{};
+    bool gps_broadcast_ion_available = false;
     std::string line;
     std::uint64_t line_number = 0;
     std::string last_position_diagnostic;
@@ -572,6 +573,10 @@ bool validate_serialized_navigation_roundtrip_stream(std::istream* input, double
             ++result.parsed_nav_records;
             if (parsed_nav.record.kind == RtklibNavRecordKind::kIonosphere) {
                 ++result.parsed_ionosphere_records;
+                if (parsed_nav.record.ionosphere.system == NavOutputSystem::kGps) {
+                    ++result.gps_ionosphere_records;
+                    gps_broadcast_ion_available = true;
+                }
             } else {
                 ++result.parsed_ephemeris_records;
                 NavOutputSystem system = NavOutputSystem::kUnknown;
@@ -623,6 +628,10 @@ bool validate_serialized_navigation_roundtrip_stream(std::istream* input, double
             return false;
         }
         result.position.selected_position_observations += static_cast<std::uint64_t>(selected.size());
+        if (broadcast_atmosphere && !gps_broadcast_ion_available) {
+            ++result.skipped_position_epochs_without_ionosphere;
+            continue;
+        }
         std::vector<RtklibRawCodeObservation> usable;
         usable.reserve(selected.size());
         for (const RtklibRawCodeObservation& observation : selected) {
@@ -682,8 +691,12 @@ bool validate_serialized_navigation_roundtrip_stream(std::istream* input, double
         set_error(error_message, "I/O failure while streaming serialized receiver log");
         return false;
     }
-    if (result.parsed_ephemeris_records == 0U || result.parsed_ionosphere_records == 0U) {
-        set_error(error_message, "serialized receiver log contains no usable EPHA/IONA navigation set");
+    if (result.parsed_ephemeris_records == 0U) {
+        set_error(error_message, "serialized receiver log contains no usable EPHA navigation set");
+        return false;
+    }
+    if (broadcast_atmosphere && result.gps_ionosphere_records == 0U) {
+        set_error(error_message, "serialized receiver log contains no usable GPS IONUTCA for broadcast atmosphere");
         return false;
     }
     if (result.position.range_epochs == 0U) {

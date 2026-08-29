@@ -372,4 +372,86 @@ TEST(RangeaRoundtripIntegration, RealBeidouLegacyAsciiRestoresRtklibBroadcastSta
     gnss_sim::destroy_rtklib_nav_store(full);
 }
 
+TEST(RangeaRoundtripIntegration, BroadcastAtmosphereRequiresSerializedGpsIonBeforePositioning) {
+    const std::filesystem::path directory = "gnss_sim_serialized_nav_no_gps_ion";
+    gnss_sim::SimulatorRunSummary simulator_summary{};
+    std::string error_message;
+    ASSERT_TRUE(run_simulator(directory, &simulator_summary, &error_message)) << error_message;
+
+    std::istringstream input(read_file(directory / "simulated.log"));
+    std::ostringstream stripped;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.rfind("#IONUTCA,", 0) != 0) {
+            stripped << line << '\n';
+        }
+    }
+
+    std::istringstream validation_input(stripped.str());
+    gnss_sim::SerializedNavRoundtripSummary summary{};
+    error_message.clear();
+    EXPECT_FALSE(gnss_sim::validate_serialized_navigation_roundtrip_stream(&validation_input, 20.0, 120.0, 100.0, 5.0,
+                                                                           true, &summary, &error_message));
+    EXPECT_NE(error_message.find("GPS IONUTCA"), std::string::npos)
+        << "serialized-NAV validation must not use RTKLIB's built-in default Klobuchar coefficients";
+
+    cleanup(directory);
+}
+
+TEST(RangeaRoundtripIntegration, RealBeidouLegacyIonRestoresRtklibGpsUtcLeapMetadata) {
+    gnss_sim::RtklibNavStore* full = gnss_sim::create_rtklib_nav_store();
+    gnss_sim::RtklibNavStore* rebuilt = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(full, nullptr);
+    ASSERT_NE(rebuilt, nullptr);
+
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(full, brd4_nav_path().c_str(), &error_message)) << error_message;
+
+    bool compared = false;
+    const int output_count = gnss_sim::rtklib_nav_output_record_count(full);
+    for (int index = 0; index < output_count; ++index) {
+        gnss_sim::NavOutputRecord source{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(full, index, &source, &error_message)) << error_message;
+        if (source.kind != gnss_sim::RtklibNavRecordKind::kIonosphere ||
+            source.ionosphere.system != gnss_sim::NavOutputSystem::kBeidou || !source.ionosphere.legacy_metadata) {
+            continue;
+        }
+
+        std::string message;
+        bool supported = false;
+        ASSERT_TRUE(
+            gnss_sim::format_novatel_nav_output_record(source, start_time(), &message, &supported, &error_message))
+            << error_message;
+        ASSERT_TRUE(supported);
+        ASSERT_EQ(message.rfind("#BD2IONUTCA,", 0), 0U);
+
+        gnss_sim::ParsedSerializedNavRecord parsed{};
+        bool recognized = false;
+        ASSERT_TRUE(
+            gnss_sim::parse_serialized_novatel_nav_line_independent(message, &parsed, &recognized, &error_message))
+            << error_message;
+        ASSERT_TRUE(recognized);
+        EXPECT_EQ(parsed.record.ionosphere.leap_seconds, source.ionosphere.leap_seconds);
+        ASSERT_TRUE(gnss_sim::rtklib_append_nav_output_record(rebuilt, parsed.record, &error_message)) << error_message;
+
+        const int rebuilt_count = gnss_sim::rtklib_nav_output_record_count(rebuilt);
+        for (int rebuilt_index = 0; rebuilt_index < rebuilt_count; ++rebuilt_index) {
+            gnss_sim::NavOutputRecord restored{};
+            ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(rebuilt, rebuilt_index, &restored, &error_message))
+                << error_message;
+            if (restored.kind == gnss_sim::RtklibNavRecordKind::kIonosphere &&
+                restored.ionosphere.system == gnss_sim::NavOutputSystem::kBeidou) {
+                EXPECT_EQ(restored.ionosphere.leap_seconds, source.ionosphere.leap_seconds);
+                compared = true;
+                break;
+            }
+        }
+        break;
+    }
+
+    EXPECT_TRUE(compared) << "real BRD400 fixture must preserve BDS legacy ion leap metadata through ASCII NAV";
+    gnss_sim::destroy_rtklib_nav_store(rebuilt);
+    gnss_sim::destroy_rtklib_nav_store(full);
+}
+
 } // namespace

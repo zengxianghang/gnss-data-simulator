@@ -474,7 +474,8 @@ bool parse_ionosphere(const std::string& name, int output_week, double output_so
     }
     ion.utc[2] = utc_tot;
     ion.utc[3] = static_cast<double>(utc_week);
-    ion.leap_seconds = leap_a;
+    // BD2IONUTCA carries BDT-UTC, while RTKLIB nav.leaps is GPST-UTC.
+    ion.leap_seconds = name == "BD2IONUTCA" ? leap_a + 14 : leap_a;
     record->kind = RtklibNavRecordKind::kIonosphere;
     record->ionosphere = ion;
     return true;

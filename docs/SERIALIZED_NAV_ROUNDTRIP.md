@@ -39,6 +39,8 @@ The simulator's `BD2EPHEMA` receiver-log contract serializes the ephemeris week 
 
 The serialized-NAV import adapter therefore keeps the parsed absolute Toe epoch unchanged and converts only the internal raw Toe SOW from GPST to BDT by subtracting 14 seconds, with week wrap handling. Omitting this conversion rotates BeiDou broadcast positions by roughly 16–43 km in the compact real-NAV case. This conversion is an RTKLIB internal representation requirement; it is not a change to the serialized `BD2EPHEMA` fields.
 
+`BD2IONUTCA` similarly carries BDT-UTC leap seconds. The importer adds 14 seconds when restoring RTKLIB `nav.leaps`, whose convention is GPST-UTC. The validator also refuses broadcast-atmosphere positioning until a serialized GPS `IONUTCA` has appeared, so RTKLIB cannot silently fall back to its built-in default Klobuchar coefficients.
+
 ## Causality
 
 Navigation records are applied to an initially empty RTKLIB navigation store as they appear in the generated log. A `RANGEA` epoch can use only navigation that appeared earlier in the stream. The validator never scans ahead for future EPH/ION records.

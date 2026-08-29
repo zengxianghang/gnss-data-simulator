@@ -1,0 +1,125 @@
+{
+  "extraction_method": "verbatim record filter/copy: retained records are byte-identical to the source records after LF line-ending normalization; no navigation field (satellite, IODnav, Toe, Toc, Ttr, orbit, clock, health, BGD/TGD/ISC, message family) was modified, synthesized, interpolated, or reordered within a record",
+  "fixture_filename": "brd400dlr_rinex4_galileo_companion_nav.rnx",
+  "fixture_sha256": "db7cc498360c9b2cb5b0bcac2818739c5cd89df63ce8c619f17cd8073150480c",
+  "mirror_url_pattern": "https://igs.bkg.bund.de/root_ftp/IGS/BRDC/2025/{ddd}/BRD400DLR_S_2025{ddd}0000_01D_MN.rnx.gz",
+  "rinex_version": 4.02,
+  "schema_version": 1,
+  "searched_absent_real_cases": {
+    "same_toe_different_iodnav": {
+      "conclusion": "the case is absent across the searched real interval under week-aware identity; the IODnav predicate term cannot currently be isolated with a provenance-compliant full-ephemeris fixture, no case was fabricated, and the production predicate is unchanged",
+      "description": "same satellite, same Toe, different IODnav across INAV/FNAV",
+      "galileo_records_scanned": 41897,
+      "identity": "week-aware Galileo navigation identity (satellite, message family, IODnav, broadcast week, Toe SOW); the broadcast week is the same record field RTKLIB decodes into eph.week (data[21], rinex.c decode \"gal week = gps week\"), and each pairing occurrence keeps both endpoints in full (IODnav, week, Toe per family), so no endpoint value is dropped or collapsed",
+      "matching_pairs_found": 20605,
+      "same_iodnav_different_toe_pairs_found": 103915,
+      "same_toe_different_iodnav_matches_found": 0,
+      "search_command": "python3 tools/download_igs/scan_galileo_nav_identities.py brd400dlr_001.rnx ... brd400dlr_007.rnx (one uncompressed day file per argument)",
+      "search_tool": "tools/download_igs/scan_galileo_nav_identities.py",
+      "searched_interval": "seven consecutive BRD400DLR daily products (2025-001 through 2025-007) spanning GPS weeks 2347 and 2348",
+      "searched_products": [
+        {
+          "compressed_sha256": "0d878a727a1c4f453a0de5ab04abd7723f01feade471be89d3ce41f769c824b9",
+          "galileo_record_count": 5623,
+          "product": "BRD400DLR_S_20250010000_01D_MN.rnx",
+          "uncompressed_sha256": "0803ad1c1272013a3c1fb5716f6e4ef1c4a4ee32691b841646c5ec28207a6ea3"
+        },
+        {
+          "compressed_sha256": "472b207a16a05140ca77563e2adf5df35c42623bea5713b8cffde86c129049f7",
+          "galileo_record_count": 5705,
+          "product": "BRD400DLR_S_20250020000_01D_MN.rnx",
+          "uncompressed_sha256": "f4d7cdf9d2664b41a485a81339851e3f556358a23b5a8f48addc80ad1ab41fdc"
+        },
+        {
+          "compressed_sha256": "fb84d4046b06e905e8e4ec0efb82f0e9ad044bc44d664cc0209cb9b4c92b9512",
+          "galileo_record_count": 6006,
+          "product": "BRD400DLR_S_20250030000_01D_MN.rnx",
+          "uncompressed_sha256": "b11c638eea42978b8bd6aa8b65a5099fe6556dfe527bc037ed481d2b239afc42"
+        },
+        {
+          "compressed_sha256": "4aeb1bdeb7ca0eb35eb1d631c68bb5c941c44dbb1da14929acaa236d5d797aae",
+          "galileo_record_count": 6177,
+          "product": "BRD400DLR_S_20250040000_01D_MN.rnx",
+          "uncompressed_sha256": "c5dde427d11d19b2139e39dc904533bb85cd145936a634d4d59b30d52721fc2e"
+        },
+        {
+          "compressed_sha256": "d4ef727f19d870091a655e14fec32b96fe3cb56eb5a570017c3974e67572d1f1",
+          "galileo_record_count": 6089,
+          "product": "BRD400DLR_S_20250050000_01D_MN.rnx",
+          "uncompressed_sha256": "1996124354adca850c40c4ffa462fca81db4f471555bce106ab9df7300030255"
+        },
+        {
+          "compressed_sha256": "ec199cb7cfdc962851746c6b9477bc562de094b260d31b0b80d8b1b4653e81f4",
+          "galileo_record_count": 6177,
+          "product": "BRD400DLR_S_20250060000_01D_MN.rnx",
+          "uncompressed_sha256": "28a6d6e08c9b5f7e6b9c49ed4ad4d692aceec6dd7635382ee873da608e65aac1"
+        },
+        {
+          "compressed_sha256": "7da3b506651801a536e4957617646f6696c14f7fd59c0f4e389e2e561b9fb26d",
+          "galileo_record_count": 6120,
+          "product": "BRD400DLR_S_20250070000_01D_MN.rnx",
+          "uncompressed_sha256": "f23b3d6081549cb820e8569a030f644366e9b9c7d1fb2d16943b129124da5244"
+        }
+      ]
+    }
+  },
+  "selected_galileo_record_count": 6,
+  "selected_galileo_records": [
+    {
+      "iodnav": 1,
+      "message_family": "INAV",
+      "role": "instance 0 INAV",
+      "satellite": "E02",
+      "source_record_index": 10832,
+      "toe_sow_sec": 457800.0
+    },
+    {
+      "iodnav": 1,
+      "message_family": "FNAV",
+      "role": "instance 0 FNAV (matching pair)",
+      "satellite": "E02",
+      "source_record_index": 10959,
+      "toe_sow_sec": 457800.0
+    },
+    {
+      "iodnav": 2,
+      "message_family": "FNAV",
+      "role": "instance 1 FNAV (newer, async)",
+      "satellite": "E02",
+      "source_record_index": 10960,
+      "toe_sow_sec": 458400.0
+    },
+    {
+      "iodnav": 2,
+      "message_family": "INAV",
+      "role": "instance 1 INAV (matching, async)",
+      "satellite": "E02",
+      "source_record_index": 10833,
+      "toe_sow_sec": 458400.0
+    },
+    {
+      "iodnav": 87,
+      "message_family": "INAV",
+      "role": "same-IODnav different-Toe negative pair",
+      "satellite": "E05",
+      "source_record_index": 11506,
+      "toe_sow_sec": 433200.0
+    },
+    {
+      "iodnav": 87,
+      "message_family": "FNAV",
+      "role": "same-IODnav different-Toe negative pair",
+      "satellite": "E05",
+      "source_record_index": 11702,
+      "toe_sow_sec": 509400.0
+    }
+  ],
+  "selection_purpose": "real same-satellite Galileo INAV/FNAV companion-identity regressions (issues 92/94)",
+  "source_compressed_sha256": "fb84d4046b06e905e8e4ec0efb82f0e9ad044bc44d664cc0209cb9b4c92b9512",
+  "source_date_span": "2025-01-03, GPS week 2347 (week start 2024-12-29T00:00:00Z GPST/GST; retained Toe SOW values map to UTC as: 433200 -> 2025-01-03T00:19:42Z, 457800 -> 2025-01-03T07:09:42Z, 458400 -> 2025-01-03T07:19:42Z, 509400 -> 2025-01-03T21:29:42Z, using the 18 s GPS/GST-UTC leap)",
+  "source_filename": "BRD400DLR_S_20250030000_01D_MN.rnx",
+  "source_product": "BRD400DLR",
+  "source_record_index_convention": "0-based index of the '>' record marker among all '>'-delimited body records of the uncompressed source file, counted after the END OF HEADER line",
+  "source_uncompressed_sha256": "b11c638eea42978b8bd6aa8b65a5099fe6556dfe527bc037ed481d2b239afc42",
+  "source_url": "ftp://igs.gnsswhu.cn/pub/gps/data/daily/2025/brdc/BRD400DLR_S_20250030000_01D_MN.rnx.gz"
+}

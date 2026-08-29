@@ -37,3 +37,31 @@ Archive pattern:
 Until a provenance-traceable authoritative L3OC record is available, compact CI
 keeps GLONASS G3 observation/Doppler validation but requires its code-bias
 coverage to be reported explicitly as unavailable. A synthetic fallback is forbidden.
+
+## Galileo INAV/FNAV companion-identity fixture
+
+`brd400dlr_rinex4_galileo_companion_nav.rnx` supports the real same-satellite
+Galileo INAV/FNAV companion-identity regressions for issue #94. It is a verbatim
+record filter/copy of the real Wuhan University IGS Data Center product
+`BRD400DLR_S_20250030000_01D_MN.rnx.gz` (the same authoritative source file as
+`brd400dlr_rinex4_acceptance_nav.rnx`); the six retained E02/E05 records are
+byte-identical to their source records after LF line-ending normalization, and no
+navigation field was modified, synthesized, or interpolated. Source URL, source
+hashes, fixture hash, per-record identities (satellite, message family, IODnav,
+Toe) and the extraction method are frozen in
+`brd400dlr_rinex4_galileo_companion_nav.meta.json`.
+
+Real cases covered: E02 carries two consecutive broadcast instances (IODnav 1 at
+Toe 457800 and IODnav 2 at Toe 458400, each with both families), and E05 carries
+a real same-IODnav/different-Toe pair (IODnav 87, INAV at Toe 433200 vs FNAV at
+Toe 509400). The retained Toe SOW values are GPS week 2347 epochs and map to
+2025-01-03 UTC wall-clock times via the 18 s GPS/GST-UTC leap (e.g. Toe 457800
+is 07:09:42Z). A real same-Toe/different-IODnav case was searched with
+`tools/download_igs/scan_galileo_nav_identities.py` over seven consecutive
+BRD400DLR daily products (2025-001 through 2025-007, spanning GPS weeks 2347
+and 2348; 41897 Galileo INAV/FNAV records, 29 satellites) using week-aware
+navigation identities: 20605 matching pairs and 103915 same-IODnav/
+different-Toe pairs exist, but zero same-Toe/different-IODnav pairs occur. The
+case is documented as absent and was not fabricated; per-product hashes and
+counts are frozen in `brd400dlr_rinex4_galileo_companion_nav.meta.json`, and
+the scanner carries a deterministic self-test in the tooling CI job.

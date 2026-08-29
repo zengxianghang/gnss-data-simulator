@@ -1,5 +1,7 @@
 #include "model/measurement_error_model.h"
 
+#include "gnss_sim/sim_time.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>

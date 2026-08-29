@@ -1,4 +1,5 @@
 #include "gnss/rtklib_adapter.h"
+#include "gnss/satellite_engine.h"
 #include "gnss/signal_definitions.h"
 #include "gnss_sim/sim_config.h"
 #include "gnss_sim/sim_time.h"
@@ -7,14 +8,13 @@
 #include "model/receiver_truth.h"
 #include "model/signal_tracking.h"
 
-#include <cmath>
 #include <gtest/gtest.h>
 #include <string>
 
 namespace {
 
 constexpr double kSpeedOfLightMps = 299792458.0;
-constexpr double kEarthRotationRateRadPerSec = 7.2921151467e-5;
+constexpr double kRadiansToDegrees = 180.0 / 3.141592653589793238462643383279502884;
 
 std::string brd4_nav_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/brd400dlr_rinex4_acceptance_nav.rnx";
@@ -42,36 +42,7 @@ gnss_sim::SignalTracker tracking_tracker(gnss_sim::SignalId signal_id, const gns
     return tracker;
 }
 
-bool range_and_angles(const gnss_sim::RtklibSatelliteState& state, const gnss_sim::ReceiverTruth& receiver,
-                      double* range_m, double line_of_sight_ecef[3], double* azimuth_rad, double* elevation_rad) {
-    return gnss_sim::rtklib_geometric_distance(state.position_ecef_m, receiver.position_ecef_m, range_m,
-                                               line_of_sight_ecef) &&
-           gnss_sim::rtklib_azimuth_elevation(receiver.position_ecef_m, line_of_sight_ecef, azimuth_rad, elevation_rad);
-}
-
-double static_receiver_range_rate_mps(const gnss_sim::RtklibSatelliteState& state,
-                                      const gnss_sim::ReceiverTruth& receiver, const double line_of_sight_ecef[3]) {
-    double rate_mps = 0.0;
-    for (int index = 0; index < 3; ++index) {
-        rate_mps += state.velocity_ecef_mps[index] * line_of_sight_ecef[index];
-    }
-    rate_mps += kEarthRotationRateRadPerSec / kSpeedOfLightMps *
-                (state.velocity_ecef_mps[1] * receiver.position_ecef_m[0] -
-                 state.velocity_ecef_mps[0] * receiver.position_ecef_m[1]);
-    return rate_mps;
-}
-
-double position_difference_m(const gnss_sim::RtklibSatelliteState& first,
-                             const gnss_sim::RtklibSatelliteState& second) {
-    double squared_m2 = 0.0;
-    for (int index = 0; index < 3; ++index) {
-        const double difference_m = first.position_ecef_m[index] - second.position_ecef_m[index];
-        squared_m2 += difference_m * difference_m;
-    }
-    return std::sqrt(squared_m2);
-}
-
-TEST(ZeroNoiseMeasurement, RealRinexFamilyMismatchUsesFinalCodeGeometryForAtmosphere) {
+TEST(ZeroNoiseMeasurement, RealWhuC35NearHorizonRecomputesAtmosphereFromFinalCodeState) {
     NavGuard nav{gnss_sim::create_rtklib_nav_store()};
     ASSERT_NE(nav.store, nullptr);
 
@@ -79,84 +50,26 @@ TEST(ZeroNoiseMeasurement, RealRinexFamilyMismatchUsesFinalCodeGeometryForAtmosp
     const std::string nav_path = brd4_nav_path();
     ASSERT_TRUE(gnss_sim::load_rinex_nav_file(nav.store, nav_path.c_str(), &error_message)) << error_message;
 
-    constexpr int kGpsWeek = 2347;
-    constexpr double kTransmitSowSec = 435600.0;
-    constexpr double kReceiveSowSec = 435600.1;
-    int satellite_number = 0;
-    ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number("C22", &satellite_number));
-
-    const gnss_sim::SignalDefinition* modern_signal = gnss_sim::find_signal_definition(gnss_sim::SignalId::kBeidouB1C);
-    const gnss_sim::SignalDefinition* legacy_signal = gnss_sim::find_signal_definition(gnss_sim::SignalId::kBeidouB1I);
-    ASSERT_NE(modern_signal, nullptr);
-    ASSERT_NE(legacy_signal, nullptr);
-
-    int modern_observation_code = 0;
-    int modern_frequency_index = 0;
-    int legacy_observation_code = 0;
-    int legacy_frequency_index = 0;
-    ASSERT_TRUE(
-        gnss_sim::signal_rtklib_observation_code(*modern_signal, &modern_observation_code, &modern_frequency_index));
-    ASSERT_TRUE(
-        gnss_sim::signal_rtklib_observation_code(*legacy_signal, &legacy_observation_code, &legacy_frequency_index));
-    static_cast<void>(modern_frequency_index);
-    static_cast<void>(legacy_frequency_index);
-
-    gnss_sim::RtklibSatelliteState modern_state{};
-    gnss_sim::RtklibSatelliteState legacy_state{};
-    ASSERT_TRUE(gnss_sim::get_rtklib_signal_satellite_state(
-        nav.store, kGpsWeek, kTransmitSowSec, satellite_number, modern_observation_code,
-        gnss_sim::RtklibBroadcastMessageFamily::kBeidouBcnav1, &modern_state, &error_message))
-        << error_message;
-    ASSERT_TRUE(gnss_sim::get_rtklib_signal_satellite_state(
-        nav.store, kGpsWeek, kTransmitSowSec, satellite_number, legacy_observation_code,
-        gnss_sim::RtklibBroadcastMessageFamily::kLegacy, &legacy_state, &error_message))
-        << error_message;
-    ASSERT_GT(position_difference_m(modern_state, legacy_state), 0.01)
-        << "real C22 D1/CNV1 records must remain physically distinct for this regression";
-
-    double subpoint_latitude_deg = 0.0;
-    double subpoint_longitude_deg = 0.0;
-    double subpoint_height_m = 0.0;
-    ASSERT_TRUE(gnss_sim::rtklib_ecef_to_llh(modern_state.position_ecef_m, &subpoint_latitude_deg,
-                                             &subpoint_longitude_deg, &subpoint_height_m));
-    static_cast<void>(subpoint_height_m);
-
     gnss_sim::ReceiverConfig receiver_config{};
-    receiver_config.latitude_deg = subpoint_latitude_deg;
-    receiver_config.longitude_deg = subpoint_longitude_deg;
-    receiver_config.height_m = 0.0;
+    receiver_config.latitude_deg = 20.0;
+    receiver_config.longitude_deg = 120.0;
+    receiver_config.height_m = 100.0;
     gnss_sim::ReceiverTruth receiver{};
     ASSERT_TRUE(gnss_sim::make_static_receiver_truth(receiver_config, &receiver, &error_message)) << error_message;
 
     gnss_sim::SimTime receive_time{};
-    ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(kGpsWeek, kReceiveSowSec, &receive_time));
+    ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2347, 437021.0, &receive_time));
 
-    double modern_range_m = 0.0;
-    double modern_line_of_sight[3]{};
-    double modern_azimuth_rad = 0.0;
-    double modern_elevation_rad = 0.0;
-    ASSERT_TRUE(range_and_angles(modern_state, receiver, &modern_range_m, modern_line_of_sight, &modern_azimuth_rad,
-                                 &modern_elevation_rad));
-    ASSERT_GT(modern_elevation_rad, 0.0);
+    int satellite_number = 0;
+    ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number("C35", &satellite_number));
+    EXPECT_EQ(satellite_number, 144);
 
     gnss_sim::SatelliteGeometry generic_geometry{};
-    generic_geometry.receive_time = receive_time;
-    generic_geometry.transmit_gps_week = kGpsWeek;
-    generic_geometry.transmit_sow_sec = kTransmitSowSec;
-    generic_geometry.satellite_number = satellite_number;
-    generic_geometry.satellite_state = modern_state;
-    generic_geometry.geometric_range_m = modern_range_m;
-    generic_geometry.range_rate_mps = static_receiver_range_rate_mps(modern_state, receiver, modern_line_of_sight);
-    generic_geometry.propagation_time_sec = modern_range_m / kSpeedOfLightMps;
-    generic_geometry.azimuth_rad = modern_azimuth_rad;
-    generic_geometry.elevation_rad = modern_elevation_rad;
-    generic_geometry.iteration_count = 1;
-    generic_geometry.healthy = modern_state.health == 0;
-    generic_geometry.above_elevation_mask = true;
-    generic_geometry.visible = generic_geometry.healthy;
-    for (int index = 0; index < 3; ++index) {
-        generic_geometry.line_of_sight_ecef[index] = modern_line_of_sight[index];
-    }
+    ASSERT_TRUE(gnss_sim::compute_satellite_geometry(nav.store, receiver, receive_time, satellite_number, -90.0,
+                                                     &generic_geometry, &error_message))
+        << error_message;
+    ASSERT_GT(generic_geometry.elevation_rad * kRadiansToDegrees, 0.0);
+    ASSERT_LT(generic_geometry.elevation_rad * kRadiansToDegrees, 0.02);
 
     gnss_sim::AtmosphereCorrection supplied_atmosphere{};
     supplied_atmosphere.mode = gnss_sim::AtmosphereMode::BROADCAST;
@@ -167,6 +80,7 @@ TEST(ZeroNoiseMeasurement, RealRinexFamilyMismatchUsesFinalCodeGeometryForAtmosp
     for (gnss_sim::SignalId signal_id : signals) {
         const gnss_sim::SignalDefinition* signal = gnss_sim::find_signal_definition(signal_id);
         ASSERT_NE(signal, nullptr);
+
         int observation_code = 0;
         int frequency_index = 0;
         ASSERT_TRUE(gnss_sim::signal_rtklib_observation_code(*signal, &observation_code, &frequency_index));
@@ -174,17 +88,20 @@ TEST(ZeroNoiseMeasurement, RealRinexFamilyMismatchUsesFinalCodeGeometryForAtmosp
 
         gnss_sim::RtklibSatelliteState expected_state{};
         ASSERT_TRUE(gnss_sim::get_rtklib_signal_satellite_state(
-            nav.store, kGpsWeek, kTransmitSowSec, satellite_number, observation_code,
-            gnss_sim::RtklibBroadcastMessageFamily::kLegacy, &expected_state, &error_message))
+            nav.store, generic_geometry.transmit_gps_week, generic_geometry.transmit_sow_sec, satellite_number,
+            observation_code, gnss_sim::RtklibBroadcastMessageFamily::kLegacy, &expected_state, &error_message))
             << error_message;
 
         double expected_range_m = 0.0;
         double expected_line_of_sight[3]{};
+        ASSERT_TRUE(gnss_sim::rtklib_geometric_distance(expected_state.position_ecef_m, receiver.position_ecef_m,
+                                                        &expected_range_m, expected_line_of_sight));
         double expected_azimuth_rad = 0.0;
         double expected_elevation_rad = 0.0;
-        ASSERT_TRUE(range_and_angles(expected_state, receiver, &expected_range_m, expected_line_of_sight,
-                                     &expected_azimuth_rad, &expected_elevation_rad));
-        ASSERT_GT(expected_elevation_rad, 0.0);
+        ASSERT_TRUE(gnss_sim::rtklib_azimuth_elevation(receiver.position_ecef_m, expected_line_of_sight,
+                                                       &expected_azimuth_rad, &expected_elevation_rad));
+        ASSERT_GT(expected_elevation_rad * kRadiansToDegrees, 0.0);
+        ASSERT_LT(expected_elevation_rad * kRadiansToDegrees, 0.02);
 
         gnss_sim::AtmosphereCorrection expected_atmosphere{};
         ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(

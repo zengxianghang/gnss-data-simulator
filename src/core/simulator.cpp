@@ -435,10 +435,25 @@ AcquisitionContext startup_context(StartupMode mode) {
     return AcquisitionContext::kHot;
 }
 
-MeasurementErrorContext measurement_error_context(const SimConfig& config, const SignalTracker& tracker) {
+MeasurementErrorContext measurement_error_context(const SimConfig& config, const ScenarioEpochState& scenario,
+                                                  const SignalTracker& tracker) {
     MeasurementErrorContext context{};
     context.phase = MeasurementErrorPhase::kStable;
     context.rea_fade_progress = 0.0;
+
+    if (config.scenario == ScenarioType::REA && scenario.signal_available &&
+        config.measurement_error.rea_fade.duration_sec > 0.0) {
+        const long double fade_duration_ns = static_cast<long double>(config.measurement_error.rea_fade.duration_sec) *
+                                             static_cast<long double>(NANOSECONDS_PER_SECOND);
+        const std::int64_t time_to_signal_off_ns = config.rea.signal_on_ns - scenario.phase_elapsed_ns;
+        if (time_to_signal_off_ns >= 0 && static_cast<long double>(time_to_signal_off_ns) <= fade_duration_ns) {
+            const long double elapsed_fade_ns = fade_duration_ns - static_cast<long double>(time_to_signal_off_ns);
+            context.phase = MeasurementErrorPhase::kReaFadeOut;
+            context.rea_fade_progress = std::clamp(static_cast<double>(elapsed_fade_ns / fade_duration_ns), 0.0, 1.0);
+            return context;
+        }
+    }
+
     if (config.scenario == ScenarioType::REA && tracker.acquisition_context == AcquisitionContext::kReacquisition) {
         context.phase = MeasurementErrorPhase::kReaReacquisition;
         return context;
@@ -858,9 +873,9 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
             }
             MeasurementObservation reported_observation = observation;
             if (config.measurement_noise_enabled &&
-                !apply_measurement_error(config.measurement_error, config.seed,
-                                         measurement_error_context(config, signal.tracker), signal.tracker, observation,
-                                         &signal.measurement_error, &reported_observation, error_message)) {
+                !apply_measurement_error(
+                    config.measurement_error, config.seed, measurement_error_context(config, scenario, signal.tracker),
+                    signal.tracker, observation, &signal.measurement_error, &reported_observation, error_message)) {
                 return false;
             }
             measurements->push_back(reported_observation);

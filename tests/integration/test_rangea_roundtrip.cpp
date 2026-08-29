@@ -147,6 +147,98 @@ TEST(RangeaRoundtripIntegration, LowElevationRangeIsRetainedWhileSppUsesFiveDegr
     cleanup(directory);
 }
 
+TEST(RangeaRoundtripIntegration, SerializedRangeEphemerisAndIonPositionWithoutOriginalRinexNav) {
+    const std::filesystem::path directory = "gnss_sim_serialized_nav_roundtrip_real_whu";
+    gnss_sim::SimulatorRunSummary simulator_summary{};
+    std::string error_message;
+    ASSERT_TRUE(run_simulator(directory, &simulator_summary, &error_message)) << error_message;
+    ASSERT_GT(simulator_summary.range_messages, 0U);
+    ASSERT_GT(simulator_summary.nav_messages, 0U);
+
+    gnss_sim::SerializedNavRoundtripSummary roundtrip{};
+    const std::string log_path = (directory / "simulated.log").string();
+    ASSERT_TRUE(gnss_sim::validate_serialized_navigation_roundtrip_file(log_path.c_str(), 20.0, 120.0, 100.0, 5.0, true,
+                                                                        &roundtrip, &error_message))
+        << error_message;
+    EXPECT_EQ(roundtrip.position.range_epochs, simulator_summary.range_messages);
+    EXPECT_GT(roundtrip.parsed_nav_records, 0U);
+    EXPECT_GT(roundtrip.parsed_ionosphere_records, 0U);
+    EXPECT_GT(roundtrip.gps_ephemeris_records, 0U);
+    EXPECT_GT(roundtrip.glonass_ephemeris_records, 0U);
+    EXPECT_GT(roundtrip.galileo_ephemeris_records, 0U);
+    EXPECT_GT(roundtrip.beidou_ephemeris_records, 0U);
+    EXPECT_GT(roundtrip.qzss_ephemeris_records, 0U);
+    EXPECT_GT(roundtrip.position.valid_position_epochs, 0U);
+    EXPECT_GT(roundtrip.skipped_position_observations_without_nav, 0U)
+        << "real receiver-visible NAV timing should leave some early observations without a usable ephemeris";
+    std::cout << "serialized_nav_roundtrip_skipped_without_nav=" << roundtrip.skipped_position_observations_without_nav
+              << '\n';
+    std::cout << "serialized_nav_roundtrip_max_3d_error_m=" << roundtrip.position.max_position_error_m << '\n';
+    std::cout << "serialized_nav_roundtrip_valid_position_epochs=" << roundtrip.position.valid_position_epochs << '\n';
+    EXPECT_LT(roundtrip.position.max_position_error_m, 0.1)
+        << "serialized EPHA/IONA precision should preserve survey-grade compact SPP without source RINEX NAV";
+
+    cleanup(directory);
+}
+
+TEST(RangeaRoundtripIntegration, SerializedNavigationDoesNotUseFutureNavBeforeItAppearsInLog) {
+    const std::filesystem::path directory = "gnss_sim_serialized_nav_causal_order";
+    gnss_sim::SimulatorRunSummary simulator_summary{};
+    std::string error_message;
+    ASSERT_TRUE(run_simulator(directory, &simulator_summary, &error_message)) << error_message;
+
+    const std::string original_log = read_file(directory / "simulated.log");
+    std::istringstream input(original_log);
+    std::string line;
+    std::string first_valid_range;
+    while (std::getline(input, line)) {
+        if (line.rfind("#RANGEA,", 0) != 0) {
+            continue;
+        }
+        gnss_sim::ParsedRangeEpoch epoch{};
+        std::string parse_error;
+        ASSERT_TRUE(gnss_sim::parse_rangea_line_independent(line, &epoch, &parse_error)) << parse_error;
+        bool has_valid_pseudorange = false;
+        for (const gnss_sim::ParsedRangeObservation& observation : epoch.observations) {
+            if (observation.pseudorange_valid) {
+                has_valid_pseudorange = true;
+                break;
+            }
+        }
+        if (has_valid_pseudorange) {
+            first_valid_range = line;
+            break;
+        }
+    }
+    ASSERT_FALSE(first_valid_range.empty());
+
+    // Put a valid observation epoch before the complete original log. All of
+    // the real serialized EPHA/IONA records still exist later in the same
+    // stream. A causal validator must skip that early observation rather than
+    // looking ahead; once the original log later delivers NAV, normal epochs
+    // can still position successfully.
+    std::istringstream reordered(first_valid_range + "\n" + original_log);
+    gnss_sim::SerializedNavRoundtripSummary summary{};
+    error_message.clear();
+    ASSERT_TRUE(gnss_sim::validate_serialized_navigation_roundtrip_stream(&reordered, 20.0, 120.0, 100.0, 5.0, true,
+                                                                          &summary, &error_message))
+        << error_message;
+    EXPECT_GT(summary.skipped_position_observations_without_nav, 0U);
+    EXPECT_GT(summary.position.valid_position_epochs, 0U);
+
+    cleanup(directory);
+}
+
+TEST(RangeaRoundtripIntegration, MalformedSerializedNavigationCrcFailsExplicitly) {
+    std::istringstream malformed("#IONUTCA,COM1,0,0.0,FINE,2347,436500.000,00000000,0,0;"
+                                 "0,0,0,0,0,0,0,0,2347,0,0,0,2347,0,18,18,0*00000000\r\n");
+    gnss_sim::SerializedNavRoundtripSummary summary{};
+    std::string error_message;
+    EXPECT_FALSE(gnss_sim::validate_serialized_navigation_roundtrip_stream(&malformed, 20.0, 120.0, 100.0, 5.0, true,
+                                                                           &summary, &error_message));
+    EXPECT_NE(error_message.find("CRC"), std::string::npos);
+}
+
 TEST(RangeaRoundtripIntegration, MalformedSerializedRangeaFailsExplicitly) {
     std::istringstream malformed(
         "#RANGEA,COM1,0,0.0,FINE,2347,436500.000,00000000,0,0;1,1,0,20000000.000*00000000\r\n");

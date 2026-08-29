@@ -2,6 +2,7 @@
 
 #include "gnss/rtklib_adapter.h"
 #include "gnss/signal_definitions.h"
+#include "serialized_nav_parser.h"
 
 #include <algorithm>
 #include <cmath>
@@ -524,6 +525,199 @@ bool validate_rangea_roundtrip_stream(std::istream* input, const char* rinex_nav
 
     *summary = result;
     return true;
+}
+
+bool validate_serialized_navigation_roundtrip_stream(std::istream* input, double truth_latitude_deg,
+                                                     double truth_longitude_deg, double truth_height_m,
+                                                     double elevation_mask_deg, bool broadcast_atmosphere,
+                                                     SerializedNavRoundtripSummary* summary,
+                                                     std::string* error_message) {
+    if (input == nullptr || summary == nullptr || !std::isfinite(truth_latitude_deg) ||
+        !std::isfinite(truth_longitude_deg) || !std::isfinite(truth_height_m) || !std::isfinite(elevation_mask_deg)) {
+        set_error(error_message, "serialized NAV round-trip request has invalid arguments");
+        return false;
+    }
+
+    RtklibNavStore* nav = create_rtklib_nav_store();
+    if (nav == nullptr) {
+        set_error(error_message, "cannot allocate serialized receiver NAV store");
+        return false;
+    }
+    double truth_ecef_m[3]{};
+    if (!rtklib_llh_to_ecef(truth_latitude_deg, truth_longitude_deg, truth_height_m, truth_ecef_m)) {
+        destroy_rtklib_nav_store(nav);
+        set_error(error_message, "cannot convert serialized NAV round-trip truth position to ECEF");
+        return false;
+    }
+
+    SerializedNavRoundtripSummary result{};
+    std::string line;
+    std::uint64_t line_number = 0;
+    std::string last_position_diagnostic;
+    while (std::getline(*input, line)) {
+        ++line_number;
+        ParsedSerializedNavRecord parsed_nav{};
+        bool nav_recognized = false;
+        std::string nav_error;
+        if (!parse_serialized_novatel_nav_line_independent(line, &parsed_nav, &nav_recognized, &nav_error)) {
+            destroy_rtklib_nav_store(nav);
+            set_error(error_message, "serialized NAV line " + std::to_string(line_number) + ": " + nav_error);
+            return false;
+        }
+        if (nav_recognized) {
+            if (!rtklib_append_nav_output_record(nav, parsed_nav.record, error_message)) {
+                destroy_rtklib_nav_store(nav);
+                return false;
+            }
+            ++result.parsed_nav_records;
+            if (parsed_nav.record.kind == RtklibNavRecordKind::kIonosphere) {
+                ++result.parsed_ionosphere_records;
+            } else {
+                ++result.parsed_ephemeris_records;
+                NavOutputSystem system = NavOutputSystem::kUnknown;
+                if (parsed_nav.record.kind == RtklibNavRecordKind::kEphemeris) {
+                    system = parsed_nav.record.ephemeris.system;
+                } else if (parsed_nav.record.kind == RtklibNavRecordKind::kGlonassEphemeris) {
+                    system = NavOutputSystem::kGlonass;
+                }
+                switch (system) {
+                    case NavOutputSystem::kGps:
+                        ++result.gps_ephemeris_records;
+                        break;
+                    case NavOutputSystem::kGlonass:
+                        ++result.glonass_ephemeris_records;
+                        break;
+                    case NavOutputSystem::kGalileo:
+                        ++result.galileo_ephemeris_records;
+                        break;
+                    case NavOutputSystem::kBeidou:
+                        ++result.beidou_ephemeris_records;
+                        break;
+                    case NavOutputSystem::kQzss:
+                        ++result.qzss_ephemeris_records;
+                        break;
+                    case NavOutputSystem::kNavic:
+                    case NavOutputSystem::kUnknown:
+                        break;
+                }
+            }
+            continue;
+        }
+        if (line.rfind("#RANGEA,", 0) != 0) {
+            continue;
+        }
+
+        ParsedRangeEpoch epoch{};
+        std::string parse_error;
+        if (!parse_rangea_line_independent(line, &epoch, &parse_error)) {
+            destroy_rtklib_nav_store(nav);
+            set_error(error_message, "RANGEA line " + std::to_string(line_number) + ": " + parse_error);
+            return false;
+        }
+        ++result.position.range_epochs;
+        result.position.parsed_observations += static_cast<std::uint64_t>(epoch.observations.size());
+
+        std::vector<RtklibRawCodeObservation> selected;
+        if (!select_position_observations(epoch, &selected, error_message)) {
+            destroy_rtklib_nav_store(nav);
+            return false;
+        }
+        result.position.selected_position_observations += static_cast<std::uint64_t>(selected.size());
+        std::vector<RtklibRawCodeObservation> usable;
+        usable.reserve(selected.size());
+        for (const RtklibRawCodeObservation& observation : selected) {
+            bool nav_available = false;
+            if (!rtklib_raw_code_observation_navigation_available(nav, epoch.gps_week, epoch.sow_sec, &observation,
+                                                                  &nav_available, error_message)) {
+                destroy_rtklib_nav_store(nav);
+                return false;
+            }
+            if (nav_available) {
+                usable.push_back(observation);
+            } else {
+                ++result.skipped_position_observations_without_nav;
+            }
+        }
+        if (usable.empty()) {
+            continue;
+        }
+
+        RtklibPositionSolution solution{};
+        std::string solve_error;
+        if (!rtklib_solve_raw_single_position(nav, epoch.gps_week, epoch.sow_sec, usable.data(),
+                                              static_cast<int>(usable.size()), elevation_mask_deg, broadcast_atmosphere,
+                                              &solution, &solve_error)) {
+            destroy_rtklib_nav_store(nav);
+            set_error(error_message, "serialized NAV RTKLIB solve failed at GPST " + std::to_string(epoch.gps_week) +
+                                         "/" + std::to_string(epoch.sow_sec) + ": " + solve_error);
+            return false;
+        }
+        if (!solution.valid) {
+            last_position_diagnostic = solution.diagnostic;
+            continue;
+        }
+
+        const double dx = solution.position_ecef_m[0] - truth_ecef_m[0];
+        const double dy = solution.position_ecef_m[1] - truth_ecef_m[1];
+        const double dz = solution.position_ecef_m[2] - truth_ecef_m[2];
+        const double error_m = std::sqrt(dx * dx + dy * dy + dz * dz);
+        if (!std::isfinite(error_m)) {
+            destroy_rtklib_nav_store(nav);
+            set_error(error_message, "serialized NAV solution produced non-finite position error");
+            return false;
+        }
+        ++result.position.valid_position_epochs;
+        result.position.final_position_error_m = error_m;
+        result.position.final_position_gps_week = epoch.gps_week;
+        result.position.final_position_sow_sec = epoch.sow_sec;
+        if (error_m > result.position.max_position_error_m) {
+            result.position.max_position_error_m = error_m;
+            result.position.max_error_gps_week = epoch.gps_week;
+            result.position.max_error_sow_sec = epoch.sow_sec;
+        }
+    }
+
+    destroy_rtklib_nav_store(nav);
+    if (input->bad()) {
+        set_error(error_message, "I/O failure while streaming serialized receiver log");
+        return false;
+    }
+    if (result.parsed_ephemeris_records == 0U || result.parsed_ionosphere_records == 0U) {
+        set_error(error_message, "serialized receiver log contains no usable EPHA/IONA navigation set");
+        return false;
+    }
+    if (result.position.range_epochs == 0U) {
+        set_error(error_message, "serialized receiver log contains no RANGEA epochs");
+        return false;
+    }
+    if (result.position.valid_position_epochs == 0U) {
+        std::string message = "serialized receiver navigation produced no valid RTKLIB position epoch";
+        if (!last_position_diagnostic.empty()) {
+            message += ": " + last_position_diagnostic;
+        }
+        set_error(error_message, message);
+        return false;
+    }
+    *summary = result;
+    return true;
+}
+
+bool validate_serialized_navigation_roundtrip_file(const char* log_path, double truth_latitude_deg,
+                                                   double truth_longitude_deg, double truth_height_m,
+                                                   double elevation_mask_deg, bool broadcast_atmosphere,
+                                                   SerializedNavRoundtripSummary* summary, std::string* error_message) {
+    if (log_path == nullptr || log_path[0] == '\0') {
+        set_error(error_message, "serialized NAV round-trip log path is invalid");
+        return false;
+    }
+    std::ifstream input(log_path, std::ios::binary);
+    if (!input) {
+        set_error(error_message, std::string("cannot open serialized NAV round-trip log: ") + log_path);
+        return false;
+    }
+    return validate_serialized_navigation_roundtrip_stream(&input, truth_latitude_deg, truth_longitude_deg,
+                                                           truth_height_m, elevation_mask_deg, broadcast_atmosphere,
+                                                           summary, error_message);
 }
 
 bool validate_rangea_roundtrip_file(const char* log_path, const char* rinex_nav_path, double truth_latitude_deg,

@@ -48,8 +48,7 @@ bool range_and_angles(const gnss_sim::RtklibSatelliteState& state, const gnss_si
                       double* range_m, double line_of_sight_ecef[3], double* azimuth_rad, double* elevation_rad) {
     return gnss_sim::rtklib_geometric_distance(state.position_ecef_m, receiver.position_ecef_m, range_m,
                                                line_of_sight_ecef) &&
-           gnss_sim::rtklib_azimuth_elevation(receiver.position_ecef_m, line_of_sight_ecef, azimuth_rad,
-                                              elevation_rad);
+           gnss_sim::rtklib_azimuth_elevation(receiver.position_ecef_m, line_of_sight_ecef, azimuth_rad, elevation_rad);
 }
 
 double static_receiver_range_rate_mps(const gnss_sim::RtklibSatelliteState& state,
@@ -78,10 +77,8 @@ TEST(ZeroNoiseMeasurement, RealRinexFamilyMismatchUsesFinalCodeGeometryForAtmosp
     int satellite_number = 0;
     ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number("C22", &satellite_number));
 
-    const gnss_sim::SignalDefinition* modern_signal =
-        gnss_sim::find_signal_definition(gnss_sim::SignalId::kBeidouB1C);
-    const gnss_sim::SignalDefinition* legacy_signal =
-        gnss_sim::find_signal_definition(gnss_sim::SignalId::kBeidouB1I);
+    const gnss_sim::SignalDefinition* modern_signal = gnss_sim::find_signal_definition(gnss_sim::SignalId::kBeidouB1C);
+    const gnss_sim::SignalDefinition* legacy_signal = gnss_sim::find_signal_definition(gnss_sim::SignalId::kBeidouB1I);
     ASSERT_NE(modern_signal, nullptr);
     ASSERT_NE(legacy_signal, nullptr);
 
@@ -89,10 +86,10 @@ TEST(ZeroNoiseMeasurement, RealRinexFamilyMismatchUsesFinalCodeGeometryForAtmosp
     int modern_frequency_index = 0;
     int legacy_observation_code = 0;
     int legacy_frequency_index = 0;
-    ASSERT_TRUE(gnss_sim::signal_rtklib_observation_code(*modern_signal, &modern_observation_code,
-                                                        &modern_frequency_index));
-    ASSERT_TRUE(gnss_sim::signal_rtklib_observation_code(*legacy_signal, &legacy_observation_code,
-                                                        &legacy_frequency_index));
+    ASSERT_TRUE(
+        gnss_sim::signal_rtklib_observation_code(*modern_signal, &modern_observation_code, &modern_frequency_index));
+    ASSERT_TRUE(
+        gnss_sim::signal_rtklib_observation_code(*legacy_signal, &legacy_observation_code, &legacy_frequency_index));
     static_cast<void>(modern_frequency_index);
     static_cast<void>(legacy_frequency_index);
 
@@ -131,10 +128,10 @@ TEST(ZeroNoiseMeasurement, RealRinexFamilyMismatchUsesFinalCodeGeometryForAtmosp
             candidate_config.height_m = 0.0;
             gnss_sim::ReceiverTruth candidate{};
             if (!gnss_sim::make_static_receiver_truth(candidate_config, &candidate, &error_message) ||
-                !range_and_angles(modern_state, candidate, &modern_range_m, modern_line_of_sight,
-                                  &modern_azimuth_rad, &modern_elevation_rad) ||
-                !range_and_angles(legacy_state, candidate, &legacy_range_m, legacy_line_of_sight,
-                                  &legacy_azimuth_rad, &legacy_elevation_rad)) {
+                !range_and_angles(modern_state, candidate, &modern_range_m, modern_line_of_sight, &modern_azimuth_rad,
+                                  &modern_elevation_rad) ||
+                !range_and_angles(legacy_state, candidate, &legacy_range_m, legacy_line_of_sight, &legacy_azimuth_rad,
+                                  &legacy_elevation_rad)) {
                 continue;
             }
 
@@ -144,14 +141,14 @@ TEST(ZeroNoiseMeasurement, RealRinexFamilyMismatchUsesFinalCodeGeometryForAtmosp
                 legacy_elevation_deg > 2.0) {
                 continue;
             }
-            if (!gnss_sim::compute_atmosphere_correction(
-                    gnss_sim::AtmosphereMode::BROADCAST, nav.store, receive_time, gnss_sim::SignalId::kBeidouB1I, 0,
-                    candidate.position_ecef_m, modern_azimuth_rad, modern_elevation_rad, &modern_atmosphere,
-                    &error_message) ||
-                !gnss_sim::compute_atmosphere_correction(
-                    gnss_sim::AtmosphereMode::BROADCAST, nav.store, receive_time, gnss_sim::SignalId::kBeidouB1I, 0,
-                    candidate.position_ecef_m, legacy_azimuth_rad, legacy_elevation_rad, &legacy_atmosphere,
-                    &error_message)) {
+            if (!gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::BROADCAST, nav.store, receive_time,
+                                                         gnss_sim::SignalId::kBeidouB1I, 0, candidate.position_ecef_m,
+                                                         modern_azimuth_rad, modern_elevation_rad, &modern_atmosphere,
+                                                         &error_message) ||
+                !gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::BROADCAST, nav.store, receive_time,
+                                                         gnss_sim::SignalId::kBeidouB1I, 0, candidate.position_ecef_m,
+                                                         legacy_azimuth_rad, legacy_elevation_rad, &legacy_atmosphere,
+                                                         &error_message)) {
                 continue;
             }
             if (std::fabs(legacy_atmosphere.troposphere_delay_m - modern_atmosphere.troposphere_delay_m) <= 0.1) {
@@ -173,8 +170,7 @@ TEST(ZeroNoiseMeasurement, RealRinexFamilyMismatchUsesFinalCodeGeometryForAtmosp
     generic_geometry.satellite_number = satellite_number;
     generic_geometry.satellite_state = modern_state;
     generic_geometry.geometric_range_m = modern_range_m;
-    generic_geometry.range_rate_mps =
-        static_receiver_range_rate_mps(modern_state, receiver, modern_line_of_sight);
+    generic_geometry.range_rate_mps = static_receiver_range_rate_mps(modern_state, receiver, modern_line_of_sight);
     generic_geometry.propagation_time_sec = modern_range_m / kSpeedOfLightMps;
     generic_geometry.azimuth_rad = modern_azimuth_rad;
     generic_geometry.elevation_rad = modern_elevation_rad;

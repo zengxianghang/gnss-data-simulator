@@ -1,0 +1,77 @@
+{
+  "extraction_method": "verbatim record filter/copy: retained records are byte-identical to the source records after LF line-ending normalization; no navigation field was modified, synthesized, interpolated, or reordered within a record",
+  "fixture_filename": "brd400dlr_rinex4_galileo_companion_nav.rnx",
+  "fixture_sha256": "db7cc498360c9b2cb5b0bcac2818739c5cd89df63ce8c619f17cd8073150480c",
+  "rinex_version": 4.02,
+  "schema_version": 1,
+  "searched_absent_real_cases": {
+    "same_toe_different_iodnav": {
+      "description": "same satellite, same Toe, different IODnav across INAV/FNAV",
+      "galileo_records_scanned": 12183,
+      "matches_found": 0,
+      "note": "case is absent in the searched real interval and was not fabricated",
+      "searched_products": [
+        "BRD400DLR_S_20250030000_01D_MN",
+        "BRD400DLR_S_20250040000_01D_MN"
+      ]
+    }
+  },
+  "selected_galileo_record_count": 6,
+  "selected_galileo_records": [
+    {
+      "iodnav": 1,
+      "message_family": "INAV",
+      "record_line_count": 9,
+      "satellite": "E02",
+      "source_record_index": 10832,
+      "toe_sow_sec": 457800.0
+    },
+    {
+      "iodnav": 1,
+      "message_family": "FNAV",
+      "record_line_count": 9,
+      "satellite": "E02",
+      "source_record_index": 10959,
+      "toe_sow_sec": 457800.0
+    },
+    {
+      "iodnav": 2,
+      "message_family": "FNAV",
+      "record_line_count": 9,
+      "satellite": "E02",
+      "source_record_index": 10960,
+      "toe_sow_sec": 458400.0
+    },
+    {
+      "iodnav": 2,
+      "message_family": "INAV",
+      "record_line_count": 9,
+      "satellite": "E02",
+      "source_record_index": 10833,
+      "toe_sow_sec": 458400.0
+    },
+    {
+      "iodnav": 87,
+      "message_family": "INAV",
+      "record_line_count": 9,
+      "satellite": "E05",
+      "source_record_index": 11506,
+      "toe_sow_sec": 433200.0
+    },
+    {
+      "iodnav": 87,
+      "message_family": "FNAV",
+      "record_line_count": 9,
+      "satellite": "E05",
+      "source_record_index": 11702,
+      "toe_sow_sec": 509400.0
+    }
+  ],
+  "selection_purpose": "real same-satellite Galileo INAV/FNAV companion-identity regressions (issue 94)",
+  "source_compressed_sha256": "fb84d4046b06e905e8e4ec0efb82f0e9ad044bc44d664cc0209cb9b4c92b9512",
+  "source_date_span": "2025-01-03 (full day, GPS week 2345)",
+  "source_filename": "BRD400DLR_S_20250030000_01D_MN.rnx",
+  "source_product": "BRD400DLR",
+  "source_uncompressed_sha256": "b11c638eea42978b8bd6aa8b65a5099fe6556dfe527bc037ed481d2b239afc42",
+  "source_url": "ftp://igs.gnsswhu.cn/pub/gps/data/daily/2025/brdc/BRD400DLR_S_20250030000_01D_MN.rnx.gz"
+}

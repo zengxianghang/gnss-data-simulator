@@ -37,3 +37,23 @@ Archive pattern:
 Until a provenance-traceable authoritative L3OC record is available, compact CI
 keeps GLONASS G3 observation/Doppler validation but requires its code-bias
 coverage to be reported explicitly as unavailable. A synthetic fallback is forbidden.
+
+## Galileo INAV/FNAV companion-identity fixture
+
+`brd400dlr_rinex4_galileo_companion_nav.rnx` supports the real same-satellite
+Galileo INAV/FNAV companion-identity regressions for issue #94. It is a verbatim
+record filter/copy of the real Wuhan University IGS Data Center product
+`BRD400DLR_S_20250030000_01D_MN.rnx.gz` (the same authoritative source file as
+`brd400dlr_rinex4_acceptance_nav.rnx`); the six retained E02/E05 records are
+byte-identical to their source records after LF line-ending normalization, and no
+navigation field was modified, synthesized, or interpolated. Source URL, source
+hashes, fixture hash, per-record identities (satellite, message family, IODnav,
+Toe) and the extraction method are frozen in
+`brd400dlr_rinex4_galileo_companion_nav.meta.json`.
+
+Real cases covered: E02 carries two consecutive broadcast instances (IODnav 1 at
+Toe 457800 and IODnav 2 at Toe 458400, each with both families), and E05 carries
+a real same-IODnav/different-Toe pair (IODnav 87, INAV at Toe 433200 vs FNAV at
+Toe 509400). A real same-Toe/different-IODnav case was searched for across two
+full BRD400DLR days (2025-003 and 2025-004, 12183 Galileo records total) and does
+not occur; no synthetic case was introduced.

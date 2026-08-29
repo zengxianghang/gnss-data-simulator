@@ -1,11 +1,10 @@
 #include "gnss/rtklib_adapter.h"
 
+#include <cstring>
+
 extern "C" {
 #include <rtklib.h>
 }
-
-#include <cstring>
-
 namespace gnss_sim {
 
 bool rtklib_satellite_number_to_id(int satellite_number, char satellite_id[4]) {

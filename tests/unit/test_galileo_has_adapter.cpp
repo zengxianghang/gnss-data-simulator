@@ -1,14 +1,12 @@
 #include "gnss/galileo_has_adapter.h"
 
+#include <cmath>
 #include <gtest/gtest.h>
+#include <string>
 
 extern "C" {
 #include <rtklib.h>
 }
-
-#include <cmath>
-#include <string>
-
 namespace {
 
 std::string test_data_path(const char* name) {

@@ -1,14 +1,13 @@
 #include "gnss/nav_output_record.h"
 
-extern "C" {
-#include <rtklib.h>
-}
-
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 
+extern "C" {
+#include <rtklib.h>
+}
 namespace gnss_sim {
 
 struct RtklibNavStore {

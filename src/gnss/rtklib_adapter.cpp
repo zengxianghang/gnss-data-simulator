@@ -1,11 +1,5 @@
 #include "gnss/rtklib_adapter.h"
 
-extern "C" {
-#include <rtklib.h>
-#include <rtklib_obs_ext.h>
-#include <rtklib_signal_bias_ext.h>
-}
-
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -15,6 +9,11 @@ extern "C" {
 #include <utility>
 #include <vector>
 
+extern "C" {
+#include <rtklib.h>
+#include <rtklib_obs_ext.h>
+#include <rtklib_signal_bias_ext.h>
+}
 namespace gnss_sim {
 
 struct RtklibNavStore {

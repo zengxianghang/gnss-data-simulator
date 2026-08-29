@@ -3,22 +3,20 @@
 #include "model/receiver_truth.h"
 #include "tools/build_cn0_model/rinex_obs_stream.h"
 
-#include <gtest/gtest.h>
-
-extern "C" {
-#include <rtklib.h>
-}
-
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <gtest/gtest.h>
 #include <iomanip>
 #include <set>
 #include <sstream>
 #include <string>
 #include <vector>
 
+extern "C" {
+#include <rtklib.h>
+}
 namespace {
 
 using gnss_sim::cn0_builder::Cn0SampleValidity;

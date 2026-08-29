@@ -1,13 +1,12 @@
 #include "gnss/rtklib_adapter.h"
 
+#include <cmath>
+#include <cstring>
+
 extern "C" {
 #include <rtklib.h>
 #include <rtklib_signal_bias_ext.h>
 }
-
-#include <cmath>
-#include <cstring>
-
 namespace gnss_sim {
 
 // RtklibNavStore is intentionally opaque outside the RTKLIB adapter boundary.

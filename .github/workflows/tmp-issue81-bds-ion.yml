@@ -10,15 +10,15 @@ permissions:
 
 jobs:
   apply:
-    if: ${{ !contains(github.event.head_commit.message, '[issue81-bds-ion]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[issue81-nav-meta]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: issue-81-serialized-nav-roundtrip
-      - name: Fix BDS leap restoration and add regression
-        shell: python
+      - name: Fix serialized NAV metadata and fallback behavior
         run: |
+          python - <<'PY'
           from pathlib import Path
 
           parser = Path('tools/rangea_roundtrip/serialized_nav_parser.cpp')
@@ -29,11 +29,98 @@ jobs:
           assert old in text
           parser.write_text(text.replace(old, new, 1))
 
+          header = Path('tools/rangea_roundtrip/rangea_roundtrip.h')
+          text = header.read_text()
+          old = ('    std::uint64_t parsed_ionosphere_records;\n'
+                 '    std::uint64_t gps_ephemeris_records;\n')
+          new = ('    std::uint64_t parsed_ionosphere_records;\n'
+                 '    std::uint64_t gps_ionosphere_records;\n'
+                 '    std::uint64_t skipped_position_epochs_without_ionosphere;\n'
+                 '    std::uint64_t gps_ephemeris_records;\n')
+          assert old in text
+          header.write_text(text.replace(old, new, 1))
+
+          core = Path('tools/rangea_roundtrip/rangea_roundtrip.cpp')
+          text = core.read_text()
+          old = '    SerializedNavRoundtripSummary result{};\n    std::string line;\n'
+          new = ('    SerializedNavRoundtripSummary result{};\n'
+                 '    bool gps_broadcast_ion_available = false;\n'
+                 '    std::string line;\n')
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = ('            if (parsed_nav.record.kind == RtklibNavRecordKind::kIonosphere) {\n'
+                 '                ++result.parsed_ionosphere_records;\n'
+                 '            } else {\n')
+          new = ('            if (parsed_nav.record.kind == RtklibNavRecordKind::kIonosphere) {\n'
+                 '                ++result.parsed_ionosphere_records;\n'
+                 '                if (parsed_nav.record.ionosphere.system == NavOutputSystem::kGps) {\n'
+                 '                    ++result.gps_ionosphere_records;\n'
+                 '                    gps_broadcast_ion_available = true;\n'
+                 '                }\n'
+                 '            } else {\n')
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = ('        result.position.selected_position_observations += static_cast<std::uint64_t>(selected.size());\n'
+                 '        std::vector<RtklibRawCodeObservation> usable;\n')
+          new = ('        result.position.selected_position_observations += static_cast<std::uint64_t>(selected.size());\n'
+                 '        if (broadcast_atmosphere && !gps_broadcast_ion_available) {\n'
+                 '            ++result.skipped_position_epochs_without_ionosphere;\n'
+                 '            continue;\n'
+                 '        }\n'
+                 '        std::vector<RtklibRawCodeObservation> usable;\n')
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = ('    if (result.parsed_ephemeris_records == 0U || result.parsed_ionosphere_records == 0U) {\n'
+                 '        set_error(error_message, "serialized receiver log contains no usable EPHA/IONA navigation set");\n'
+                 '        return false;\n'
+                 '    }\n')
+          new = ('    if (result.parsed_ephemeris_records == 0U) {\n'
+                 '        set_error(error_message, "serialized receiver log contains no usable EPHA navigation set");\n'
+                 '        return false;\n'
+                 '    }\n'
+                 '    if (broadcast_atmosphere && result.gps_ionosphere_records == 0U) {\n'
+                 '        set_error(error_message,\n'
+                 '                  "serialized receiver log contains no usable GPS IONUTCA for broadcast atmosphere");\n'
+                 '        return false;\n'
+                 '    }\n')
+          assert old in text
+          core.write_text(text.replace(old, new, 1))
+
           test = Path('tests/integration/test_rangea_roundtrip.cpp')
           text = test.read_text()
+          assert 'RealBeidouLegacyIonRestoresRtklibGpsUtcLeapMetadata' not in text
           marker = '\n} // namespace\n'
           assert text.endswith(marker)
           addition = r'''
+
+TEST(RangeaRoundtripIntegration, BroadcastAtmosphereRequiresSerializedGpsIonBeforePositioning) {
+    const std::filesystem::path directory = "gnss_sim_serialized_nav_no_gps_ion";
+    gnss_sim::SimulatorRunSummary simulator_summary{};
+    std::string error_message;
+    ASSERT_TRUE(run_simulator(directory, &simulator_summary, &error_message)) << error_message;
+
+    std::istringstream input(read_file(directory / "simulated.log"));
+    std::ostringstream stripped;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.rfind("#IONUTCA,", 0) != 0) {
+            stripped << line << '\n';
+        }
+    }
+
+    std::istringstream validation_input(stripped.str());
+    gnss_sim::SerializedNavRoundtripSummary summary{};
+    error_message.clear();
+    EXPECT_FALSE(gnss_sim::validate_serialized_navigation_roundtrip_stream(
+        &validation_input, 20.0, 120.0, 100.0, 5.0, true, &summary, &error_message));
+    EXPECT_NE(error_message.find("GPS IONUTCA"), std::string::npos)
+        << "serialized-NAV validation must not use RTKLIB's built-in default Klobuchar coefficients";
+
+    cleanup(directory);
+}
 
 TEST(RangeaRoundtripIntegration, RealBeidouLegacyIonRestoresRtklibGpsUtcLeapMetadata) {
     gnss_sim::RtklibNavStore* full = gnss_sim::create_rtklib_nav_store();
@@ -91,8 +178,16 @@ TEST(RangeaRoundtripIntegration, RealBeidouLegacyIonRestoresRtklibGpsUtcLeapMeta
 }
 '''
           test.write_text(text[:-len(marker)] + addition + marker)
+
+          doc = Path('docs/SERIALIZED_NAV_ROUNDTRIP.md')
+          text = doc.read_text()
+          anchor = ('The serialized-NAV import adapter therefore keeps the parsed absolute Toe epoch unchanged and converts only the internal raw Toe SOW from GPST to BDT by subtracting 14 seconds, with week wrap handling. Omitting this conversion rotates BeiDou broadcast positions by roughly 16–43 km in the compact real-NAV case. This conversion is an RTKLIB internal representation requirement; it is not a change to the serialized `BD2EPHEMA` fields.\n')
+          assert anchor in text
+          addition_doc = ('\n`BD2IONUTCA` similarly carries BDT-UTC leap seconds. The importer adds 14 seconds when restoring RTKLIB `nav.leaps`, whose convention is GPST-UTC. The validator also refuses broadcast-atmosphere positioning until a serialized GPS `IONUTCA` has appeared, so RTKLIB cannot silently fall back to its built-in default Klobuchar coefficients.\n')
+          doc.write_text(text.replace(anchor, anchor + addition_doc, 1))
+          PY
       - name: Format
-        run: clang-format -i tools/rangea_roundtrip/serialized_nav_parser.cpp tests/integration/test_rangea_roundtrip.cpp
+        run: clang-format -i tools/rangea_roundtrip/serialized_nav_parser.cpp tools/rangea_roundtrip/rangea_roundtrip.cpp tools/rangea_roundtrip/rangea_roundtrip.h tests/integration/test_rangea_roundtrip.cpp
       - name: Commit
         run: |
           if git diff --quiet; then
@@ -100,6 +195,6 @@ TEST(RangeaRoundtripIntegration, RealBeidouLegacyIonRestoresRtklibGpsUtcLeapMeta
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tools/rangea_roundtrip/serialized_nav_parser.cpp tests/integration/test_rangea_roundtrip.cpp
-          git commit -m "Restore BDS ION leap metadata from ASCII [issue81-bds-ion]"
+          git add tools/rangea_roundtrip/serialized_nav_parser.cpp tools/rangea_roundtrip/rangea_roundtrip.cpp tools/rangea_roundtrip/rangea_roundtrip.h tests/integration/test_rangea_roundtrip.cpp docs/SERIALIZED_NAV_ROUNDTRIP.md
+          git commit -m "Preserve serialized ION timing metadata [issue81-nav-meta]"
           git push origin HEAD:issue-81-serialized-nav-roundtrip

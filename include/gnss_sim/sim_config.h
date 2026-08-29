@@ -37,6 +37,33 @@ struct ReaConfig {
     std::int64_t signal_off_ns;
 };
 
+struct MeasurementTransientErrorConfig {
+    double psr_extra_sigma_m;
+    double doppler_extra_sigma_mps;
+    double cn0_extra_sigma_dbhz;
+    double decay_tau_sec;
+};
+
+struct MeasurementFadeErrorConfig {
+    double duration_sec;
+    double psr_extra_sigma_m;
+    double doppler_extra_sigma_mps;
+    double cn0_drop_db;
+};
+
+struct MeasurementErrorConfig {
+    double psr_sigma_m;
+    double doppler_sigma_mps;
+    double adr_sigma_m;
+    double cn0_sigma_dbhz;
+    double psr_correlation_tau_sec;
+    MeasurementTransientErrorConfig ttff_hot;
+    MeasurementTransientErrorConfig ttff_warm;
+    MeasurementTransientErrorConfig ttff_cold;
+    MeasurementTransientErrorConfig rea_reacquisition;
+    MeasurementFadeErrorConfig rea_fade;
+};
+
 struct SimConfig {
     int schema_version;
     ScenarioType scenario;
@@ -54,6 +81,7 @@ struct SimConfig {
     ReceiverConfig receiver;
     TtffConfig ttff;
     ReaConfig rea;
+    MeasurementErrorConfig measurement_error;
     std::uint64_t seed;
 };
 

@@ -104,6 +104,7 @@ add_library(gnss_sim_core STATIC
     src/gnss/signal_definitions.cpp
     src/model/atmosphere_model.cpp
     src/model/cn0_model.cpp
+    src/model/measurement_error_model.cpp
     src/model/measurement_model.cpp
     src/model/receiver_truth.cpp
     src/model/signal_tracking.cpp
@@ -211,6 +212,7 @@ if(BUILD_TESTING)
         tests/unit/test_deterministic_rng.cpp
         tests/unit/test_galileo_has_adapter.cpp
         tests/unit/test_low_elevation_signal_geometry.cpp
+        tests/unit/test_measurement_error_model.cpp
         tests/unit/test_measurement_model.cpp
         tests/unit/test_nav_message_scheduler.cpp
         tests/unit/test_nav_message_scheduler_gal_bds.cpp

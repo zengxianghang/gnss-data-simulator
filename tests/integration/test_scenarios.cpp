@@ -63,8 +63,10 @@ std::vector<std::string> bestpos_states(const std::string& log) {
     std::size_t position = 0;
     while ((position = log.find("#BESTPOSA,", position)) != std::string::npos) {
         const std::size_t semicolon = log.find(';', position);
-        const std::size_t first_comma = semicolon == std::string::npos ? std::string::npos : log.find(',', semicolon + 1);
-        const std::size_t second_comma = first_comma == std::string::npos ? std::string::npos : log.find(',', first_comma + 1);
+        const std::size_t first_comma =
+            semicolon == std::string::npos ? std::string::npos : log.find(',', semicolon + 1);
+        const std::size_t second_comma =
+            first_comma == std::string::npos ? std::string::npos : log.find(',', first_comma + 1);
         if (semicolon == std::string::npos || first_comma == std::string::npos || second_comma == std::string::npos) {
             break;
         }
@@ -215,7 +217,6 @@ TEST(StreamingSimulator, ColdTtffAcquiresEphemerisBeforeSolutionBecomesValid) {
     EXPECT_TRUE(file_contains(test_output_path("ttff_cold"), "#GPSEPHEMA,"));
     std::remove(test_output_path("ttff_cold").c_str());
 }
-
 
 TEST(StreamingSimulator, ReaBestPosFixResetsOnSignalLossAndRefixesAfterStability) {
     gnss_sim::SimConfig config = base_config(gnss_sim::ScenarioType::REA);

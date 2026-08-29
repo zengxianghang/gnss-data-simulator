@@ -895,8 +895,7 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
 bool emit_epoch_logs(const SimConfig& config, const ScenarioEpochState& scenario,
                      const std::vector<MeasurementObservation>& measurements, int tracked_satellites,
                      const SolutionEpoch& solution, const ReceiverTruth& receiver, bool bestpos_rtk_fixed,
-                     std::ofstream* output,
-                     SimulatorRunSummary* summary, std::string* error_message) {
+                     std::ofstream* output, SimulatorRunSummary* summary, std::string* error_message) {
     std::string message;
     const MeasurementObservation* data = measurements.empty() ? nullptr : measurements.data();
     if (!format_novatel_rangea(scenario.time, data, static_cast<int>(measurements.size()), &message, error_message) ||
@@ -917,7 +916,7 @@ bool emit_epoch_logs(const SimConfig& config, const ScenarioEpochState& scenario
     ++summary->psrvel_messages;
 
     if (!format_novatel_bestposa(solution, tracked_satellites, receiver, bestpos_rtk_fixed, config.bestpos_rtk,
-                                &message, error_message) ||
+                                 &message, error_message) ||
         !write_message(output, message, error_message)) {
         return false;
     }
@@ -1087,8 +1086,8 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         if (!solve_receiver_epoch(receiver_navigation_store(runtime.navigation), current_time, data,
                                   static_cast<int>(measurements.size()), config.solution_elevation_mask_deg,
                                   config.atmosphere_mode, &runtime.solution_state, &solution, error_message) ||
-            !update_bestpos_rtk_state(config.bestpos_rtk, current_time, solution.position,
-                                      &runtime.bestpos_rtk_state, error_message) ||
+            !update_bestpos_rtk_state(config.bestpos_rtk, current_time, solution.position, &runtime.bestpos_rtk_state,
+                                      error_message) ||
             !truth_writer_write_solution(truth_writer, solution, tracked_satellites, error_message) ||
             !emit_epoch_logs(config, scenario, measurements, tracked_satellites, solution, runtime.receiver,
                              runtime.bestpos_rtk_state.fixed, &output, &result, error_message)) {

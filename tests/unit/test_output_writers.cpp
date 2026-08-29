@@ -141,9 +141,8 @@ TEST(NovatelSolutionWriter, BestPosAFixedEpochUsesTruthAndNarrowInt) {
     std::string error_message;
     ASSERT_TRUE(gnss_sim::format_novatel_bestposa(solution, 8, truth, true, config, &message, &error_message))
         << error_message;
-    EXPECT_EQ(ascii_body(message),
-              "SOL_COMPUTED,NARROW_INT,20.00000000000,120.00000000000,100.0000,0.0000,WGS84,"
-              "0.0100,0.0100,0.0200,\"\",0.000,0.000,8,6,0,0,00,00,00,00");
+    EXPECT_EQ(ascii_body(message), "SOL_COMPUTED,NARROW_INT,20.00000000000,120.00000000000,100.0000,0.0000,WGS84,"
+                                   "0.0100,0.0100,0.0200,\"\",0.000,0.000,8,6,0,0,00,00,00,00");
 }
 
 TEST(NovatelSolutionWriter, InvalidBestPosMatchesInvalidPsrPosInsteadOfTruth) {

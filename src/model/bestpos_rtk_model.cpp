@@ -25,8 +25,7 @@ void reset_bestpos_rtk_state(BestposRtkState* state) {
 }
 
 bool update_bestpos_rtk_state(const BestposRtkConfig& config, const SimTime& epoch_time,
-                              const PositionSolution& position, BestposRtkState* state,
-                              std::string* error_message) {
+                              const PositionSolution& position, BestposRtkState* state, std::string* error_message) {
     if (state == nullptr || config.stable_duration_ns < 0 || config.min_used_satellites < 1) {
         set_error(error_message, "BESTPOS RTK state request has invalid arguments");
         return false;

@@ -242,8 +242,8 @@ bool parse_bestpos_rtk(const cJSON* root, SimConfig* config, std::string* error_
     if (!validate_object_keys(object, "bestpos_rtk", allowed_keys, 5U, error_message)) {
         return false;
     }
-    double stable_duration_sec = static_cast<double>(config->bestpos_rtk.stable_duration_ns) /
-                                 static_cast<double>(NANOSECONDS_PER_SECOND);
+    double stable_duration_sec =
+        static_cast<double>(config->bestpos_rtk.stable_duration_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
     return read_optional_bool(object, "enabled", &config->bestpos_rtk.enabled, error_message) &&
            read_optional_number(object, "stable_duration_sec", &stable_duration_sec, error_message) &&
            read_optional_int(object, "min_used_satellites", &config->bestpos_rtk.min_used_satellites, error_message) &&
@@ -343,9 +343,8 @@ bool valid_measurement_fade(const MeasurementFadeErrorConfig& config) {
 }
 
 bool valid_bestpos_rtk_config(const BestposRtkConfig& config) {
-    return config.stable_duration_ns >= 0 && config.min_used_satellites >= 4 &&
-           config.min_used_satellites <= 64 && finite_nonnegative(config.horizontal_std_m) &&
-           finite_nonnegative(config.height_std_m);
+    return config.stable_duration_ns >= 0 && config.min_used_satellites >= 4 && config.min_used_satellites <= 64 &&
+           finite_nonnegative(config.horizontal_std_m) && finite_nonnegative(config.height_std_m);
 }
 
 bool valid_measurement_error_config(const MeasurementErrorConfig& config) {
@@ -549,8 +548,8 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
             parse_atmosphere_mode(atmosphere_name, &parsed.atmosphere_mode, error_message) &&
             parse_receiver(root, &parsed, error_message) && parse_ttff(root, &parsed, error_message) &&
             parse_rea(root, &parsed, error_message) && parse_bestpos_rtk(root, &parsed, error_message) &&
-            parse_measurement_error(root, &parsed, error_message) &&
-            parse_seed(root, &parsed, error_message) && validate_sim_config(parsed, error_message);
+            parse_measurement_error(root, &parsed, error_message) && parse_seed(root, &parsed, error_message) &&
+            validate_sim_config(parsed, error_message);
     }
 
     cJSON_Delete(root);

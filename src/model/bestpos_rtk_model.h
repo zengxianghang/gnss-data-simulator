@@ -16,8 +16,7 @@ struct BestposRtkState {
 
 void reset_bestpos_rtk_state(BestposRtkState* state);
 bool update_bestpos_rtk_state(const BestposRtkConfig& config, const SimTime& epoch_time,
-                              const PositionSolution& position, BestposRtkState* state,
-                              std::string* error_message);
+                              const PositionSolution& position, BestposRtkState* state, std::string* error_message);
 
 } // namespace gnss_sim
 

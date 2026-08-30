@@ -1,0 +1,233 @@
+name: temporary apply transmit-time ephemeris selection fix
+
+on:
+  push:
+    branches:
+      - fix/transmit-time-ephemeris-selection
+    paths:
+      - .github/workflows/tmp-apply-transmit-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply focused source changes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one replacement, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'src/gnss/rtklib_adapter.h',
+              '''bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
+                                RtklibSatelliteState* state, std::string* error_message);''',
+              '''// Evaluate the satellite state at gps_week/sow_sec while keeping RTKLIB's
+// broadcast-ephemeris selection epoch fixed at selection_gps_week/selection_sow_sec.
+// This mirrors RTKLIB satposs(): transmission time is used for state evaluation,
+// while the observation epoch (teph) is used for ephemeris selection.
+bool get_rtklib_satellite_state_with_selection_time(
+    const RtklibNavStore* store, int gps_week, double sow_sec, int selection_gps_week, double selection_sow_sec,
+    int satellite_number, RtklibSatelliteState* state, std::string* error_message);
+bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
+                                RtklibSatelliteState* state, std::string* error_message);''')
+
+          replace_once(
+              'src/gnss/rtklib_adapter.cpp',
+              '''bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
+                                RtklibSatelliteState* state, std::string* error_message) {
+    if (store == nullptr || state == nullptr || satellite_number <= 0 || !valid_gps_time(gps_week, sow_sec)) {
+        set_error(error_message, "satellite-state request has invalid arguments");
+        return false;
+    }
+
+    const gtime_t time = gpst2time(gps_week, sow_sec);
+    double state_and_velocity[6]{};
+    double clock[2]{};
+    double variance_m2 = 0.0;
+    int health = 0;
+    if (satpos(time, time, satellite_number, EPHOPT_BRDC, &store->nav, state_and_velocity, clock, &variance_m2,
+               &health) == 0) {
+        set_error(error_message, "RTKLIB could not compute broadcast satellite state at requested GPST");
+        return false;
+    }
+
+    for (int index = 0; index < 3; ++index) {
+        state->position_ecef_m[index] = state_and_velocity[index];
+        state->velocity_ecef_mps[index] = state_and_velocity[index + 3];
+    }
+    state->clock_bias_sec = clock[0];
+    state->clock_drift_sec_per_sec = clock[1];
+    state->variance_m2 = variance_m2;
+    state->health = health;
+    return true;
+}''',
+              '''bool get_rtklib_satellite_state_with_selection_time(
+    const RtklibNavStore* store, int gps_week, double sow_sec, int selection_gps_week, double selection_sow_sec,
+    int satellite_number, RtklibSatelliteState* state, std::string* error_message) {
+    if (store == nullptr || state == nullptr || satellite_number <= 0 || !valid_gps_time(gps_week, sow_sec) ||
+        !valid_gps_time(selection_gps_week, selection_sow_sec)) {
+        set_error(error_message, "satellite-state request has invalid arguments");
+        return false;
+    }
+
+    const gtime_t time = gpst2time(gps_week, sow_sec);
+    const gtime_t selection_time = gpst2time(selection_gps_week, selection_sow_sec);
+    double state_and_velocity[6]{};
+    double clock[2]{};
+    double variance_m2 = 0.0;
+    int health = 0;
+    if (satpos(time, selection_time, satellite_number, EPHOPT_BRDC, &store->nav, state_and_velocity, clock,
+               &variance_m2, &health) == 0) {
+        set_error(error_message, "RTKLIB could not compute broadcast satellite state at requested GPST");
+        return false;
+    }
+
+    for (int index = 0; index < 3; ++index) {
+        state->position_ecef_m[index] = state_and_velocity[index];
+        state->velocity_ecef_mps[index] = state_and_velocity[index + 3];
+    }
+    state->clock_bias_sec = clock[0];
+    state->clock_drift_sec_per_sec = clock[1];
+    state->variance_m2 = variance_m2;
+    state->health = health;
+    return true;
+}
+
+bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
+                                RtklibSatelliteState* state, std::string* error_message) {
+    return get_rtklib_satellite_state_with_selection_time(store, gps_week, sow_sec, gps_week, sow_sec,
+                                                          satellite_number, state, error_message);
+}''')
+
+          replace_once(
+              'src/gnss/satellite_engine.cpp',
+              '''bool rtklib_state_provider(const void* context, int gps_week, double sow_sec, int satellite_number,
+                           RtklibSatelliteState* state, std::string* error_message) {
+    return get_rtklib_satellite_state(static_cast<const RtklibNavStore*>(context), gps_week, sow_sec, satellite_number,
+                                      state, error_message);
+}''',
+              '''struct RtklibStateProviderContext {
+    const RtklibNavStore* nav_store;
+    int selection_gps_week;
+    double selection_sow_sec;
+};
+
+bool rtklib_state_provider(const void* context, int gps_week, double sow_sec, int satellite_number,
+                           RtklibSatelliteState* state, std::string* error_message) {
+    const RtklibStateProviderContext* provider_context = static_cast<const RtklibStateProviderContext*>(context);
+    if (provider_context == nullptr) {
+        set_error(error_message, "RTKLIB satellite-state provider context is null");
+        return false;
+    }
+    return get_rtklib_satellite_state_with_selection_time(
+        provider_context->nav_store, gps_week, sow_sec, provider_context->selection_gps_week,
+        provider_context->selection_sow_sec, satellite_number, state, error_message);
+}''')
+
+          replace_once(
+              'src/gnss/satellite_engine.cpp',
+              '''    return compute_satellite_geometry_with_provider(rtklib_state_provider, nav_store, receiver, receive_time,
+                                                    satellite_number, elevation_mask_deg, geometry, error_message);''',
+              '''    const RtklibStateProviderContext provider_context{
+        nav_store, receive_time.gps_week, sim_time_sow_sec(receive_time)};
+    return compute_satellite_geometry_with_provider(rtklib_state_provider, &provider_context, receiver, receive_time,
+                                                    satellite_number, elevation_mask_deg, geometry, error_message);''')
+
+          replace_once(
+              'tests/unit/test_satellite_engine.cpp',
+              '''    const gtime_t transmit_time = gpst2time(geometry.transmit_gps_week, geometry.transmit_sow_sec);
+    double reference_state[6]{};''',
+              '''    const gtime_t transmit_time = gpst2time(geometry.transmit_gps_week, geometry.transmit_sow_sec);
+    const gtime_t selection_time =
+        gpst2time(receive_time.gps_week, gnss_sim::sim_time_sow_sec(receive_time));
+    double reference_state[6]{};''')
+
+          replace_once(
+              'tests/unit/test_satellite_engine.cpp',
+              '''    ASSERT_NE(satpos(transmit_time, transmit_time, satellite_number, EPHOPT_BRDC, &reference_nav, reference_state,
+                     reference_clock, &reference_variance_m2, &reference_health),
+              0);''',
+              '''    ASSERT_NE(satpos(transmit_time, selection_time, satellite_number, EPHOPT_BRDC, &reference_nav, reference_state,
+                     reference_clock, &reference_variance_m2, &reference_health),
+              0);''')
+
+          marker = '''TEST_F(SatelliteEngineTest, SatelliteStateIsEvaluatedAtTransmitRatherThanReceiveTime) {'''
+          extra = '''TEST_F(SatelliteEngineTest, AdapterCanFixEphemerisSelectionAtReceiveEpoch) {
+    int satellite_number = 0;
+    ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number("G01", &satellite_number));
+
+    gnss_sim::RtklibSatelliteState state{};
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::get_rtklib_satellite_state_with_selection_time(
+        nav_store_, 2041, 179999.925, 2041, 180000.0, satellite_number, &state, &error_message))
+        << error_message;
+
+    nav_t reference_nav{};
+    obs_t reference_obs{};
+    sta_t reference_station{};
+    const std::string reference_path = rtklib_reference_nav_path();
+    ASSERT_NE(readrnx(reference_path.c_str(), 1, "", &reference_obs, &reference_nav, &reference_station), 0);
+    freeobs(&reference_obs);
+    uniqnav(&reference_nav);
+
+    const gtime_t state_time = gpst2time(2041, 179999.925);
+    const gtime_t selection_time = gpst2time(2041, 180000.0);
+    double reference_state[6]{};
+    double reference_clock[2]{};
+    double reference_variance_m2 = 0.0;
+    int reference_health = 0;
+    ASSERT_NE(satpos(state_time, selection_time, satellite_number, EPHOPT_BRDC, &reference_nav, reference_state,
+                     reference_clock, &reference_variance_m2, &reference_health),
+              0);
+
+    for (int index = 0; index < 3; ++index) {
+        EXPECT_NEAR(state.position_ecef_m[index], reference_state[index], 1.0e-6);
+        EXPECT_NEAR(state.velocity_ecef_mps[index], reference_state[index + 3], 1.0e-9);
+    }
+    EXPECT_NEAR(state.clock_bias_sec, reference_clock[0], 1.0e-15);
+    EXPECT_NEAR(state.clock_drift_sec_per_sec, reference_clock[1], 1.0e-18);
+    EXPECT_EQ(state.health, reference_health);
+    freenav(&reference_nav, 0xFF);
+}
+
+'''
+          p = Path('tests/unit/test_satellite_engine.cpp')
+          text = p.read_text()
+          if text.count(marker) != 1:
+              raise SystemExit('test marker not unique')
+          p.write_text(text.replace(marker, extra + marker, 1))
+          PY
+
+      - name: Build and run unit/integration tests
+        shell: bash
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
+      - name: Commit tested fix and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/tmp-apply-transmit-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/gnss/rtklib_adapter.h src/gnss/rtklib_adapter.cpp src/gnss/satellite_engine.cpp tests/unit/test_satellite_engine.cpp .github/workflows/tmp-apply-transmit-fix.yml
+          git commit -m "Fix transmit-time ephemeris selection stability"
+          git push origin HEAD:fix/transmit-time-ephemeris-selection

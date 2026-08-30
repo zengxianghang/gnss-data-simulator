@@ -140,11 +140,12 @@ TEST_F(SatelliteEngineTest, GeometryMatchesDirectRtklibReferenceAtConvergedTrans
     uniqnav(&reference_nav);
 
     const gtime_t transmit_time = gpst2time(geometry.transmit_gps_week, geometry.transmit_sow_sec);
+    const gtime_t selection_time = gpst2time(receive_time.gps_week, gnss_sim::sim_time_sow_sec(receive_time));
     double reference_state[6]{};
     double reference_clock[2]{};
     double reference_variance_m2 = 0.0;
     int reference_health = 0;
-    ASSERT_NE(satpos(transmit_time, transmit_time, satellite_number, EPHOPT_BRDC, &reference_nav, reference_state,
+    ASSERT_NE(satpos(transmit_time, selection_time, satellite_number, EPHOPT_BRDC, &reference_nav, reference_state,
                      reference_clock, &reference_variance_m2, &reference_health),
               0);
 
@@ -180,6 +181,44 @@ TEST_F(SatelliteEngineTest, GeometryMatchesDirectRtklibReferenceAtConvergedTrans
     EXPECT_NEAR(geometry.range_rate_mps, reference_range_rate_mps, 1.0e-9);
     EXPECT_NEAR(geometry.propagation_time_sec, geometry.geometric_range_m / kSpeedOfLightMps, 1.0e-15);
 
+    freenav(&reference_nav, 0xFF);
+}
+
+TEST_F(SatelliteEngineTest, AdapterCanFixEphemerisSelectionAtReceiveEpoch) {
+    int satellite_number = 0;
+    ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number("G01", &satellite_number));
+
+    gnss_sim::RtklibSatelliteState state{};
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::get_rtklib_satellite_state_with_selection_time(nav_store_, 2041, 179999.925, 2041, 180000.0,
+                                                                         satellite_number, &state, &error_message))
+        << error_message;
+
+    nav_t reference_nav{};
+    obs_t reference_obs{};
+    sta_t reference_station{};
+    const std::string reference_path = rtklib_reference_nav_path();
+    ASSERT_NE(readrnx(reference_path.c_str(), 1, "", &reference_obs, &reference_nav, &reference_station), 0);
+    freeobs(&reference_obs);
+    uniqnav(&reference_nav);
+
+    const gtime_t state_time = gpst2time(2041, 179999.925);
+    const gtime_t selection_time = gpst2time(2041, 180000.0);
+    double reference_state[6]{};
+    double reference_clock[2]{};
+    double reference_variance_m2 = 0.0;
+    int reference_health = 0;
+    ASSERT_NE(satpos(state_time, selection_time, satellite_number, EPHOPT_BRDC, &reference_nav, reference_state,
+                     reference_clock, &reference_variance_m2, &reference_health),
+              0);
+
+    for (int index = 0; index < 3; ++index) {
+        EXPECT_NEAR(state.position_ecef_m[index], reference_state[index], 1.0e-6);
+        EXPECT_NEAR(state.velocity_ecef_mps[index], reference_state[index + 3], 1.0e-9);
+    }
+    EXPECT_NEAR(state.clock_bias_sec, reference_clock[0], 1.0e-15);
+    EXPECT_NEAR(state.clock_drift_sec_per_sec, reference_clock[1], 1.0e-18);
+    EXPECT_EQ(state.health, reference_health);
     freenav(&reference_nav, 0xFF);
 }
 

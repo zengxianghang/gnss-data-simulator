@@ -1,6 +1,7 @@
 #ifndef GNSS_SIM_SRC_GNSS_RTKLIB_ADAPTER_H_
 #define GNSS_SIM_SRC_GNSS_RTKLIB_ADAPTER_H_
 
+#include <cstdint>
 #include <string>
 
 namespace gnss_sim {
@@ -74,10 +75,36 @@ struct RtklibSatelliteState {
     int health;
 };
 
+// Identity metadata of the broadcast ephemeris record that the family-restricted
+// RTKLIB selection actually chose for a satellite-state calculation. Week/SOW values
+// use the GPST convention of the projected records. GLONASS records carry no separate
+// IODC/Toc: IODC is reported as 0 and Toc mirrors Toe.
+struct RtklibSelectedEphemerisInfo {
+    int satellite_number;
+    RtklibBroadcastMessageFamily message_family;
+    int iode;
+    int iodc;
+    int toe_week;
+    double toe_sow_sec;
+    int toc_week;
+    double toc_sow_sec;
+    int transmit_week;
+    double transmit_sow_sec;
+};
+
 struct RtklibIonosphereResult {
     RtklibIonosphereStatus status;
     double reference_delay_m;
     double reference_frequency_hz;
+};
+
+// Read-only snapshot of the broadcast ionosphere model state stored in the RTKLIB
+// navigation store (8 Klobuchar-style coefficients plus the GPST-UTC leap seconds).
+// Used to verify correction values inside the final reconstructed store without
+// exposing or mutating private nav_t internals.
+struct RtklibIonosphereModelState {
+    double coefficients[8];
+    int leap_seconds;
 };
 
 struct RtklibBroadcastBiasData {
@@ -126,6 +153,10 @@ struct RtklibPositionSolution {
     double receiver_clock_bias_m;
     double covariance_ecef_m2[6];
     int used_satellites;
+    // Exact set of satellites RTKLIB used in the solution, as a bit mask indexed by
+    // (RTKLIB satellite number - 1). Seven 64-bit words cover RTKLIB MAXSAT (408);
+    // unused satellites have cleared bits. Zero when the solution is invalid.
+    std::uint64_t used_satellite_mask[7];
     char diagnostic[128];
 };
 
@@ -164,10 +195,12 @@ bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, doubl
                                 RtklibSatelliteState* state, std::string* error_message);
 bool get_rtklib_signal_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
                                        int observation_code, RtklibBroadcastMessageFamily requested_message_family,
-                                       RtklibSatelliteState* state, std::string* error_message);
+                                       RtklibSatelliteState* state, std::string* error_message,
+                                       RtklibSelectedEphemerisInfo* selected_identity = nullptr);
 bool rtklib_broadcast_bias_data_for_family(const RtklibNavStore* store, int gps_week, double sow_sec,
                                            int satellite_number, RtklibBroadcastMessageFamily requested_message_family,
-                                           RtklibBroadcastBiasData* data, std::string* error_message);
+                                           RtklibBroadcastBiasData* data, std::string* error_message,
+                                           RtklibSelectedEphemerisInfo* selected_identity = nullptr);
 bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
                                 RtklibBroadcastBiasData* data, std::string* error_message);
 
@@ -195,6 +228,8 @@ bool rtklib_geometric_distance(const double satellite_ecef_m[3], const double re
 bool rtklib_azimuth_elevation(const double receiver_ecef_m[3], const double line_of_sight_ecef[3], double* azimuth_rad,
                               double* elevation_rad);
 
+bool rtklib_broadcast_ionosphere_model_state(const RtklibNavStore* store, RtklibIonosphereSystem system,
+                                             RtklibIonosphereModelState* state, std::string* error_message);
 bool rtklib_broadcast_ionosphere_reference_delay(const RtklibNavStore* store, RtklibIonosphereSystem system,
                                                  int gps_week, double sow_sec, const double receiver_ecef_m[3],
                                                  double azimuth_rad, double elevation_rad,

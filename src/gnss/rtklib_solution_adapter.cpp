@@ -212,6 +212,8 @@ void fill_common_observation(const RtklibSolutionObservation& source, gtime_t ti
 
 } // namespace
 
+static_assert(MAXSAT <= 448, "used-satellite mask covers seven 64-bit words");
+
 bool rtklib_solve_single_position(const RtklibNavStore* receiver_nav, int gps_week, double sow_sec,
                                   const RtklibSolutionObservation* observations, int observation_count,
                                   double elevation_mask_deg, bool broadcast_atmosphere,
@@ -266,13 +268,23 @@ bool rtklib_solve_single_position(const RtklibNavStore* receiver_nav, int gps_we
 
     prcopt_t options = solution_options(elevation_mask_deg, broadcast_atmosphere);
     sol_t rtklib_solution{};
+    double azels[2 * MAXOBS]{};
+    ssat_t ssats[MAXSAT]{};
     char message[128]{};
     const int status =
-        pntpos(rtklib_observations, usable_count, &solver_nav, &options, &rtklib_solution, nullptr, nullptr, message);
+        pntpos(rtklib_observations, usable_count, &solver_nav, &options, &rtklib_solution, azels, ssats, message);
     copy_diagnostic(result.diagnostic, message);
     if (status == 0) {
         *solution = result;
         return true;
+    }
+    for (int index = 0; index < usable_count; ++index) {
+        const int satellite_number = rtklib_observations[index].sat;
+        if (satellite_number < 1 || satellite_number > 448 || ssats[satellite_number - 1].vs == 0) {
+            continue;
+        }
+        result.used_satellite_mask[(satellite_number - 1) / 64] |=
+            1ULL << static_cast<std::uint64_t>((satellite_number - 1) % 64);
     }
 
     result.valid = true;

@@ -25,3 +25,10 @@ Testing/
 *.log
 sim_output/
 generated/
+
+# Integration-test run artifacts (repository root only)
+/event_truth.csv
+/observation_truth.csv
+/run_manifest.json
+/scenario.json
+/solution_truth.csv

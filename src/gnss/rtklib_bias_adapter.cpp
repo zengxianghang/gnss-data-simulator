@@ -179,7 +179,8 @@ const eph_t* select_ephemeris_for_family(const nav_t& nav, gtime_t time, int sat
 
 bool rtklib_broadcast_bias_data_for_family(const RtklibNavStore* store, int gps_week, double sow_sec,
                                            int satellite_number, RtklibBroadcastMessageFamily requested_message_family,
-                                           RtklibBroadcastBiasData* data, std::string* error_message) {
+                                           RtklibBroadcastBiasData* data, std::string* error_message,
+                                           RtklibSelectedEphemerisInfo* selected_identity) {
     if (store == nullptr || data == nullptr || satellite_number <= 0 || !valid_gps_time(gps_week, sow_sec)) {
         set_error(error_message, "broadcast-bias request has invalid arguments");
         return false;
@@ -207,6 +208,17 @@ bool rtklib_broadcast_bias_data_for_family(const RtklibNavStore* store, int gps_
             result.glonass_fcn = 0;
             result.glonass_isc_l3ocp_sec = geph->isc_l3ocp;
         }
+        if (selected_identity != nullptr) {
+            // Identity comes from the same selected geph_t that produced the bias data.
+            selected_identity->satellite_number = satellite_number;
+            selected_identity->message_family = result.message_family;
+            selected_identity->iode = geph->iode;
+            selected_identity->iodc = 0;
+            selected_identity->toe_sow_sec = time2gpst(geph->toe, &selected_identity->toe_week);
+            selected_identity->toc_week = selected_identity->toe_week;
+            selected_identity->toc_sow_sec = selected_identity->toe_sow_sec;
+            selected_identity->transmit_sow_sec = time2gpst(geph->tof, &selected_identity->transmit_week);
+        }
         *data = result;
         return true;
     }
@@ -221,6 +233,16 @@ bool rtklib_broadcast_bias_data_for_family(const RtklibNavStore* store, int gps_
     result.iode = eph->iode;
     std::memcpy(result.tgd_sec, eph->tgd, sizeof(result.tgd_sec));
     std::memcpy(result.isc_sec, eph->isc, sizeof(result.isc_sec));
+    if (selected_identity != nullptr) {
+        // Identity comes from the same selected eph_t that produced the bias data.
+        selected_identity->satellite_number = satellite_number;
+        selected_identity->message_family = result.message_family;
+        selected_identity->iode = eph->iode;
+        selected_identity->iodc = eph->iodc;
+        selected_identity->toe_sow_sec = time2gpst(eph->toe, &selected_identity->toe_week);
+        selected_identity->toc_sow_sec = time2gpst(eph->toc, &selected_identity->toc_week);
+        selected_identity->transmit_sow_sec = time2gpst(eph->ttr, &selected_identity->transmit_week);
+    }
     *data = result;
     return true;
 }

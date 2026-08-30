@@ -527,7 +527,8 @@ bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, doubl
 
 bool get_rtklib_signal_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
                                        int observation_code, RtklibBroadcastMessageFamily requested_message_family,
-                                       RtklibSatelliteState* state, std::string* error_message) {
+                                       RtklibSatelliteState* state, std::string* error_message,
+                                       RtklibSelectedEphemerisInfo* selected_identity) {
     if (store == nullptr || state == nullptr || satellite_number <= 0 || observation_code <= 0 ||
         observation_code > 255 || !valid_gps_time(gps_week, sow_sec)) {
         set_error(error_message, "signal satellite-state request has invalid arguments");
@@ -616,6 +617,62 @@ bool get_rtklib_signal_satellite_state(const RtklibNavStore* store, int gps_week
     state->clock_bias_sec = clock_bias_sec;
     state->clock_drift_sec_per_sec = (next_clock_bias_sec - clock_bias_sec) / kDifferenceSec;
     state->variance_m2 = variance_m2;
+    if (selected_identity != nullptr) {
+        // The identity comes from the same selected record that produced the state.
+        selected_identity->satellite_number = satellite_number;
+        selected_identity->message_family = requested_message_family;
+        if (info.system == SYS_GLO) {
+            selected_identity->iode = geph.iode;
+            selected_identity->iodc = 0;
+            selected_identity->toe_sow_sec = time2gpst(geph.toe, &selected_identity->toe_week);
+            selected_identity->toc_week = selected_identity->toe_week;
+            selected_identity->toc_sow_sec = selected_identity->toe_sow_sec;
+            selected_identity->transmit_sow_sec = time2gpst(geph.tof, &selected_identity->transmit_week);
+        } else {
+            selected_identity->iode = eph.iode;
+            selected_identity->iodc = eph.iodc;
+            selected_identity->toe_sow_sec = time2gpst(eph.toe, &selected_identity->toe_week);
+            selected_identity->toc_sow_sec = time2gpst(eph.toc, &selected_identity->toc_week);
+            selected_identity->transmit_sow_sec = time2gpst(eph.ttr, &selected_identity->transmit_week);
+        }
+    }
+    return true;
+}
+
+bool rtklib_broadcast_ionosphere_model_state(const RtklibNavStore* store, RtklibIonosphereSystem system,
+                                             RtklibIonosphereModelState* state, std::string* error_message) {
+    if (store == nullptr || state == nullptr) {
+        if (error_message != nullptr) {
+            *error_message = "broadcast ionosphere model-state request has invalid arguments";
+        }
+        return false;
+    }
+    const double* coefficients = nullptr;
+    switch (system) {
+        case RtklibIonosphereSystem::kGps:
+            coefficients = store->nav.ion_gps;
+            break;
+        case RtklibIonosphereSystem::kQzss:
+            coefficients = store->nav.ion_qzs;
+            break;
+        case RtklibIonosphereSystem::kBeidouLegacy:
+            coefficients = store->nav.ion_cmp;
+            break;
+        case RtklibIonosphereSystem::kGalileo:
+        case RtklibIonosphereSystem::kGlonass:
+        case RtklibIonosphereSystem::kBeidouModern:
+            break;
+    }
+    if (coefficients == nullptr) {
+        if (error_message != nullptr) {
+            *error_message = "broadcast ionosphere model is not stored for the requested system";
+        }
+        return false;
+    }
+    for (int index = 0; index < 8; ++index) {
+        state->coefficients[index] = coefficients[index];
+    }
+    state->leap_seconds = store->nav.leaps;
     return true;
 }
 

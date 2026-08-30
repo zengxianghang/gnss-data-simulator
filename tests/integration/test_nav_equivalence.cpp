@@ -749,6 +749,9 @@ TEST(NavEquivalence, CorrectionParametersSurviveProductionRoundTrip) {
     EXPECT_GT(serialized_supported_beidou_ion_records, 0U) << "the real fixture must serialize its BeiDou ION record";
     EXPECT_EQ(stage_b_ion_compared, serialized_supported_beidou_ion_records)
         << "every supported serialized BeiDou ION record must reach the stage-B final-store comparison";
+    EXPECT_EQ(stage_b_bias_compared, serialized_ephemeris_count)
+        << "every supported serialized ephemeris must reach the stage-B bias comparison";
+    EXPECT_GT(stage_b_bias_compared, 0U);
     gnss_sim::destroy_rtklib_nav_store(roundtrip);
     gnss_sim::destroy_rtklib_nav_store(reference);
 }

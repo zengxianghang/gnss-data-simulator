@@ -199,7 +199,8 @@ bool get_rtklib_signal_satellite_state(const RtklibNavStore* store, int gps_week
                                        RtklibSelectedEphemerisInfo* selected_identity = nullptr);
 bool rtklib_broadcast_bias_data_for_family(const RtklibNavStore* store, int gps_week, double sow_sec,
                                            int satellite_number, RtklibBroadcastMessageFamily requested_message_family,
-                                           RtklibBroadcastBiasData* data, std::string* error_message);
+                                           RtklibBroadcastBiasData* data, std::string* error_message,
+                                           RtklibSelectedEphemerisInfo* selected_identity = nullptr);
 bool rtklib_broadcast_bias_data(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
                                 RtklibBroadcastBiasData* data, std::string* error_message);
 

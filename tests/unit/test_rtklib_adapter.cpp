@@ -15,8 +15,10 @@ extern "C" {
 #undef unlock
 #endif
 
+#include <algorithm>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -351,6 +353,49 @@ TEST_F(RtklibAdapterTest, SelectedEphemerisIdentityCoversFamiliesAndToeInstances
     EXPECT_EQ(glonass_identity.iode, glonass_record.glonass.iode);
     EXPECT_EQ(glonass_identity.toe_week, glonass_record.glonass.toe_week);
     EXPECT_DOUBLE_EQ(glonass_identity.toe_sow_sec, glonass_record.glonass.toe_sow_sec);
+}
+
+TEST_F(RtklibAdapterTest, BroadcastBiasSelectionTracksRealToeInstances) {
+    std::string error_message;
+    const std::string companion_path =
+        std::string(GNSS_SIM_TEST_DATA_DIR) + "/brd400dlr_rinex4_galileo_companion_nav.rnx";
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(store_, companion_path.c_str(), &error_message)) << error_message;
+
+    // The two real E02 INAV instances share satellite and family but differ in IODnav
+    // and Toe. The bias adapter performs its own selection, so its returned identity
+    // must track the real instance whose Toe matches the queried epoch.
+    std::vector<gnss_sim::NavOutputRecord> instances;
+    for (int index = 0; index < gnss_sim::rtklib_nav_output_record_count(store_); ++index) {
+        gnss_sim::NavOutputRecord record{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(store_, index, &record, &error_message)) << error_message;
+        if (record.kind == gnss_sim::RtklibNavRecordKind::kEphemeris &&
+            record.ephemeris.system == gnss_sim::NavOutputSystem::kGalileo && record.ephemeris.prn == 2 &&
+            record.ephemeris.message_family == gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav) {
+            instances.push_back(record);
+        }
+    }
+    ASSERT_EQ(instances.size(), 2U) << "the fixture must provide two real E02 INAV instances";
+    std::sort(instances.begin(), instances.end(),
+              [](const gnss_sim::NavOutputRecord& lhs, const gnss_sim::NavOutputRecord& rhs) {
+                  return lhs.ephemeris.toe_sow_sec < rhs.ephemeris.toe_sow_sec;
+              });
+
+    for (const gnss_sim::NavOutputRecord& instance : instances) {
+        gnss_sim::RtklibBroadcastBiasData bias{};
+        gnss_sim::RtklibSelectedEphemerisInfo identity{};
+        ASSERT_TRUE(gnss_sim::rtklib_broadcast_bias_data_for_family(
+            store_, instance.ephemeris.toe_week, instance.ephemeris.toe_sow_sec, instance.ephemeris.satellite_number,
+            gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav, &bias, &error_message, &identity))
+            << error_message;
+        EXPECT_EQ(identity.satellite_number, instance.ephemeris.satellite_number);
+        EXPECT_EQ(identity.message_family, gnss_sim::RtklibBroadcastMessageFamily::kGalileoInav);
+        EXPECT_EQ(identity.iode, instance.ephemeris.iode);
+        EXPECT_EQ(identity.toe_week, instance.ephemeris.toe_week);
+        EXPECT_DOUBLE_EQ(identity.toe_sow_sec, instance.ephemeris.toe_sow_sec);
+        EXPECT_EQ(bias.iode, instance.ephemeris.iode);
+    }
+    EXPECT_NE(instances[0].ephemeris.iode, instances[1].ephemeris.iode)
+        << "the two real instances must be distinguishable by IODnav";
 }
 
 } // namespace

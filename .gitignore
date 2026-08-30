@@ -26,9 +26,9 @@ Testing/
 sim_output/
 generated/
 
-# Integration-test run artifacts
-event_truth.csv
-observation_truth.csv
-run_manifest.json
-scenario.json
-solution_truth.csv
+# Integration-test run artifacts (repository root only)
+/event_truth.csv
+/observation_truth.csv
+/run_manifest.json
+/scenario.json
+/solution_truth.csv

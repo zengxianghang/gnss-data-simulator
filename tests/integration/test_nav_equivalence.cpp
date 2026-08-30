@@ -769,9 +769,6 @@ TEST(NavEquivalence, CorrectionParametersSurviveProductionRoundTrip) {
     EXPECT_EQ(stage_b_bias_compared, serialized_ephemeris_count)
         << "every supported serialized ephemeris must reach the stage-B bias comparison";
     EXPECT_GT(stage_b_bias_compared, 0U);
-    EXPECT_EQ(stage_b_bias_compared, serialized_ephemeris_count)
-        << "every supported serialized ephemeris must reach the stage-B bias comparison";
-    EXPECT_GT(stage_b_bias_compared, 0U);
     gnss_sim::destroy_rtklib_nav_store(roundtrip);
     gnss_sim::destroy_rtklib_nav_store(reference);
 }

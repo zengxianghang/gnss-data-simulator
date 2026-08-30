@@ -697,13 +697,30 @@ TEST(NavEquivalence, CorrectionParametersSurviveProductionRoundTrip) {
             // instance (queried through the production bias API at Toe).
             gnss_sim::RtklibBroadcastBiasData reference_bias{};
             gnss_sim::RtklibBroadcastBiasData roundtrip_bias{};
+            const ExpectedEphemerisIdentity expected_source = expected_identity_from_record(record);
+            gnss_sim::RtklibSelectedEphemerisInfo reference_bias_identity{};
+            gnss_sim::RtklibSelectedEphemerisInfo roundtrip_bias_identity{};
             ASSERT_TRUE(gnss_sim::rtklib_broadcast_bias_data_for_family(reference, toe_week, toe_sow, satellite_number,
-                                                                        family, &reference_bias, &error_message))
+                                                                        family, &reference_bias, &error_message,
+                                                                        &reference_bias_identity))
                 << error_message;
             ASSERT_TRUE(gnss_sim::rtklib_broadcast_bias_data_for_family(roundtrip, toe_week, toe_sow, satellite_number,
-                                                                        family, &roundtrip_bias, &error_message))
+                                                                        family, &roundtrip_bias, &error_message,
+                                                                        &roundtrip_bias_identity))
                 << error_message;
-            EXPECT_EQ(reference_bias.iode, roundtrip_bias.iode) << "stage-B selected-instance IODE mismatch";
+            // The bias adapter performs its own selection, so its returned identity must
+            // bind to the same unchanged source record on both navigation paths before
+            // any correction value is compared.
+            EXPECT_EQ(reference_bias_identity.satellite_number, expected_source.satellite_number);
+            EXPECT_EQ(reference_bias_identity.message_family, expected_source.family);
+            EXPECT_EQ(reference_bias_identity.iode, expected_source.iode);
+            EXPECT_EQ(reference_bias_identity.toe_week, expected_source.toe_week);
+            EXPECT_DOUBLE_EQ(reference_bias_identity.toe_sow_sec, expected_source.toe_sow_sec);
+            EXPECT_EQ(roundtrip_bias_identity.satellite_number, expected_source.satellite_number);
+            EXPECT_EQ(roundtrip_bias_identity.message_family, expected_source.family);
+            EXPECT_EQ(roundtrip_bias_identity.iode, expected_source.iode);
+            EXPECT_EQ(roundtrip_bias_identity.toe_week, expected_source.toe_week);
+            EXPECT_DOUBLE_EQ(roundtrip_bias_identity.toe_sow_sec, expected_source.toe_sow_sec);
             for (int term = 0; term < 4; ++term) {
                 EXPECT_LE(relative_diff(reference_bias.tgd_sec[term], roundtrip_bias.tgd_sec[term]),
                           kMaxCorrectionRelativeDiff)
@@ -749,6 +766,9 @@ TEST(NavEquivalence, CorrectionParametersSurviveProductionRoundTrip) {
     EXPECT_GT(serialized_supported_beidou_ion_records, 0U) << "the real fixture must serialize its BeiDou ION record";
     EXPECT_EQ(stage_b_ion_compared, serialized_supported_beidou_ion_records)
         << "every supported serialized BeiDou ION record must reach the stage-B final-store comparison";
+    EXPECT_EQ(stage_b_bias_compared, serialized_ephemeris_count)
+        << "every supported serialized ephemeris must reach the stage-B bias comparison";
+    EXPECT_GT(stage_b_bias_compared, 0U);
     EXPECT_EQ(stage_b_bias_compared, serialized_ephemeris_count)
         << "every supported serialized ephemeris must reach the stage-B bias comparison";
     EXPECT_GT(stage_b_bias_compared, 0U);

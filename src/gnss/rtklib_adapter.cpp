@@ -496,9 +496,10 @@ bool rtklib_satellite_state_available(const RtklibNavStore* store, int gps_week,
                   &health) != 0;
 }
 
-bool get_rtklib_satellite_state_with_selection_time(
-    const RtklibNavStore* store, int gps_week, double sow_sec, int selection_gps_week, double selection_sow_sec,
-    int satellite_number, RtklibSatelliteState* state, std::string* error_message) {
+bool get_rtklib_satellite_state_with_selection_time(const RtklibNavStore* store, int gps_week, double sow_sec,
+                                                    int selection_gps_week, double selection_sow_sec,
+                                                    int satellite_number, RtklibSatelliteState* state,
+                                                    std::string* error_message) {
     if (store == nullptr || state == nullptr || satellite_number <= 0 || !valid_gps_time(gps_week, sow_sec) ||
         !valid_gps_time(selection_gps_week, selection_sow_sec)) {
         set_error(error_message, "satellite-state request has invalid arguments");
@@ -530,8 +531,8 @@ bool get_rtklib_satellite_state_with_selection_time(
 
 bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
                                 RtklibSatelliteState* state, std::string* error_message) {
-    return get_rtklib_satellite_state_with_selection_time(store, gps_week, sow_sec, gps_week, sow_sec,
-                                                          satellite_number, state, error_message);
+    return get_rtklib_satellite_state_with_selection_time(store, gps_week, sow_sec, gps_week, sow_sec, satellite_number,
+                                                          state, error_message);
 }
 
 bool get_rtklib_signal_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,

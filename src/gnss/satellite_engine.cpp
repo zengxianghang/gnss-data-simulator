@@ -210,8 +210,7 @@ bool compute_satellite_geometry(const RtklibNavStore* nav_store, const ReceiverT
         set_error(error_message, "satellite-geometry navigation store is null");
         return false;
     }
-    const RtklibStateProviderContext provider_context{
-        nav_store, receive_time.gps_week, sim_time_sow_sec(receive_time)};
+    const RtklibStateProviderContext provider_context{nav_store, receive_time.gps_week, sim_time_sow_sec(receive_time)};
     return compute_satellite_geometry_with_provider(rtklib_state_provider, &provider_context, receiver, receive_time,
                                                     satellite_number, elevation_mask_deg, geometry, error_message);
 }

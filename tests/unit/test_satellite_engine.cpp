@@ -140,8 +140,7 @@ TEST_F(SatelliteEngineTest, GeometryMatchesDirectRtklibReferenceAtConvergedTrans
     uniqnav(&reference_nav);
 
     const gtime_t transmit_time = gpst2time(geometry.transmit_gps_week, geometry.transmit_sow_sec);
-    const gtime_t selection_time =
-        gpst2time(receive_time.gps_week, gnss_sim::sim_time_sow_sec(receive_time));
+    const gtime_t selection_time = gpst2time(receive_time.gps_week, gnss_sim::sim_time_sow_sec(receive_time));
     double reference_state[6]{};
     double reference_clock[2]{};
     double reference_variance_m2 = 0.0;
@@ -191,8 +190,8 @@ TEST_F(SatelliteEngineTest, AdapterCanFixEphemerisSelectionAtReceiveEpoch) {
 
     gnss_sim::RtklibSatelliteState state{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::get_rtklib_satellite_state_with_selection_time(
-        nav_store_, 2041, 179999.925, 2041, 180000.0, satellite_number, &state, &error_message))
+    ASSERT_TRUE(gnss_sim::get_rtklib_satellite_state_with_selection_time(nav_store_, 2041, 179999.925, 2041, 180000.0,
+                                                                         satellite_number, &state, &error_message))
         << error_message;
 
     nav_t reference_nav{};

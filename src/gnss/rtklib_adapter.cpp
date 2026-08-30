@@ -496,20 +496,23 @@ bool rtklib_satellite_state_available(const RtklibNavStore* store, int gps_week,
                   &health) != 0;
 }
 
-bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
-                                RtklibSatelliteState* state, std::string* error_message) {
-    if (store == nullptr || state == nullptr || satellite_number <= 0 || !valid_gps_time(gps_week, sow_sec)) {
+bool get_rtklib_satellite_state_with_selection_time(
+    const RtklibNavStore* store, int gps_week, double sow_sec, int selection_gps_week, double selection_sow_sec,
+    int satellite_number, RtklibSatelliteState* state, std::string* error_message) {
+    if (store == nullptr || state == nullptr || satellite_number <= 0 || !valid_gps_time(gps_week, sow_sec) ||
+        !valid_gps_time(selection_gps_week, selection_sow_sec)) {
         set_error(error_message, "satellite-state request has invalid arguments");
         return false;
     }
 
     const gtime_t time = gpst2time(gps_week, sow_sec);
+    const gtime_t selection_time = gpst2time(selection_gps_week, selection_sow_sec);
     double state_and_velocity[6]{};
     double clock[2]{};
     double variance_m2 = 0.0;
     int health = 0;
-    if (satpos(time, time, satellite_number, EPHOPT_BRDC, &store->nav, state_and_velocity, clock, &variance_m2,
-               &health) == 0) {
+    if (satpos(time, selection_time, satellite_number, EPHOPT_BRDC, &store->nav, state_and_velocity, clock,
+               &variance_m2, &health) == 0) {
         set_error(error_message, "RTKLIB could not compute broadcast satellite state at requested GPST");
         return false;
     }
@@ -523,6 +526,12 @@ bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, doubl
     state->variance_m2 = variance_m2;
     state->health = health;
     return true;
+}
+
+bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
+                                RtklibSatelliteState* state, std::string* error_message) {
+    return get_rtklib_satellite_state_with_selection_time(store, gps_week, sow_sec, gps_week, sow_sec,
+                                                          satellite_number, state, error_message);
 }
 
 bool get_rtklib_signal_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,

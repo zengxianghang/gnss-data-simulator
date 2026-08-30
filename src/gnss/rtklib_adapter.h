@@ -191,6 +191,13 @@ bool rtklib_signal_health_for_family(const RtklibNavStore* store, int gps_week, 
                                      const char* rinex_signal_code,
                                      RtklibBroadcastMessageFamily requested_message_family, int* signal_health,
                                      std::string* error_message);
+// Evaluate the satellite state at gps_week/sow_sec while keeping RTKLIB's
+// broadcast-ephemeris selection epoch fixed at selection_gps_week/selection_sow_sec.
+// This mirrors RTKLIB satposs(): transmission time is used for state evaluation,
+// while the observation epoch (teph) is used for ephemeris selection.
+bool get_rtklib_satellite_state_with_selection_time(
+    const RtklibNavStore* store, int gps_week, double sow_sec, int selection_gps_week, double selection_sow_sec,
+    int satellite_number, RtklibSatelliteState* state, std::string* error_message);
 bool get_rtklib_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,
                                 RtklibSatelliteState* state, std::string* error_message);
 bool get_rtklib_signal_satellite_state(const RtklibNavStore* store, int gps_week, double sow_sec, int satellite_number,

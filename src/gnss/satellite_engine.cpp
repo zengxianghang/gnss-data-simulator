@@ -55,10 +55,22 @@ bool compute_range_rate(const RtklibSatelliteState& satellite_state, const Recei
     return std::isfinite(rate_mps);
 }
 
+struct RtklibStateProviderContext {
+    const RtklibNavStore* nav_store;
+    int selection_gps_week;
+    double selection_sow_sec;
+};
+
 bool rtklib_state_provider(const void* context, int gps_week, double sow_sec, int satellite_number,
                            RtklibSatelliteState* state, std::string* error_message) {
-    return get_rtklib_satellite_state(static_cast<const RtklibNavStore*>(context), gps_week, sow_sec, satellite_number,
-                                      state, error_message);
+    const RtklibStateProviderContext* provider_context = static_cast<const RtklibStateProviderContext*>(context);
+    if (provider_context == nullptr) {
+        set_error(error_message, "RTKLIB satellite-state provider context is null");
+        return false;
+    }
+    return get_rtklib_satellite_state_with_selection_time(
+        provider_context->nav_store, gps_week, sow_sec, provider_context->selection_gps_week,
+        provider_context->selection_sow_sec, satellite_number, state, error_message);
 }
 
 } // namespace
@@ -198,7 +210,9 @@ bool compute_satellite_geometry(const RtklibNavStore* nav_store, const ReceiverT
         set_error(error_message, "satellite-geometry navigation store is null");
         return false;
     }
-    return compute_satellite_geometry_with_provider(rtklib_state_provider, nav_store, receiver, receive_time,
+    const RtklibStateProviderContext provider_context{
+        nav_store, receive_time.gps_week, sim_time_sow_sec(receive_time)};
+    return compute_satellite_geometry_with_provider(rtklib_state_provider, &provider_context, receiver, receive_time,
                                                     satellite_number, elevation_mask_deg, geometry, error_message);
 }
 

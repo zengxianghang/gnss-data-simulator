@@ -1,0 +1,34 @@
+name: temporary format transmit-time fix
+
+on:
+  push:
+    branches:
+      - fix/transmit-time-ephemeris-selection
+    paths:
+      - .github/workflows/tmp-format-transmit-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply repository clang-format
+        run: |
+          clang-format -i \
+            src/gnss/rtklib_adapter.cpp \
+            src/gnss/rtklib_adapter.h \
+            src/gnss/satellite_engine.cpp \
+            tests/unit/test_satellite_engine.cpp
+      - name: Commit formatting and remove temporary workflow
+        run: |
+          rm .github/workflows/tmp-format-transmit-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Apply clang-format to transmit-time fix"
+          git push origin HEAD:fix/transmit-time-ephemeris-selection

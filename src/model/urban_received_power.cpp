@@ -32,8 +32,8 @@ bool reflection_normalized_voltage(const UrbanRfResolvedConfig& rf_config, const
     }
 
     std::complex<double> direct_reference_antenna{};
-    if (!evaluate_urban_antenna_response(rf_config.antenna, UrbanCircularPolarization::kRhcp,
-                                         geometry.elevation_rad, &direct_reference_antenna, error_message)) {
+    if (!evaluate_urban_antenna_response(rf_config.antenna, UrbanCircularPolarization::kRhcp, geometry.elevation_rad,
+                                         &direct_reference_antenna, error_message)) {
         return false;
     }
     const double direct_reference_magnitude = std::abs(direct_reference_antenna);
@@ -46,8 +46,8 @@ bool reflection_normalized_voltage(const UrbanRfResolvedConfig& rf_config, const
         reflection.rf_response.gamma_rhcp_from_rhcp * reflection.antenna_rhcp_voltage +
         reflection.rf_response.gamma_lhcp_from_rhcp * reflection.antenna_lhcp_voltage;
     const double spreading_ratio = reflection.direct_euclidean_range_m / reflection.reflected_euclidean_range_m;
-    const std::complex<double> result = spreading_ratio * reflected_receiver_voltage /
-                                        direct_reference_antenna * reflection.geometric_phase_factor;
+    const std::complex<double> result =
+        spreading_ratio * reflected_receiver_voltage / direct_reference_antenna * reflection.geometric_phase_factor;
     if (!std::isfinite(spreading_ratio) || !(spreading_ratio > 0.0) || !finite_complex(result)) {
         set_error(error_message, "urban normalized reflection voltage is non-finite");
         return false;
@@ -78,8 +78,7 @@ bool compute_urban_received_path_set(const Cn0Model& cn0_model, const UrbanScene
     }
 
     if (!compute_urban_direct_path_geometry(scene_config, satellite_geometry.azimuth_rad,
-                                            satellite_geometry.elevation_rad, &output.direct_geometry,
-                                            error_message) ||
+                                            satellite_geometry.elevation_rad, &output.direct_geometry, error_message) ||
         !compute_urban_rooftop_diffraction(scene_config, signal, glonass_fcn, receiver, satellite_geometry,
                                            &output.diffraction, &output.diffraction_status, error_message) ||
         !compute_urban_first_order_reflections(scene_config, rf_config, signal, glonass_fcn, receiver,
@@ -160,8 +159,7 @@ bool compute_effective_cn0_from_paths(double open_cn0_dbhz, const SignalDefiniti
     output.carrier_to_noise_density_hz = open_linear * output.composite_power_ratio;
     output.effective_cn0_dbhz = open_cn0_dbhz + 10.0 * std::log10(output.composite_power_ratio);
     output.finite_effective_cn0 = std::isfinite(output.carrier_to_noise_density_hz) &&
-                                  output.carrier_to_noise_density_hz > 0.0 &&
-                                  std::isfinite(output.effective_cn0_dbhz);
+                                  output.carrier_to_noise_density_hz > 0.0 && std::isfinite(output.effective_cn0_dbhz);
     if (!output.finite_effective_cn0) {
         set_error(error_message, "effective CN0 conversion is outside the supported numeric range");
         return false;
@@ -171,8 +169,7 @@ bool compute_effective_cn0_from_paths(double open_cn0_dbhz, const SignalDefiniti
 }
 
 bool compute_urban_effective_cn0(const SignalDefinition& signal, const UrbanReceivedPathSet& paths,
-                                 double local_code_phase_sec, UrbanEffectiveCn0* result,
-                                 std::string* error_message) {
+                                 double local_code_phase_sec, UrbanEffectiveCn0* result, std::string* error_message) {
     if (paths.path_count <= 0 || paths.path_count > kMaxUrbanReceivedPaths) {
         set_error(error_message, "urban effective CN0 path set is invalid");
         return false;

@@ -138,6 +138,7 @@ gnss_sim_set_project_warnings(gnss-data-simulator)
 
 add_library(cn0_model_builder_core STATIC
     tools/build_cn0_model/cn0_builder.cpp
+    tools/build_cn0_model/cn0_normalized_builder.cpp
     tools/build_cn0_model/cn0_statistics.cpp
     tools/build_cn0_model/rinex_obs_stream.cpp
 )
@@ -229,6 +230,7 @@ if(BUILD_TESTING)
         tests/unit/test_atmosphere_model.cpp
         tests/unit/test_bestpos_rtk_model.cpp
         tests/unit/test_cn0_model.cpp
+        tests/unit/test_cn0_normalized_builder.cpp
         tests/unit/test_cn0_statistics.cpp
         tests/unit/test_deterministic_rng.cpp
         tests/unit/test_galileo_has_adapter.cpp

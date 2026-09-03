@@ -47,8 +47,9 @@ std::string first_line(const std::filesystem::path& path) {
     return line;
 }
 
-bool run_in_directory(const std::filesystem::path& directory, gnss_sim::SimulatorRunSummary* summary,
-                      std::string* error_message, const char* cn0_model_path = nullptr) {
+bool run_config_in_directory(const std::filesystem::path& directory, const gnss_sim::SimConfig& config,
+                             gnss_sim::SimulatorRunSummary* summary, std::string* error_message,
+                             const char* cn0_model_path = nullptr) {
     std::error_code error;
     std::filesystem::remove_all(directory, error);
     error.clear();
@@ -62,7 +63,12 @@ bool run_in_directory(const std::filesystem::path& directory, gnss_sim::Simulato
     const std::string input_path = nav_path();
     const std::string output_text = output_path.string();
     const gnss_sim::SimulatorRunOptions options{input_path.c_str(), output_text.c_str(), start_time(), cn0_model_path};
-    return gnss_sim::run_simulator(truth_config(), options, summary, error_message);
+    return gnss_sim::run_simulator(config, options, summary, error_message);
+}
+
+bool run_in_directory(const std::filesystem::path& directory, gnss_sim::SimulatorRunSummary* summary,
+                      std::string* error_message, const char* cn0_model_path = nullptr) {
+    return run_config_in_directory(directory, truth_config(), summary, error_message, cn0_model_path);
 }
 
 void cleanup(const std::filesystem::path& path) {
@@ -102,6 +108,7 @@ TEST(TruthOutputs, HeadersAreVersionedAndExplicit) {
     const std::string observations = read_file(directory / "observation_truth.csv");
     EXPECT_NE(scenario.find("\"truth_schema_version\": 1"), std::string::npos);
     EXPECT_NE(scenario.find("\"atmosphere_mode\": \"none\""), std::string::npos);
+    EXPECT_NE(scenario.find("\"cn0_high_dbhz\": {}"), std::string::npos);
     EXPECT_NE(manifest.find("\"output_format_version\": 1"), std::string::npos);
     EXPECT_NE(manifest.find(std::string("\"rtklib_commit_sha\": \"") + GNSS_SIM_RTKLIB_COMMIT + "\""),
               std::string::npos);
@@ -112,9 +119,11 @@ TEST(TruthOutputs, HeadersAreVersionedAndExplicit) {
     EXPECT_NE(manifest.find("\"stable_duration_ns\": 5000000000"), std::string::npos);
     EXPECT_EQ(summary.bestpos_messages, 10U);
     EXPECT_NE(manifest.find("\"source\": \"BUILTIN_FALLBACK\""), std::string::npos);
+    EXPECT_NE(manifest.find("\"semantic\": \"BUILTIN_ABSOLUTE_CN0\""), std::string::npos);
     EXPECT_NE(manifest.find("\"schema_version\": \"builtin-cn0-v1\""), std::string::npos);
     EXPECT_NE(manifest.find("\"hash_algorithm\": \"none\""), std::string::npos);
     EXPECT_EQ(summary.cn0_model_source, "BUILTIN_FALLBACK");
+    EXPECT_EQ(summary.cn0_model_semantic, "BUILTIN_ABSOLUTE_CN0");
     EXPECT_NE(read_file(directory / "event_truth.csv").find("POWER_ON"), std::string::npos);
     EXPECT_NE(observations.find(",LEGACY,"), std::string::npos);
     EXPECT_GT(observations.size(), first_line(directory / "observation_truth.csv").size());
@@ -161,11 +170,13 @@ TEST(TruthOutputs, ExternalCn0ModelIsManifestedAndByteRepeatable) {
     }
     const std::string manifest = read_file(first_directory / "run_manifest.json");
     EXPECT_EQ(first_summary.cn0_model_source, "CALIBRATED_CSV");
+    EXPECT_EQ(first_summary.cn0_model_semantic, "ABSOLUTE_STATION_CN0");
     EXPECT_EQ(first_summary.cn0_model_schema_version, "gnss-cn0-model-v1");
     EXPECT_EQ(first_summary.cn0_model_name, "runtime_cn0_model.csv");
     EXPECT_FALSE(first_summary.cn0_model_hash.empty());
     EXPECT_GT(first_summary.cn0_model_size_bytes, 0U);
     EXPECT_NE(manifest.find("\"source\": \"CALIBRATED_CSV\""), std::string::npos);
+    EXPECT_NE(manifest.find("\"semantic\": \"ABSOLUTE_STATION_CN0\""), std::string::npos);
     EXPECT_NE(manifest.find("\"schema_version\": \"gnss-cn0-model-v1\""), std::string::npos);
     EXPECT_NE(manifest.find("\"name\": \"runtime_cn0_model.csv\""), std::string::npos);
     EXPECT_NE(read_file(first_directory / "observation_truth.csv"),
@@ -174,6 +185,55 @@ TEST(TruthOutputs, ExternalCn0ModelIsManifestedAndByteRepeatable) {
     cleanup(first_directory);
     cleanup(second_directory);
     cleanup(builtin_directory);
+}
+
+TEST(TruthOutputs, NormalizedCn0ManifestRecordsSemanticAndReceiverBaseline) {
+    const std::filesystem::path directory = "gnss_sim_truth_cn0_normalized";
+    const std::filesystem::path model_path = "gnss_sim_runtime_cn0_normalized.csv";
+    {
+        std::ofstream output(model_path, std::ios::binary | std::ios::trunc);
+        output << "schema_version,model_semantic,constellation,signal,elevation_min_deg,elevation_max_deg,"
+                  "upper_edge_inclusive,status,contributing_source_count,delta_p50_db\n";
+        output << "gnss-cn0-model-v2,NORMALIZED_ELEVATION_SHAPE,GPS,1C,0,90,1,READY,2,-2.000000\n";
+    }
+
+    gnss_sim::SimConfig config = truth_config();
+    config.cn0_high_dbhz = {{"GPS L1 C/A", 47.0}};
+    gnss_sim::SimulatorRunSummary summary{};
+    std::string error_message;
+    ASSERT_TRUE(run_config_in_directory(directory, config, &summary, &error_message, model_path.string().c_str()))
+        << error_message;
+
+    const std::string scenario = read_file(directory / "scenario.json");
+    const std::string manifest = read_file(directory / "run_manifest.json");
+    EXPECT_EQ(summary.cn0_model_semantic, "NORMALIZED_ELEVATION_SHAPE");
+    EXPECT_NE(manifest.find("\"semantic\": \"NORMALIZED_ELEVATION_SHAPE\""), std::string::npos);
+    EXPECT_NE(scenario.find("\"GPS L1 C/A\": 47"), std::string::npos);
+    EXPECT_NE(manifest.find("\"GPS L1 C/A\": 47"), std::string::npos);
+
+    cleanup(directory);
+    std::remove(model_path.string().c_str());
+}
+
+TEST(TruthOutputs, NormalizedCn0MissingRequiredBaselineFailsBeforeReceiverOutputCreation) {
+    const std::filesystem::path directory = "gnss_sim_truth_cn0_missing_baseline";
+    const std::filesystem::path model_path = "gnss_sim_runtime_cn0_missing_baseline.csv";
+    {
+        std::ofstream output(model_path, std::ios::binary | std::ios::trunc);
+        output << "schema_version,model_semantic,constellation,signal,elevation_min_deg,elevation_max_deg,"
+                  "upper_edge_inclusive,status,contributing_source_count,delta_p50_db\n";
+        output << "gnss-cn0-model-v2,NORMALIZED_ELEVATION_SHAPE,GPS,1C,0,90,1,READY,2,-2.000000\n";
+    }
+
+    gnss_sim::SimulatorRunSummary summary{};
+    std::string error_message;
+    EXPECT_FALSE(run_config_in_directory(directory, truth_config(), &summary, &error_message, model_path.string().c_str()));
+    EXPECT_NE(error_message.find("cn0_high_dbhz"), std::string::npos);
+    EXPECT_FALSE(std::filesystem::exists(directory / "simulated.log"));
+    EXPECT_FALSE(std::filesystem::exists(directory / "run_manifest.json"));
+
+    cleanup(directory);
+    std::remove(model_path.string().c_str());
 }
 
 TEST(TruthOutputs, ExplicitMalformedCn0ModelFailsBeforeReceiverOutputCreation) {

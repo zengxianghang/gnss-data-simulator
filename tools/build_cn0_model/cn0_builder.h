@@ -104,8 +104,8 @@ bool build_normalized_cn0_model(const std::vector<Cn0InputSource>& sources, cons
                                 std::string* error_message);
 
 bool aggregate_normalized_cn0_sources(const std::vector<Cn0NormalizedSourceResult>& sources,
-                                      const Cn0NormalizationConfig& normalization,
-                                      std::vector<Cn0NormalizedBin>* bins, std::string* error_message);
+                                      const Cn0NormalizationConfig& normalization, std::vector<Cn0NormalizedBin>* bins,
+                                      std::string* error_message);
 
 bool write_cn0_metadata_json(const std::string& output_path, const Cn0AggregationConfig& config,
                              const Cn0BuildResult& result, std::string* error_message);

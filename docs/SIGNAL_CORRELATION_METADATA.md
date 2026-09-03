@@ -23,9 +23,9 @@ Each `SignalDefinition` carries:
 - `primary_subcarrier_rate_hz`: low-rate BOC subcarrier for composite BOC profiles;
 - `secondary_subcarrier_rate_hz`: high-rate BOC subcarrier for composite profiles;
 - `secondary_power_fraction`: power fraction of the secondary subcarrier contribution;
-- `secondary_phase`: in-phase, anti-phase, quadrature, or not applicable.
+- `secondary_phase`: in-phase, anti-phase, **positive quadrature (+90 deg)**, **negative quadrature (-90 deg)**, or not applicable.
 
-TMBOC uses a time-multiplex fraction rather than a fixed subcarrier phase, so `secondary_phase` is `kNotApplicable`.
+The sign of a quadrature relation is preserved because the later complex correlation function can have a signed imaginary component. TMBOC uses a time-multiplex fraction rather than a fixed subcarrier phase, so `secondary_phase` is `kNotApplicable`.
 
 ## Authoritative source baseline
 
@@ -65,9 +65,11 @@ QZSS L1C and L2C are explicitly unsupported in the V1 metadata. Current QZSS gen
 
 - BDS-SIS-ICD-B1I-3.0, February 2019: B1I, BPSK, 2.046 Mcps.
 - BDS-SIS-ICD-B3I-1.0, February 2018: B3I, 10.23 Mcps.
-- BDS-SIS-ICD-B1C-1.0, December 2017: B1C pilot code rate 1.023 Mcps and QMBOC(6,1,4/33). The BOC(1,1) and BOC(6,1) subcarriers are in quadrature with power ratio 29:4.
+- BDS-SIS-ICD-B1C-1.0, December 2017: B1C pilot code rate 1.023 Mcps and QMBOC(6,1,4/33). Under the ICD complex-envelope convention, the pilot subcarrier is represented as `sqrt(29/33) * BOC(1,1) - j * sqrt(4/33) * BOC(6,1)`. Therefore the central B1C pilot profile stores the BOC(6,1) term as **negative quadrature**, not an unsigned generic quadrature relation.
 - BDS-SIS-ICD-B2a-1.0, December 2017: B2a pilot/data ranging code rate 10.23 Mcps and BPSK(10).
 - BDS-SIS-ICD-B2b-1.0, July 2020: B2b-I ranging code rate 10.23 Mcps and BPSK(10).
+
+The generic QMBOC profile validator accepts either positive or negative quadrature structurally; the **specific B1C central entry** locks the negative sign required by the referenced ICD. This keeps the central type reusable without erasing the signal-specific phase convention.
 
 ### GLONASS
 
@@ -93,6 +95,7 @@ There is deliberately no fallback such as "unknown -> triangular BPSK".
 - the unsupported set is explicit and stable;
 - #119 minimum signals have the required representative profile and chip-rate metadata;
 - GPS L1C, Galileo E1-C, and BeiDou B1C retain their distinct TMBOC/CBOC/QMBOC identities;
+- BDS B1C retains the ICD-required negative-quadrature sign while the generic QMBOC validator can represent either signed quadrature orientation;
 - invalid/non-finite/inconsistent profiles are rejected;
 - existing signal lookup/carrier/NAV/bias/OEM7 behavior remains owned by the existing `SignalDefinition` regression suite.
 

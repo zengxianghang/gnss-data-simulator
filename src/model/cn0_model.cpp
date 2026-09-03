@@ -24,11 +24,21 @@ constexpr double kSlowAmplitudeDb = 0.50;
 constexpr double kBinToleranceDeg = 1.0e-9;
 constexpr std::uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
 constexpr std::uint64_t kFnvPrime = 1099511628211ULL;
-constexpr const char* kModelSchemaVersion = "gnss-cn0-model-v1";
-constexpr const char* kModelHeader =
+constexpr const char* kAbsoluteModelSchemaVersion = "gnss-cn0-model-v1";
+constexpr const char* kNormalizedModelSchemaVersion = "gnss-cn0-model-v2";
+constexpr const char* kNormalizedSemantic = "NORMALIZED_ELEVATION_SHAPE";
+constexpr const char* kAbsoluteModelHeader =
     "schema_version,constellation,signal,elevation_min_deg,elevation_max_deg,upper_edge_inclusive,status,count,"
     "p05_dbhz,p10_dbhz,p25_dbhz,p50_dbhz,p75_dbhz,p90_dbhz,p95_dbhz,mean_dbhz,stddev_dbhz,mad_dbhz,"
     "delta_count,delta_p50_dbhz,delta_p90_dbhz,delta_p99_dbhz,ar1_status,ar1";
+constexpr const char* kNormalizedModelHeader =
+    "schema_version,model_semantic,constellation,signal,elevation_min_deg,elevation_max_deg,upper_edge_inclusive,"
+    "status,contributing_source_count,delta_p50_db";
+
+enum class CsvSchema {
+    kAbsoluteV1,
+    kNormalizedV2,
+};
 
 void set_error(std::string* error_message, const std::string& message) {
     if (error_message != nullptr) {
@@ -247,7 +257,8 @@ bool bin_contains(const Cn0CalibratedBin& bin, double elevation_deg) {
     return elevation_deg >= bin.elevation_min_deg - kBinToleranceDeg && elevation_deg < bin.elevation_max_deg;
 }
 
-bool calibrated_nominal_dbhz(const Cn0Model& model, SignalId signal_id, double elevation_deg, double* nominal_dbhz) {
+bool calibrated_absolute_nominal_dbhz(const Cn0Model& model, SignalId signal_id, double elevation_deg,
+                                      double* nominal_dbhz) {
     if (nominal_dbhz == nullptr) {
         return false;
     }
@@ -336,15 +347,15 @@ bool file_identity(const char* file_path, Cn0ModelIdentity* identity, std::strin
     std::ostringstream hash_stream;
     hash_stream.imbue(std::locale::classic());
     hash_stream << std::hex << std::nouppercase << std::setw(16) << std::setfill('0') << hash;
-    identity->schema_version = kModelSchemaVersion;
     identity->file_name = std::filesystem::path(file_path).filename().generic_string();
     identity->hash = hash_stream.str();
     identity->size_bytes = size;
     return true;
 }
 
-bool validate_statistics_fields(const std::vector<std::string>& fields, std::uint64_t count, const std::string& status,
-                                std::size_t line_number, double* p50_dbhz, std::string* error_message) {
+bool validate_absolute_statistics_fields(const std::vector<std::string>& fields, std::uint64_t count,
+                                         const std::string& status, std::size_t line_number, double* p50_dbhz,
+                                         std::string* error_message) {
     double values[10]{};
     for (int index = 0; index < 10; ++index) {
         const std::string& field = fields[static_cast<std::size_t>(8 + index)];
@@ -448,11 +459,95 @@ bool validate_temporal_fields(const std::vector<std::string>& fields, std::size_
     return true;
 }
 
+bool validate_normalized_value(const std::vector<std::string>& fields, std::size_t line_number,
+                               std::uint64_t* support_count, double* delta_p50_db, bool* ready,
+                               std::string* error_message) {
+    if (!parse_u64(fields[8], support_count)) {
+        set_error(error_message,
+                  "normalized CN0 model has invalid contributing_source_count at line " + std::to_string(line_number));
+        return false;
+    }
+    const std::string& status = fields[7];
+    if (status != "EMPTY" && status != "SPARSE" && status != "READY") {
+        set_error(error_message,
+                  "normalized CN0 model has unsupported bin status at line " + std::to_string(line_number));
+        return false;
+    }
+    if (status == "EMPTY") {
+        if (*support_count != 0 || !fields[9].empty()) {
+            set_error(error_message, "normalized CN0 model EMPTY row has data at line " + std::to_string(line_number));
+            return false;
+        }
+        *delta_p50_db = std::numeric_limits<double>::quiet_NaN();
+        *ready = false;
+        return true;
+    }
+    if (*support_count == 0 || !parse_finite_double(fields[9], delta_p50_db)) {
+        set_error(error_message, "normalized CN0 model non-empty row lacks finite support/value at line " +
+                                     std::to_string(line_number));
+        return false;
+    }
+    *ready = status == "READY";
+    return true;
+}
+
+bool parse_common_bin(const std::vector<std::string>& fields, std::size_t constellation_index, std::size_t signal_index,
+                      std::size_t elevation_min_index, std::size_t elevation_max_index, std::size_t inclusive_index,
+                      std::size_t line_number, Cn0CalibratedBin* bin, std::string* error_message) {
+    GnssConstellation constellation{};
+    if (!constellation_from_name(fields[constellation_index], &constellation)) {
+        set_error(error_message,
+                  "configured CN0 model has unsupported constellation at line " + std::to_string(line_number));
+        return false;
+    }
+    const SignalDefinition* definition = find_signal_definition_by_rinex(constellation, fields[signal_index].c_str());
+    if (definition == nullptr) {
+        set_error(error_message, "configured CN0 model signal is absent from central signal definitions at line " +
+                                     std::to_string(line_number));
+        return false;
+    }
+    bin->signal_id = definition->signal_id;
+    if (!parse_finite_double(fields[elevation_min_index], &bin->elevation_min_deg) ||
+        !parse_finite_double(fields[elevation_max_index], &bin->elevation_max_deg) ||
+        !parse_binary_flag(fields[inclusive_index], &bin->upper_edge_inclusive) || bin->elevation_min_deg < 0.0 ||
+        bin->elevation_max_deg > 90.0 || bin->elevation_max_deg <= bin->elevation_min_deg) {
+        set_error(error_message,
+                  "configured CN0 model has invalid elevation bin at line " + std::to_string(line_number));
+        return false;
+    }
+    bin->elevation_center_deg = 0.5 * (bin->elevation_min_deg + bin->elevation_max_deg);
+    return true;
+}
+
+bool append_validated_bin(Cn0Model* loaded, const Cn0CalibratedBin& bin, std::size_t line_number,
+                          std::string* error_message) {
+    const Cn0CalibratedBin* previous = previous_signal_bin(loaded->calibrated_bins, bin.signal_id);
+    if (previous != nullptr) {
+        if (bin.elevation_min_deg <= previous->elevation_min_deg + kBinToleranceDeg) {
+            set_error(error_message,
+                      "configured CN0 model bins are duplicate/non-monotonic at line " + std::to_string(line_number));
+            return false;
+        }
+        if (bin.elevation_min_deg < previous->elevation_max_deg - kBinToleranceDeg) {
+            set_error(error_message, "configured CN0 model bins overlap at line " + std::to_string(line_number));
+            return false;
+        }
+        if (previous->upper_edge_inclusive) {
+            set_error(error_message, "configured CN0 model has a non-final inclusive upper edge at line " +
+                                         std::to_string(line_number - 1));
+            return false;
+        }
+    }
+    loaded->calibrated_bins.push_back(bin);
+    return true;
+}
+
 } // namespace
 
 Cn0Model make_builtin_cn0_model(std::uint64_t seed) {
     Cn0Model model{};
     model.source = Cn0ModelSource::kBuiltinFallback;
+    model.semantic = Cn0ModelSemantic::kBuiltinAbsoluteCn0;
     model.seed = seed;
     model.identity.schema_version = "builtin-cn0-v1";
     return model;
@@ -485,8 +580,19 @@ bool load_cn0_model_csv(const char* file_path, std::uint64_t seed, Cn0Model* mod
     if (!line.empty() && line.back() == '\r') {
         line.pop_back();
     }
-    if (line != kModelHeader) {
-        set_error(error_message, "configured CN0 model header/schema does not match gnss-cn0-model-v1");
+
+    CsvSchema schema{};
+    if (line == kAbsoluteModelHeader) {
+        schema = CsvSchema::kAbsoluteV1;
+        loaded.semantic = Cn0ModelSemantic::kAbsoluteStationCn0;
+        loaded.identity.schema_version = kAbsoluteModelSchemaVersion;
+    } else if (line == kNormalizedModelHeader) {
+        schema = CsvSchema::kNormalizedV2;
+        loaded.semantic = Cn0ModelSemantic::kNormalizedElevationShape;
+        loaded.identity.schema_version = kNormalizedModelSchemaVersion;
+    } else {
+        set_error(error_message,
+                  "configured CN0 model header/schema is neither gnss-cn0-model-v1 nor gnss-cn0-model-v2");
         return false;
     }
 
@@ -507,68 +613,44 @@ bool load_cn0_model_csv(const char* file_path, std::uint64_t seed, Cn0Model* mod
             return false;
         }
         const std::vector<std::string> fields = split_csv_line(line);
-        if (fields.size() != 24U) {
-            set_error(error_message,
-                      "configured CN0 model row must contain 24 columns at line " + std::to_string(line_number));
-            return false;
-        }
-        if (fields[0] != kModelSchemaVersion) {
-            set_error(error_message, "configured CN0 model row has incompatible schema version at line " +
-                                         std::to_string(line_number));
-            return false;
-        }
-
-        GnssConstellation constellation{};
-        if (!constellation_from_name(fields[1], &constellation)) {
-            set_error(error_message,
-                      "configured CN0 model has unsupported constellation at line " + std::to_string(line_number));
-            return false;
-        }
-        const SignalDefinition* definition = find_signal_definition_by_rinex(constellation, fields[2].c_str());
-        if (definition == nullptr) {
-            set_error(error_message, "configured CN0 model signal is absent from central signal definitions at line " +
-                                         std::to_string(line_number));
-            return false;
-        }
-
         Cn0CalibratedBin bin{};
-        bin.signal_id = definition->signal_id;
-        if (!parse_finite_double(fields[3], &bin.elevation_min_deg) ||
-            !parse_finite_double(fields[4], &bin.elevation_max_deg) ||
-            !parse_binary_flag(fields[5], &bin.upper_edge_inclusive) || bin.elevation_min_deg < 0.0 ||
-            bin.elevation_max_deg > 90.0 || bin.elevation_max_deg <= bin.elevation_min_deg) {
-            set_error(error_message,
-                      "configured CN0 model has invalid elevation bin at line " + std::to_string(line_number));
+        if (schema == CsvSchema::kAbsoluteV1) {
+            if (fields.size() != 24U || fields[0] != kAbsoluteModelSchemaVersion) {
+                set_error(error_message,
+                          "configured absolute CN0 model row is incompatible at line " + std::to_string(line_number));
+                return false;
+            }
+            if (!parse_common_bin(fields, 1U, 2U, 3U, 4U, 5U, line_number, &bin, error_message)) {
+                return false;
+            }
+            std::uint64_t count = 0;
+            if (!parse_u64(fields[7], &count) ||
+                !validate_absolute_statistics_fields(fields, count, fields[6], line_number, &bin.p50_dbhz,
+                                                     error_message) ||
+                !validate_temporal_fields(fields, line_number, error_message)) {
+                return false;
+            }
+            bin.support_count = count;
+            bin.delta_p50_db = std::numeric_limits<double>::quiet_NaN();
+            bin.ready = fields[6] == "READY";
+        } else {
+            if (fields.size() != 10U || fields[0] != kNormalizedModelSchemaVersion ||
+                fields[1] != kNormalizedSemantic) {
+                set_error(error_message,
+                          "configured normalized CN0 model row has incompatible schema/semantic at line " +
+                              std::to_string(line_number));
+                return false;
+            }
+            if (!parse_common_bin(fields, 2U, 3U, 4U, 5U, 6U, line_number, &bin, error_message) ||
+                !validate_normalized_value(fields, line_number, &bin.support_count, &bin.delta_p50_db, &bin.ready,
+                                           error_message)) {
+                return false;
+            }
+            bin.p50_dbhz = std::numeric_limits<double>::quiet_NaN();
+        }
+        if (!append_validated_bin(&loaded, bin, line_number, error_message)) {
             return false;
         }
-        bin.elevation_center_deg = 0.5 * (bin.elevation_min_deg + bin.elevation_max_deg);
-
-        std::uint64_t count = 0;
-        if (!parse_u64(fields[7], &count) ||
-            !validate_statistics_fields(fields, count, fields[6], line_number, &bin.p50_dbhz, error_message) ||
-            !validate_temporal_fields(fields, line_number, error_message)) {
-            return false;
-        }
-        bin.ready = fields[6] == "READY";
-
-        const Cn0CalibratedBin* previous = previous_signal_bin(loaded.calibrated_bins, bin.signal_id);
-        if (previous != nullptr) {
-            if (bin.elevation_min_deg <= previous->elevation_min_deg + kBinToleranceDeg) {
-                set_error(error_message, "configured CN0 model bins are duplicate/non-monotonic at line " +
-                                             std::to_string(line_number));
-                return false;
-            }
-            if (bin.elevation_min_deg < previous->elevation_max_deg - kBinToleranceDeg) {
-                set_error(error_message, "configured CN0 model bins overlap at line " + std::to_string(line_number));
-                return false;
-            }
-            if (previous->upper_edge_inclusive) {
-                set_error(error_message, "configured CN0 model has a non-final inclusive upper edge at line " +
-                                             std::to_string(line_number - 1));
-                return false;
-            }
-        }
-        loaded.calibrated_bins.push_back(bin);
     }
     if (!input.eof()) {
         set_error(error_message, "failed while reading configured CN0 model");
@@ -596,7 +678,10 @@ bool cn0_model_estimate_dbhz(const Cn0Model& model, SignalId signal_id, double e
             nominal_dbhz = builtin_nominal_dbhz(signal_id, elevation_deg);
             break;
         case Cn0ModelSource::kCalibratedCsv:
-            if (!calibrated_nominal_dbhz(model, signal_id, elevation_deg, &nominal_dbhz)) {
+            if (model.semantic != Cn0ModelSemantic::kAbsoluteStationCn0 ||
+                !calibrated_absolute_nominal_dbhz(model, signal_id, elevation_deg, &nominal_dbhz)) {
+                // NORMALIZED_ELEVATION_SHAPE is intentionally not interpreted as
+                // absolute dB-Hz until the receiver-baseline composition in #107.
                 return false;
             }
             break;
@@ -619,6 +704,18 @@ const char* cn0_model_source_name(Cn0ModelSource source) {
             return "BUILTIN_FALLBACK";
         case Cn0ModelSource::kCalibratedCsv:
             return "CALIBRATED_CSV";
+    }
+    return "UNKNOWN";
+}
+
+const char* cn0_model_semantic_name(Cn0ModelSemantic semantic) {
+    switch (semantic) {
+        case Cn0ModelSemantic::kBuiltinAbsoluteCn0:
+            return "BUILTIN_ABSOLUTE_CN0";
+        case Cn0ModelSemantic::kAbsoluteStationCn0:
+            return "ABSOLUTE_STATION_CN0";
+        case Cn0ModelSemantic::kNormalizedElevationShape:
+            return "NORMALIZED_ELEVATION_SHAPE";
     }
     return "UNKNOWN";
 }

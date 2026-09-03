@@ -51,11 +51,11 @@ bool compute_complex_knife_edge_coefficient(double fresnel_v, std::complex<doubl
 // Compute the roof-affected direct component for the actual first blocking
 // wall selected by #115 geometry. A non-applicable edge is reported through
 // status and is not a model failure.
-bool compute_urban_rooftop_diffraction(const UrbanSceneGeometryConfig& scene_config,
-                                       const SignalDefinition& signal, int glonass_fcn,
-                                       const ReceiverTruth& receiver, const SatelliteGeometry& satellite_geometry,
-                                       UrbanRooftopDiffractionPath* diffraction,
-                                       UrbanRooftopDiffractionStatus* status, std::string* error_message);
+bool compute_urban_rooftop_diffraction(const UrbanSceneGeometryConfig& scene_config, const SignalDefinition& signal,
+                                       int glonass_fcn, const ReceiverTruth& receiver,
+                                       const SatelliteGeometry& satellite_geometry,
+                                       UrbanRooftopDiffractionPath* diffraction, UrbanRooftopDiffractionStatus* status,
+                                       std::string* error_message);
 
 const char* urban_rooftop_diffraction_status_name(UrbanRooftopDiffractionStatus status);
 

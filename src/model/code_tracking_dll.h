@@ -38,6 +38,11 @@ enum class CodeTrackingDllSelectionMode {
     ACQUISITION,
 };
 
+enum class CodeTrackingDllRootSearchStatus {
+    kRootsFound = 0,
+    kNoRoots,
+};
+
 CodeTrackingDllConfig default_code_tracking_dll_config();
 bool validate_code_tracking_dll_config(const CodeTrackingDllConfig& config, std::string* error_message);
 
@@ -59,6 +64,15 @@ bool compute_code_tracking_dll_discriminator(const SignalDefinition& signal, con
 bool find_code_tracking_dll_roots(const SignalDefinition& signal, const CodeTrackingDllPath* paths, int path_count,
                                   const CodeTrackingDllConfig& config, CodeTrackingDllRoot* roots, int root_capacity,
                                   int* root_count, std::string* error_message);
+
+// Status-preserving wrapper for propagation/tracking orchestration. A valid
+// receiver-domain coherent null (all equal-delay complex-voltage groups cancel)
+// is a physical no-root condition rather than a computation error. All other
+// root enumeration is delegated unchanged to find_code_tracking_dll_roots().
+bool find_code_tracking_dll_roots_with_status(const SignalDefinition& signal, const CodeTrackingDllPath* paths,
+                                              int path_count, const CodeTrackingDllConfig& config,
+                                              CodeTrackingDllRoot* roots, int root_capacity, int* root_count,
+                                              CodeTrackingDllRootSearchStatus* status, std::string* error_message);
 
 bool select_code_tracking_dll_root(const CodeTrackingDllRoot* roots, int root_count, CodeTrackingDllSelectionMode mode,
                                    double previous_code_phase_sec, int* selected_index, std::string* error_message);

@@ -1,0 +1,35 @@
+name: tmp-issue117-format
+
+on:
+  push:
+    branches:
+      - issue-117-first-order-reflections
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-117-first-order-reflections
+      - name: Format issue 117 files
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang-format -i \
+            src/model/urban_reflection_paths.h \
+            src/model/urban_reflection_paths.cpp \
+            tests/unit/test_urban_reflection_paths.cpp
+          if git diff --quiet; then
+            echo "Already formatted"
+            exit 0
+          fi
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/model/urban_reflection_paths.h src/model/urban_reflection_paths.cpp tests/unit/test_urban_reflection_paths.cpp
+          git commit -m "Format first-order reflection implementation"
+          git push origin HEAD:issue-117-first-order-reflections

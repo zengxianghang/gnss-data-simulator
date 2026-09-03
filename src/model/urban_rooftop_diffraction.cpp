@@ -364,17 +364,17 @@ bool compute_urban_rooftop_diffraction(const UrbanSceneGeometryConfig& scene_con
         return false;
     }
 
-    const double fresnel_magnitude = std::sqrt(2.0 * result.excess_path_length_m / wavelength_m);
-    if (!std::isfinite(fresnel_magnitude)) {
-        set_error(error_message, "urban rooftop Fresnel parameter magnitude is non-finite");
+    const double fresnel_scale =
+        std::sqrt(2.0 * result.edge_path_euclidean_range_m /
+                  (wavelength_m * result.source_edge_distance_m * result.receiver_edge_distance_m));
+    if (!finite_positive(fresnel_scale)) {
+        set_error(error_message, "urban rooftop Fresnel parameter scale is invalid");
         return false;
     }
-    if (result.signed_clearance_m > 0.0) {
-        result.fresnel_v = fresnel_magnitude;
-    } else if (result.signed_clearance_m < 0.0) {
-        result.fresnel_v = -fresnel_magnitude;
-    } else {
-        result.fresnel_v = 0.0;
+    result.fresnel_v = result.signed_clearance_m * fresnel_scale;
+    if (!std::isfinite(result.fresnel_v)) {
+        set_error(error_message, "urban rooftop Fresnel parameter is non-finite");
+        return false;
     }
 
     if (!compute_complex_knife_edge_coefficient(result.fresnel_v, &result.fresnel_coefficient, error_message)) {

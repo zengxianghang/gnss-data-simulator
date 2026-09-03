@@ -1,8 +1,7 @@
 #include "model/urban_scene_geometry.h"
 
-#include <gtest/gtest.h>
-
 #include <cmath>
+#include <gtest/gtest.h>
 #include <string>
 
 namespace {
@@ -27,8 +26,8 @@ TEST(UrbanSceneGeometry, CardinalAndCornerSkylinesMatchAnalyticalAnchors) {
 
     double skyline_rad = 0.0;
     double horizontal_distance_m = 0.0;
-    ASSERT_TRUE(gnss_sim::compute_urban_skyline_elevation(config, 0.0, &skyline_rad, &horizontal_distance_m,
-                                                          &error_message))
+    ASSERT_TRUE(
+        gnss_sim::compute_urban_skyline_elevation(config, 0.0, &skyline_rad, &horizontal_distance_m, &error_message))
         << error_message;
     EXPECT_NEAR(horizontal_distance_m, 10.0, 1.0e-12);
     EXPECT_NEAR(skyline_rad * kRadiansToDegrees, 40.36453657309736, 1.0e-10);
@@ -45,8 +44,8 @@ TEST(UrbanSceneGeometry, NorthWallBlocksBelowSkylineAndClearsAboveRoof) {
     std::string error_message;
 
     gnss_sim::UrbanDirectPathGeometry blocked{};
-    ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(config, 0.0, 30.0 * kDegreesToRadians, &blocked,
-                                                             &error_message))
+    ASSERT_TRUE(
+        gnss_sim::compute_urban_direct_path_geometry(config, 0.0, 30.0 * kDegreesToRadians, &blocked, &error_message))
         << error_message;
     EXPECT_FALSE(blocked.line_of_sight);
     EXPECT_TRUE(blocked.blocked_by_wall);
@@ -59,8 +58,8 @@ TEST(UrbanSceneGeometry, NorthWallBlocksBelowSkylineAndClearsAboveRoof) {
     EXPECT_LT(blocked.roof_clearance_m, 0.0);
 
     gnss_sim::UrbanDirectPathGeometry clear{};
-    ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(config, 0.0, 50.0 * kDegreesToRadians, &clear,
-                                                             &error_message))
+    ASSERT_TRUE(
+        gnss_sim::compute_urban_direct_path_geometry(config, 0.0, 50.0 * kDegreesToRadians, &clear, &error_message))
         << error_message;
     EXPECT_TRUE(clear.line_of_sight);
     EXPECT_FALSE(clear.blocked_by_wall);
@@ -73,8 +72,8 @@ TEST(UrbanSceneGeometry, ExactCornerExposesBothFirstWallsWithoutHidingTie) {
     std::string error_message;
 
     gnss_sim::UrbanDirectPathGeometry geometry{};
-    ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(config, 45.0 * kDegreesToRadians,
-                                                             30.0 * kDegreesToRadians, &geometry, &error_message))
+    ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(config, 45.0 * kDegreesToRadians, 30.0 * kDegreesToRadians,
+                                                             &geometry, &error_message))
         << error_message;
     EXPECT_FALSE(geometry.line_of_sight);
     EXPECT_TRUE(geometry.blocked_by_wall);
@@ -97,8 +96,8 @@ TEST(UrbanSceneGeometry, CardinalRotationKeepsGeometrySymmetric) {
 
     for (int index = 0; index < 4; ++index) {
         gnss_sim::UrbanDirectPathGeometry geometry{};
-        ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(
-            config, azimuths_deg[index] * kDegreesToRadians, 30.0 * kDegreesToRadians, &geometry, &error_message))
+        ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(config, azimuths_deg[index] * kDegreesToRadians,
+                                                                 30.0 * kDegreesToRadians, &geometry, &error_message))
             << error_message;
         EXPECT_FALSE(geometry.line_of_sight);
         EXPECT_TRUE(geometry.blocked_by_wall);
@@ -115,8 +114,8 @@ TEST(UrbanSceneGeometry, GrazingRoofIsDeterministicallyClassifiedAsBlocked) {
     std::string error_message;
 
     gnss_sim::UrbanDirectPathGeometry geometry{};
-    ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(config, 0.0, grazing_elevation_rad, &geometry,
-                                                             &error_message))
+    ASSERT_TRUE(
+        gnss_sim::compute_urban_direct_path_geometry(config, 0.0, grazing_elevation_rad, &geometry, &error_message))
         << error_message;
     EXPECT_FALSE(geometry.line_of_sight);
     EXPECT_TRUE(geometry.blocked_by_wall);
@@ -147,8 +146,8 @@ TEST(UrbanSceneGeometry, ZenithDoesNotIntersectAnyWall) {
     std::string error_message;
 
     gnss_sim::UrbanDirectPathGeometry geometry{};
-    ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(config, 123.0 * kDegreesToRadians, 0.5 * kPi,
-                                                             &geometry, &error_message))
+    ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(config, 123.0 * kDegreesToRadians, 0.5 * kPi, &geometry,
+                                                             &error_message))
         << error_message;
     EXPECT_TRUE(geometry.line_of_sight);
     EXPECT_FALSE(geometry.blocked_by_wall);
@@ -176,11 +175,11 @@ TEST(UrbanSceneGeometry, RepeatedEvaluationIsNumericallyIdentical) {
     gnss_sim::UrbanDirectPathGeometry first{};
     gnss_sim::UrbanDirectPathGeometry second{};
 
-    ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(config, 27.0 * kDegreesToRadians,
-                                                             22.0 * kDegreesToRadians, &first, &error_message))
+    ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(config, 27.0 * kDegreesToRadians, 22.0 * kDegreesToRadians,
+                                                             &first, &error_message))
         << error_message;
-    ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(config, 27.0 * kDegreesToRadians,
-                                                             22.0 * kDegreesToRadians, &second, &error_message))
+    ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(config, 27.0 * kDegreesToRadians, 22.0 * kDegreesToRadians,
+                                                             &second, &error_message))
         << error_message;
 
     EXPECT_EQ(first.primary_wall, second.primary_wall);

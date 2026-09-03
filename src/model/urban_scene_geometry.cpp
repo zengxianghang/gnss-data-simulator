@@ -34,7 +34,8 @@ struct WallCandidate {
 
 bool add_candidate(UrbanWallId wall_id, double ray_component, double wall_coordinate_m, WallCandidate candidates[4],
                    int* candidate_count) {
-    if (candidates == nullptr || candidate_count == nullptr || std::fabs(ray_component) <= kHorizontalDirectionEpsilon) {
+    if (candidates == nullptr || candidate_count == nullptr ||
+        std::fabs(ray_component) <= kHorizontalDirectionEpsilon) {
         return true;
     }
     const double ray_distance_m = wall_coordinate_m / ray_component;
@@ -88,30 +89,30 @@ bool urban_wall_plane(const UrbanSceneGeometryConfig& config, UrbanWallId wall_i
     UrbanWallPlane result{};
     result.wall_id = wall_id;
     switch (wall_id) {
-    case UrbanWallId::NORTH:
-        result.plane_anchor_enu_m = {0.0, config.wall_distance_m, 0.0};
-        set_vector3(result.inward_normal_enu, 0.0, -1.0, 0.0);
-        set_vector3(result.horizontal_tangent_enu, 1.0, 0.0, 0.0);
-        break;
-    case UrbanWallId::EAST:
-        result.plane_anchor_enu_m = {config.wall_distance_m, 0.0, 0.0};
-        set_vector3(result.inward_normal_enu, -1.0, 0.0, 0.0);
-        set_vector3(result.horizontal_tangent_enu, 0.0, 1.0, 0.0);
-        break;
-    case UrbanWallId::SOUTH:
-        result.plane_anchor_enu_m = {0.0, -config.wall_distance_m, 0.0};
-        set_vector3(result.inward_normal_enu, 0.0, 1.0, 0.0);
-        set_vector3(result.horizontal_tangent_enu, 1.0, 0.0, 0.0);
-        break;
-    case UrbanWallId::WEST:
-        result.plane_anchor_enu_m = {-config.wall_distance_m, 0.0, 0.0};
-        set_vector3(result.inward_normal_enu, 1.0, 0.0, 0.0);
-        set_vector3(result.horizontal_tangent_enu, 0.0, 1.0, 0.0);
-        break;
-    case UrbanWallId::NONE:
-    default:
-        set_error(error_message, "urban wall id is invalid");
-        return false;
+        case UrbanWallId::NORTH:
+            result.plane_anchor_enu_m = {0.0, config.wall_distance_m, 0.0};
+            set_vector3(result.inward_normal_enu, 0.0, -1.0, 0.0);
+            set_vector3(result.horizontal_tangent_enu, 1.0, 0.0, 0.0);
+            break;
+        case UrbanWallId::EAST:
+            result.plane_anchor_enu_m = {config.wall_distance_m, 0.0, 0.0};
+            set_vector3(result.inward_normal_enu, -1.0, 0.0, 0.0);
+            set_vector3(result.horizontal_tangent_enu, 0.0, 1.0, 0.0);
+            break;
+        case UrbanWallId::SOUTH:
+            result.plane_anchor_enu_m = {0.0, -config.wall_distance_m, 0.0};
+            set_vector3(result.inward_normal_enu, 0.0, 1.0, 0.0);
+            set_vector3(result.horizontal_tangent_enu, 1.0, 0.0, 0.0);
+            break;
+        case UrbanWallId::WEST:
+            result.plane_anchor_enu_m = {-config.wall_distance_m, 0.0, 0.0};
+            set_vector3(result.inward_normal_enu, 1.0, 0.0, 0.0);
+            set_vector3(result.horizontal_tangent_enu, 0.0, 1.0, 0.0);
+            break;
+        case UrbanWallId::NONE:
+        default:
+            set_error(error_message, "urban wall id is invalid");
+            return false;
     }
 
     result.roof_edge_anchor_enu_m = result.plane_anchor_enu_m;
@@ -146,8 +147,7 @@ bool compute_urban_skyline_elevation(const UrbanSceneGeometryConfig& config, dou
     }
 
     const double horizontal_distance_m = config.wall_distance_m / dominant_horizontal;
-    const double skyline_rad =
-        std::atan2(config.wall_height_m - config.antenna_height_m, horizontal_distance_m);
+    const double skyline_rad = std::atan2(config.wall_height_m - config.antenna_height_m, horizontal_distance_m);
     if (!std::isfinite(horizontal_distance_m) || !std::isfinite(skyline_rad)) {
         set_error(error_message, "urban skyline calculation produced a non-finite result");
         return false;
@@ -246,17 +246,17 @@ bool compute_urban_direct_path_geometry(const UrbanSceneGeometryConfig& config, 
 
 const char* urban_wall_id_name(UrbanWallId wall_id) {
     switch (wall_id) {
-    case UrbanWallId::NORTH:
-        return "NORTH";
-    case UrbanWallId::EAST:
-        return "EAST";
-    case UrbanWallId::SOUTH:
-        return "SOUTH";
-    case UrbanWallId::WEST:
-        return "WEST";
-    case UrbanWallId::NONE:
-    default:
-        return "NONE";
+        case UrbanWallId::NORTH:
+            return "NORTH";
+        case UrbanWallId::EAST:
+            return "EAST";
+        case UrbanWallId::SOUTH:
+            return "SOUTH";
+        case UrbanWallId::WEST:
+            return "WEST";
+        case UrbanWallId::NONE:
+        default:
+            return "NONE";
     }
 }
 

@@ -219,7 +219,7 @@ add_executable(validate-transient-observations
     tools/transient_validator/main.cpp
 )
 target_link_libraries(validate-transient-observations PRIVATE transient_validator_core)
-gnss_sim_set_project_warnings(validate-transient_observations)
+gnss_sim_set_project_warnings(transient_validator_core)
 
 if(BUILD_TESTING)
     include(FetchContent)

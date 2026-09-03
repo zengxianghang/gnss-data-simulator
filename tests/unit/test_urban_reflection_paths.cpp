@@ -45,9 +45,9 @@ TEST(UrbanReflectionPaths, SouthSkyProducesOneValidNorthWallReflection) {
 
     gnss_sim::UrbanFirstOrderReflectionSet reflections{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(
-        scene, sim_config.urban_rf, signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver, geometry, &reflections,
-        &error_message))
+    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(scene, sim_config.urban_rf,
+                                                                signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver,
+                                                                geometry, &reflections, &error_message))
         << error_message;
 
     ASSERT_EQ(reflections.path_count, 1);
@@ -74,9 +74,9 @@ TEST(UrbanReflectionPaths, SpecularDirectionsObeyReflectionLaw) {
 
     gnss_sim::UrbanFirstOrderReflectionSet reflections{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(
-        scene, sim_config.urban_rf, signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver, geometry, &reflections,
-        &error_message))
+    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(scene, sim_config.urban_rf,
+                                                                signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver,
+                                                                geometry, &reflections, &error_message))
         << error_message;
     ASSERT_EQ(reflections.path_count, 1);
 
@@ -111,9 +111,9 @@ TEST(UrbanReflectionPaths, BacksideAndFacadeHeightAreExplicitRejections) {
     EXPECT_EQ(status, gnss_sim::UrbanReflectionCandidateStatus::BACKSIDE);
 
     const gnss_sim::EnuPoint high_south_source{0.0, -1000.0, 2000.0};
-    ASSERT_TRUE(gnss_sim::compute_urban_one_wall_reflection(scene, rf, gnss_sim::UrbanWallId::NORTH,
-                                                            high_south_source, receiver, 2500.0, 1575.42e6,
-                                                            wavelength_m, &path, &status, &error_message));
+    ASSERT_TRUE(gnss_sim::compute_urban_one_wall_reflection(scene, rf, gnss_sim::UrbanWallId::NORTH, high_south_source,
+                                                            receiver, 2500.0, 1575.42e6, wavelength_m, &path, &status,
+                                                            &error_message));
     EXPECT_EQ(status, gnss_sim::UrbanReflectionCandidateStatus::OUTSIDE_FACADE_HEIGHT);
 }
 
@@ -126,9 +126,9 @@ TEST(UrbanReflectionPaths, SkewedCandidateIsRejectedByAnotherFacade) {
 
     gnss_sim::UrbanFirstOrderReflectionSet reflections{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(
-        scene, sim_config.urban_rf, signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver, geometry, &reflections,
-        &error_message))
+    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(scene, sim_config.urban_rf,
+                                                                signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver,
+                                                                geometry, &reflections, &error_message))
         << error_message;
     EXPECT_EQ(reflections.path_count, 0);
     EXPECT_EQ(reflections.candidate_status[0], gnss_sim::UrbanReflectionCandidateStatus::RECEIVER_OCCLUDED);
@@ -144,9 +144,9 @@ TEST(UrbanReflectionPaths, DiagonalDoubleImageCandidatesRemainBlockedInFrozenInf
 
     gnss_sim::UrbanFirstOrderReflectionSet reflections{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(
-        scene, sim_config.urban_rf, signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver, geometry, &reflections,
-        &error_message))
+    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(scene, sim_config.urban_rf,
+                                                                signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver,
+                                                                geometry, &reflections, &error_message))
         << error_message;
     EXPECT_EQ(reflections.path_count, 0);
     EXPECT_EQ(reflections.candidate_status[0], gnss_sim::UrbanReflectionCandidateStatus::SOURCE_OCCLUDED);
@@ -165,9 +165,9 @@ TEST(UrbanReflectionPaths, ExcessRangeUsesEuclideanDifferenceThenAddsRtklibBasel
 
     gnss_sim::UrbanFirstOrderReflectionSet reflections{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(
-        scene, sim_config.urban_rf, signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver, geometry, &reflections,
-        &error_message))
+    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(scene, sim_config.urban_rf,
+                                                                signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver,
+                                                                geometry, &reflections, &error_message))
         << error_message;
     ASSERT_EQ(reflections.path_count, 1);
     const gnss_sim::UrbanFirstOrderReflectionPath& path = reflections.paths[0];
@@ -221,9 +221,9 @@ TEST(UrbanReflectionPaths, HighElevationCanProduceZeroValidPathsWithoutInventing
 
     gnss_sim::UrbanFirstOrderReflectionSet reflections{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(
-        scene, sim_config.urban_rf, signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver, geometry, &reflections,
-        &error_message));
+    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(scene, sim_config.urban_rf,
+                                                                signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver,
+                                                                geometry, &reflections, &error_message));
     EXPECT_EQ(reflections.path_count, 0);
     EXPECT_EQ(reflections.candidate_status[0], gnss_sim::UrbanReflectionCandidateStatus::OUTSIDE_FACADE_HEIGHT);
 }
@@ -238,11 +238,12 @@ TEST(UrbanReflectionPaths, RepeatedEvaluationIsNumericallyIdentical) {
     gnss_sim::UrbanFirstOrderReflectionSet first{};
     gnss_sim::UrbanFirstOrderReflectionSet second{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(
-        scene, sim_config.urban_rf, signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver, geometry, &first, &error_message));
-    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(
-        scene, sim_config.urban_rf, signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver, geometry, &second,
-        &error_message));
+    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(scene, sim_config.urban_rf,
+                                                                signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver,
+                                                                geometry, &first, &error_message));
+    ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(scene, sim_config.urban_rf,
+                                                                signal(gnss_sim::SignalId::kGpsL1Ca), 0, receiver,
+                                                                geometry, &second, &error_message));
     ASSERT_EQ(first.path_count, second.path_count);
     ASSERT_EQ(first.path_count, 1);
     for (int index = 0; index < gnss_sim::kUrbanFirstOrderWallCount; ++index) {

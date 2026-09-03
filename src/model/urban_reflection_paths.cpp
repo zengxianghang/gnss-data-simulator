@@ -140,8 +140,7 @@ bool segment_blocked_by_other_wall(const UrbanSceneGeometryConfig& scene_config,
             continue;
         }
         bool wall_blocked = false;
-        if (!segment_blocked_by_wall(scene_config, wall_id, segment_start, segment_end, &wall_blocked,
-                                     error_message)) {
+        if (!segment_blocked_by_wall(scene_config, wall_id, segment_start, segment_end, &wall_blocked, error_message)) {
             return false;
         }
         if (wall_blocked) {
@@ -174,7 +173,8 @@ bool reconstruct_urban_satellite_enu(const UrbanSceneGeometryConfig& scene_confi
                                      std::string* error_message) {
     if (receiver_enu_m == nullptr || satellite_enu_m == nullptr || direct_euclidean_range_m == nullptr ||
         !validate_urban_scene_geometry_config(scene_config, error_message) ||
-        !finite_vector3(receiver.position_ecef_m) || !finite_vector3(satellite_geometry.satellite_state.position_ecef_m) ||
+        !finite_vector3(receiver.position_ecef_m) ||
+        !finite_vector3(satellite_geometry.satellite_state.position_ecef_m) ||
         !std::isfinite(satellite_geometry.azimuth_rad) || !std::isfinite(satellite_geometry.elevation_rad) ||
         satellite_geometry.elevation_rad < -0.5 * kPi || satellite_geometry.elevation_rad > 0.5 * kPi) {
         set_error(error_message, "urban reflection satellite reconstruction request is invalid");
@@ -312,8 +312,7 @@ bool compute_urban_one_wall_reflection(const UrbanSceneGeometryConfig& scene_con
         set_error(error_message, "urban reflection path direction calculation failed");
         return false;
     }
-    if (!verify_specular_law(result.incident_direction_enu, result.reflected_direction_enu,
-                             wall.inward_normal_enu)) {
+    if (!verify_specular_law(result.incident_direction_enu, result.reflected_direction_enu, wall.inward_normal_enu)) {
         set_error(error_message, "urban reflection image solution violates the specular law");
         return false;
     }
@@ -368,10 +367,9 @@ bool compute_urban_one_wall_reflection(const UrbanSceneGeometryConfig& scene_con
     return true;
 }
 
-bool compute_urban_first_order_reflections(const UrbanSceneGeometryConfig& scene_config,
-                                           const UrbanRfConfig& rf_config, const SignalDefinition& signal,
-                                           int glonass_fcn, const ReceiverTruth& receiver,
-                                           const SatelliteGeometry& satellite_geometry,
+bool compute_urban_first_order_reflections(const UrbanSceneGeometryConfig& scene_config, const UrbanRfConfig& rf_config,
+                                           const SignalDefinition& signal, int glonass_fcn,
+                                           const ReceiverTruth& receiver, const SatelliteGeometry& satellite_geometry,
                                            UrbanFirstOrderReflectionSet* reflections, std::string* error_message) {
     if (reflections == nullptr || !finite_positive(satellite_geometry.geometric_range_m)) {
         set_error(error_message, "urban first-order reflection request is invalid");

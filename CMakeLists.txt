@@ -202,7 +202,7 @@ add_executable(validate-rangea-roundtrip
     tools/rangea_roundtrip/main.cpp
 )
 target_link_libraries(validate-rangea-roundtrip PRIVATE rangea_roundtrip_core)
-gnss_sim_set_project_warnings(validate-rangea_roundtrip)
+gnss_sim_set_project_warnings(validate-rangea-roundtrip)
 
 add_library(transient_validator_core STATIC
     tools/transient_validator/transient_validator.cpp
@@ -219,7 +219,7 @@ add_executable(validate-transient-observations
     tools/transient_validator/main.cpp
 )
 target_link_libraries(validate-transient-observations PRIVATE transient_validator_core)
-gnss_sim_set_project_warnings(transient_validator_core)
+gnss_sim_set_project_warnings(validate-transient-observations)
 
 if(BUILD_TESTING)
     include(FetchContent)

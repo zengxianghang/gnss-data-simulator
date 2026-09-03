@@ -63,7 +63,8 @@ bool compute_urban_received_path_set(const Cn0Model& cn0_model, const UrbanScene
                                      const SimTime& time, const ReceiverTruth& receiver,
                                      const SatelliteGeometry& satellite_geometry, UrbanReceivedPathSet* result,
                                      std::string* error_message) {
-    if (result == nullptr || !std::isfinite(satellite_geometry.elevation_rad)) {
+    if (result == nullptr || !std::isfinite(satellite_geometry.azimuth_rad) ||
+        !std::isfinite(satellite_geometry.elevation_rad)) {
         set_error(error_message, "urban received-power request is invalid");
         return false;
     }
@@ -76,7 +77,10 @@ bool compute_urban_received_path_set(const Cn0Model& cn0_model, const UrbanScene
         return false;
     }
 
-    if (!compute_urban_rooftop_diffraction(scene_config, signal, glonass_fcn, receiver, satellite_geometry,
+    if (!compute_urban_direct_path_geometry(scene_config, satellite_geometry.azimuth_rad,
+                                            satellite_geometry.elevation_rad, &output.direct_geometry,
+                                            error_message) ||
+        !compute_urban_rooftop_diffraction(scene_config, signal, glonass_fcn, receiver, satellite_geometry,
                                            &output.diffraction, &output.diffraction_status, error_message) ||
         !compute_urban_first_order_reflections(scene_config, rf_config, signal, glonass_fcn, receiver,
                                                satellite_geometry, &output.reflections, error_message)) {
@@ -91,7 +95,9 @@ bool compute_urban_received_path_set(const Cn0Model& cn0_model, const UrbanScene
             set_error(error_message, "urban rooftop direct transfer voltage is non-finite");
             return false;
         }
-        output.paths[output.path_count++] = {output.diffraction.excess_delay_sec, output.direct_voltage};
+        const double direct_code_delay_sec =
+            output.direct_geometry.line_of_sight ? 0.0 : output.diffraction.excess_delay_sec;
+        output.paths[output.path_count++] = {direct_code_delay_sec, output.direct_voltage};
     } else {
         output.direct_voltage = {1.0, 0.0};
         output.paths[output.path_count++] = {0.0, output.direct_voltage};

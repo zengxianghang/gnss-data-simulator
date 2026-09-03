@@ -1,6 +1,5 @@
-#include "tools/build_cn0_model/cn0_builder.h"
-
 #include "gnss/signal_definitions.h"
+#include "tools/build_cn0_model/cn0_builder.h"
 
 #include <algorithm>
 #include <array>
@@ -247,8 +246,8 @@ const char* cn0_reference_status_name(Cn0ReferenceStatus status) {
 }
 
 bool aggregate_normalized_cn0_sources(const std::vector<Cn0NormalizedSourceResult>& sources,
-                                      const Cn0NormalizationConfig& normalization,
-                                      std::vector<Cn0NormalizedBin>* bins, std::string* error_message) {
+                                      const Cn0NormalizationConfig& normalization, std::vector<Cn0NormalizedBin>* bins,
+                                      std::string* error_message) {
     if (bins == nullptr || sources.empty() || normalization.min_sources_per_bin == 0) {
         set_error(error_message, "normalized CN0 aggregation requires sources/output and positive source support");
         return false;
@@ -277,8 +276,7 @@ bool aggregate_normalized_cn0_sources(const std::vector<Cn0NormalizedSourceResul
                 set_error(error_message, "normalized CN0 sources use inconsistent signal/elevation ordering");
                 return false;
             }
-            if (bin.reference_ready && bin.source_status == Cn0BinStatus::kReady &&
-                std::isfinite(bin.delta_p50_db)) {
+            if (bin.reference_ready && bin.source_status == Cn0BinStatus::kReady && std::isfinite(bin.delta_p50_db)) {
                 deltas.push_back(bin.delta_p50_db);
             }
         }
@@ -352,8 +350,8 @@ bool build_normalized_cn0_model(const std::vector<Cn0InputSource>& sources, cons
             normalized_bin.source_status = bin.status;
             normalized_bin.sample_count = bin.count;
             const Cn0SignalReference* reference = find_reference(normalized_source.references, bin.signal_id);
-            normalized_bin.reference_ready =
-                reference != nullptr && reference->status == Cn0ReferenceStatus::kReady && std::isfinite(reference->p50_dbhz);
+            normalized_bin.reference_ready = reference != nullptr && reference->status == Cn0ReferenceStatus::kReady &&
+                                             std::isfinite(reference->p50_dbhz);
             if (normalized_bin.reference_ready && bin.count > 0 && std::isfinite(bin.p50_dbhz)) {
                 normalized_bin.delta_p50_db = bin.p50_dbhz - reference->p50_dbhz;
             } else {
@@ -365,16 +363,16 @@ bool build_normalized_cn0_model(const std::vector<Cn0InputSource>& sources, cons
         build.sources.push_back(std::move(normalized_source));
     }
 
-    std::sort(build.sources.begin(), build.sources.end(), [](const Cn0NormalizedSourceResult& left,
-                                                             const Cn0NormalizedSourceResult& right) {
-        if (left.metadata.observation_file.file_name != right.metadata.observation_file.file_name) {
-            return left.metadata.observation_file.file_name < right.metadata.observation_file.file_name;
-        }
-        if (left.metadata.observation_file.fnv1a64 != right.metadata.observation_file.fnv1a64) {
-            return left.metadata.observation_file.fnv1a64 < right.metadata.observation_file.fnv1a64;
-        }
-        return left.metadata.navigation_file.fnv1a64 < right.metadata.navigation_file.fnv1a64;
-    });
+    std::sort(build.sources.begin(), build.sources.end(),
+              [](const Cn0NormalizedSourceResult& left, const Cn0NormalizedSourceResult& right) {
+                  if (left.metadata.observation_file.file_name != right.metadata.observation_file.file_name) {
+                      return left.metadata.observation_file.file_name < right.metadata.observation_file.file_name;
+                  }
+                  if (left.metadata.observation_file.fnv1a64 != right.metadata.observation_file.fnv1a64) {
+                      return left.metadata.observation_file.fnv1a64 < right.metadata.observation_file.fnv1a64;
+                  }
+                  return left.metadata.navigation_file.fnv1a64 < right.metadata.navigation_file.fnv1a64;
+              });
 
     if (!aggregate_normalized_cn0_sources(build.sources, normalization, &build.bins, error_message)) {
         return false;
@@ -425,9 +423,9 @@ bool write_normalized_cn0_metadata_json(const std::string& output_path, const Cn
     output << "  \"schema_version\":\"gnss-cn0-metadata-v2\",\n";
     output << "  \"model_schema_version\":\"gnss-cn0-model-v2\",\n";
     output << "  \"model_semantic\":\"NORMALIZED_ELEVATION_SHAPE\",\n";
-    output << "  \"normalization\":{\"reference_elevation_min_deg\":"
-           << normalization.reference_elevation_min_deg << ",\"reference_elevation_max_deg\":"
-           << normalization.reference_elevation_max_deg << ",\"reference_statistic\":\"P50_R7\","
+    output << "  \"normalization\":{\"reference_elevation_min_deg\":" << normalization.reference_elevation_min_deg
+           << ",\"reference_elevation_max_deg\":" << normalization.reference_elevation_max_deg
+           << ",\"reference_statistic\":\"P50_R7\","
            << "\"min_reference_samples\":" << normalization.min_reference_samples
            << ",\"cross_source_statistic\":\"P50_EQUAL_SOURCE_WEIGHT\",\"min_sources_per_bin\":"
            << normalization.min_sources_per_bin << "},\n";
@@ -466,10 +464,10 @@ bool write_normalized_cn0_metadata_json(const std::string& output_path, const Cn
             if (bin_index > 0) {
                 output << ',';
             }
-            output << "{\"signal\":\"" << bin.rinex_signal_code << "\",\"elevation_min_deg\":"
-                   << bin.elevation_min_deg << ",\"status\":\"" << cn0_bin_status_name(bin.source_status)
-                   << "\",\"sample_count\":" << bin.sample_count << ",\"reference_ready\":"
-                   << (bin.reference_ready ? "true" : "false") << ",\"delta_p50_db\":";
+            output << "{\"signal\":\"" << bin.rinex_signal_code << "\",\"elevation_min_deg\":" << bin.elevation_min_deg
+                   << ",\"status\":\"" << cn0_bin_status_name(bin.source_status)
+                   << "\",\"sample_count\":" << bin.sample_count
+                   << ",\"reference_ready\":" << (bin.reference_ready ? "true" : "false") << ",\"delta_p50_db\":";
             if (bin.reference_ready && bin.sample_count > 0 && std::isfinite(bin.delta_p50_db)) {
                 output << bin.delta_p50_db;
             } else {
@@ -486,8 +484,8 @@ bool write_normalized_cn0_metadata_json(const std::string& output_path, const Cn
         if (index > 0) {
             output << ',';
         }
-        output << "{\"signal\":\"" << bin.rinex_signal_code << "\",\"elevation_min_deg\":"
-               << bin.elevation_min_deg << ",\"status\":\"" << cn0_bin_status_name(bin.status)
+        output << "{\"signal\":\"" << bin.rinex_signal_code << "\",\"elevation_min_deg\":" << bin.elevation_min_deg
+               << ",\"status\":\"" << cn0_bin_status_name(bin.status)
                << "\",\"contributing_source_count\":" << bin.contributing_source_count << ",\"delta_p50_db\":";
         if (bin.contributing_source_count > 0 && std::isfinite(bin.delta_p50_db)) {
             output << bin.delta_p50_db;

@@ -189,6 +189,60 @@ TEST(CodeTrackingDll, CompositeCorrelationUsesNormalizedComplexVoltageWithoutRei
     EXPECT_NEAR(correlation.imag(), 0.5, 1.0e-15);
 }
 
+TEST(CodeTrackingDllRootSearchStatus, OrdinaryRootsMatchExistingEnumerationExactly) {
+    const gnss_sim::SignalDefinition& gps_l1 = signal(gnss_sim::SignalId::kGpsL1Ca);
+    const gnss_sim::CodeTrackingDllPath paths[] = {
+        {0.0, {1.0, 0.0}},
+        {chips_to_seconds(gps_l1, 0.3), {0.5, 0.0}},
+    };
+    const gnss_sim::CodeTrackingDllConfig config = gnss_sim::default_code_tracking_dll_config();
+    gnss_sim::CodeTrackingDllRoot legacy[gnss_sim::kMaxCodeTrackingDllRoots]{};
+    gnss_sim::CodeTrackingDllRoot status_roots[gnss_sim::kMaxCodeTrackingDllRoots]{};
+    int legacy_count = 0;
+    int status_count = 0;
+    gnss_sim::CodeTrackingDllRootSearchStatus status = gnss_sim::CodeTrackingDllRootSearchStatus::kNoRoots;
+    std::string error_message;
+
+    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(
+        gps_l1, paths, 2, config, legacy, gnss_sim::kMaxCodeTrackingDllRoots, &legacy_count, &error_message));
+    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots_with_status(
+        gps_l1, paths, 2, config, status_roots, gnss_sim::kMaxCodeTrackingDllRoots, &status_count, &status,
+        &error_message));
+    ASSERT_EQ(status, gnss_sim::CodeTrackingDllRootSearchStatus::kRootsFound);
+    ASSERT_EQ(status_count, legacy_count);
+    for (int index = 0; index < legacy_count; ++index) {
+        EXPECT_DOUBLE_EQ(status_roots[index].code_phase_sec, legacy[index].code_phase_sec);
+        EXPECT_DOUBLE_EQ(status_roots[index].code_phase_chips, legacy[index].code_phase_chips);
+        EXPECT_DOUBLE_EQ(status_roots[index].discriminator, legacy[index].discriminator);
+        EXPECT_DOUBLE_EQ(status_roots[index].discriminator_slope_per_chip, legacy[index].discriminator_slope_per_chip);
+        EXPECT_DOUBLE_EQ(status_roots[index].prompt_power, legacy[index].prompt_power);
+        EXPECT_EQ(status_roots[index].stable, legacy[index].stable);
+    }
+}
+
+TEST(CodeTrackingDllRootSearchStatus, ExactCoherentNullIsPhysicalNoRoot) {
+    const gnss_sim::SignalDefinition& gps_l1 = signal(gnss_sim::SignalId::kGpsL1Ca);
+    const gnss_sim::CodeTrackingDllPath paths[] = {
+        {0.0, {1.0, 0.25}},
+        {0.0, {-1.0, -0.25}},
+    };
+    const gnss_sim::CodeTrackingDllConfig config = gnss_sim::default_code_tracking_dll_config();
+    gnss_sim::CodeTrackingDllRoot roots[gnss_sim::kMaxCodeTrackingDllRoots]{};
+    int root_count = -1;
+    gnss_sim::CodeTrackingDllRootSearchStatus status = gnss_sim::CodeTrackingDllRootSearchStatus::kRootsFound;
+    std::string error_message;
+
+    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots_with_status(
+        gps_l1, paths, 2, config, roots, gnss_sim::kMaxCodeTrackingDllRoots, &root_count, &status, &error_message));
+    EXPECT_EQ(status, gnss_sim::CodeTrackingDllRootSearchStatus::kNoRoots);
+    EXPECT_EQ(root_count, 0);
+
+    int legacy_count = 0;
+    EXPECT_FALSE(gnss_sim::find_code_tracking_dll_roots(
+        gps_l1, paths, 2, config, roots, gnss_sim::kMaxCodeTrackingDllRoots, &legacy_count, &error_message));
+    EXPECT_EQ(legacy_count, 0);
+}
+
 TEST(CodeTrackingDll, InvalidInputsFailExplicitly) {
     const gnss_sim::SignalDefinition& gps_l1 = signal(gnss_sim::SignalId::kGpsL1Ca);
     const gnss_sim::SignalDefinition& gps_l2c = signal(gnss_sim::SignalId::kGpsL2C);

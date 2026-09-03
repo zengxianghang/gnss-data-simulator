@@ -2,6 +2,7 @@
 #define GNSS_SIM_SRC_GNSS_SIGNAL_DEFINITIONS_H_
 
 #include <cstddef>
+#include <string>
 
 namespace gnss_sim {
 
@@ -89,6 +90,35 @@ enum class CodeBiasModel {
     kBeidouB2B,
 };
 
+// Ideal code-domain correlation family used by the V1 DLL model. This is
+// intentionally narrower than a full IF/baseband signal description.
+enum class CodeCorrelationModel {
+    kUnsupported = 0,
+    kBpsk,
+    kTmboc,
+    kCboc,
+    kQmboc,
+};
+
+// Relationship of a secondary subcarrier to the primary subcarrier for
+// composite correlation models. TMBOC time multiplexing does not use a fixed
+// phase relation and therefore uses kNotApplicable.
+enum class CompositeSubcarrierPhase {
+    kNotApplicable = 0,
+    kInPhase,
+    kAntiPhase,
+    kQuadrature,
+};
+
+struct CodeCorrelationProfile {
+    CodeCorrelationModel model;
+    double chip_rate_hz;
+    double primary_subcarrier_rate_hz;
+    double secondary_subcarrier_rate_hz;
+    double secondary_power_fraction;
+    CompositeSubcarrierPhase secondary_phase;
+};
+
 struct SignalDefinition {
     GnssConstellation constellation;
     SignalId signal_id;
@@ -99,12 +129,16 @@ struct SignalDefinition {
     NavMessageFamily nav_message_family;
     CodeBiasModel code_bias_model;
     int novatel_oem7_signal_type;
+    CodeCorrelationProfile code_correlation;
 };
 
 const SignalDefinition* signal_definitions(std::size_t* count);
 const SignalDefinition* find_signal_definition(SignalId signal_id);
 const SignalDefinition* find_signal_definition_by_rinex(GnssConstellation constellation, const char* rinex_signal_code);
 const SignalDefinition* find_signal_definition_by_oem7(GnssConstellation constellation, int novatel_oem7_signal_type);
+
+bool validate_code_correlation_profile(const CodeCorrelationProfile& profile, std::string* error_message);
+bool signal_has_supported_code_correlation(const SignalDefinition& definition);
 
 bool signal_carrier_frequency_hz(const SignalDefinition& definition, int glonass_fcn, double* frequency_hz);
 bool signal_wavelength_m(const SignalDefinition& definition, int glonass_fcn, double* wavelength_m);

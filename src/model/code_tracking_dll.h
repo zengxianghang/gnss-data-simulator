@@ -60,9 +60,8 @@ bool find_code_tracking_dll_roots(const SignalDefinition& signal, const CodeTrac
                                   const CodeTrackingDllConfig& config, CodeTrackingDllRoot* roots, int root_capacity,
                                   int* root_count, std::string* error_message);
 
-bool select_code_tracking_dll_root(const CodeTrackingDllRoot* roots, int root_count,
-                                   CodeTrackingDllSelectionMode mode, double previous_code_phase_sec,
-                                   int* selected_index, std::string* error_message);
+bool select_code_tracking_dll_root(const CodeTrackingDllRoot* roots, int root_count, CodeTrackingDllSelectionMode mode,
+                                   double previous_code_phase_sec, int* selected_index, std::string* error_message);
 
 } // namespace gnss_sim
 

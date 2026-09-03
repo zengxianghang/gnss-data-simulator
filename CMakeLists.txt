@@ -240,6 +240,7 @@ if(BUILD_TESTING)
         tests/unit/test_cn0_statistics.cpp
         tests/unit/test_code_correlation.cpp
         tests/unit/test_code_tracking_dll.cpp
+        tests/unit/test_code_tracking_dll_boundaries.cpp
         tests/unit/test_deterministic_rng.cpp
         tests/unit/test_galileo_has_adapter.cpp
         tests/unit/test_low_elevation_signal_geometry.cpp

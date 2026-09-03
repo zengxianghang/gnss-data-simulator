@@ -475,8 +475,7 @@ bool validate_normalized_value(const std::vector<std::string>& fields, std::size
     }
     if (status == "EMPTY") {
         if (*support_count != 0 || !fields[9].empty()) {
-            set_error(error_message,
-                      "normalized CN0 model EMPTY row has data at line " + std::to_string(line_number));
+            set_error(error_message, "normalized CN0 model EMPTY row has data at line " + std::to_string(line_number));
             return false;
         }
         *delta_p50_db = std::numeric_limits<double>::quiet_NaN();
@@ -484,9 +483,8 @@ bool validate_normalized_value(const std::vector<std::string>& fields, std::size
         return true;
     }
     if (*support_count == 0 || !parse_finite_double(fields[9], delta_p50_db)) {
-        set_error(error_message,
-                  "normalized CN0 model non-empty row lacks finite support/value at line " +
-                      std::to_string(line_number));
+        set_error(error_message, "normalized CN0 model non-empty row lacks finite support/value at line " +
+                                     std::to_string(line_number));
         return false;
     }
     *ready = status == "READY";
@@ -526,8 +524,8 @@ bool append_validated_bin(Cn0Model* loaded, const Cn0CalibratedBin& bin, std::si
     const Cn0CalibratedBin* previous = previous_signal_bin(loaded->calibrated_bins, bin.signal_id);
     if (previous != nullptr) {
         if (bin.elevation_min_deg <= previous->elevation_min_deg + kBinToleranceDeg) {
-            set_error(error_message, "configured CN0 model bins are duplicate/non-monotonic at line " +
-                                         std::to_string(line_number));
+            set_error(error_message,
+                      "configured CN0 model bins are duplicate/non-monotonic at line " + std::to_string(line_number));
             return false;
         }
         if (bin.elevation_min_deg < previous->elevation_max_deg - kBinToleranceDeg) {
@@ -618,8 +616,8 @@ bool load_cn0_model_csv(const char* file_path, std::uint64_t seed, Cn0Model* mod
         Cn0CalibratedBin bin{};
         if (schema == CsvSchema::kAbsoluteV1) {
             if (fields.size() != 24U || fields[0] != kAbsoluteModelSchemaVersion) {
-                set_error(error_message, "configured absolute CN0 model row is incompatible at line " +
-                                             std::to_string(line_number));
+                set_error(error_message,
+                          "configured absolute CN0 model row is incompatible at line " + std::to_string(line_number));
                 return false;
             }
             if (!parse_common_bin(fields, 1U, 2U, 3U, 4U, 5U, line_number, &bin, error_message)) {
@@ -636,9 +634,11 @@ bool load_cn0_model_csv(const char* file_path, std::uint64_t seed, Cn0Model* mod
             bin.delta_p50_db = std::numeric_limits<double>::quiet_NaN();
             bin.ready = fields[6] == "READY";
         } else {
-            if (fields.size() != 10U || fields[0] != kNormalizedModelSchemaVersion || fields[1] != kNormalizedSemantic) {
-                set_error(error_message, "configured normalized CN0 model row has incompatible schema/semantic at line " +
-                                             std::to_string(line_number));
+            if (fields.size() != 10U || fields[0] != kNormalizedModelSchemaVersion ||
+                fields[1] != kNormalizedSemantic) {
+                set_error(error_message,
+                          "configured normalized CN0 model row has incompatible schema/semantic at line " +
+                              std::to_string(line_number));
                 return false;
             }
             if (!parse_common_bin(fields, 2U, 3U, 4U, 5U, 6U, line_number, &bin, error_message) ||

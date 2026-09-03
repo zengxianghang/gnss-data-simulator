@@ -227,7 +227,8 @@ TEST(TruthOutputs, NormalizedCn0MissingRequiredBaselineFailsBeforeReceiverOutput
 
     gnss_sim::SimulatorRunSummary summary{};
     std::string error_message;
-    EXPECT_FALSE(run_config_in_directory(directory, truth_config(), &summary, &error_message, model_path.string().c_str()));
+    EXPECT_FALSE(
+        run_config_in_directory(directory, truth_config(), &summary, &error_message, model_path.string().c_str()));
     EXPECT_NE(error_message.find("cn0_high_dbhz"), std::string::npos);
     EXPECT_FALSE(std::filesystem::exists(directory / "simulated.log"));
     EXPECT_FALSE(std::filesystem::exists(directory / "run_manifest.json"));

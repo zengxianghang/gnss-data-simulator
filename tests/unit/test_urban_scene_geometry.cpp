@@ -51,6 +51,12 @@ TEST(UrbanSceneGeometry, NorthWallBlocksBelowSkylineAndClearsAboveRoof) {
     EXPECT_TRUE(blocked.blocked_by_wall);
     EXPECT_FALSE(blocked.grazing_roof);
     EXPECT_EQ(blocked.primary_wall, gnss_sim::UrbanWallId::NORTH);
+    EXPECT_DOUBLE_EQ(blocked.ray_origin_enu_m.east_m, 0.0);
+    EXPECT_DOUBLE_EQ(blocked.ray_origin_enu_m.north_m, 0.0);
+    EXPECT_DOUBLE_EQ(blocked.ray_origin_enu_m.up_m, 1.5);
+    EXPECT_NEAR(blocked.ray_direction_enu[0], 0.0, 1.0e-12);
+    EXPECT_NEAR(blocked.ray_direction_enu[1], std::cos(30.0 * kDegreesToRadians), 1.0e-12);
+    EXPECT_NEAR(blocked.ray_direction_enu[2], 0.5, 1.0e-12);
     ASSERT_EQ(blocked.first_wall_count, 1);
     EXPECT_NEAR(blocked.first_wall_intersections[0].point_enu_m.east_m, 0.0, 1.0e-12);
     EXPECT_NEAR(blocked.first_wall_intersections[0].point_enu_m.north_m, 10.0, 1.0e-12);
@@ -77,6 +83,9 @@ TEST(UrbanSceneGeometry, ExactCornerExposesBothFirstWallsWithoutHidingTie) {
         << error_message;
     EXPECT_FALSE(geometry.line_of_sight);
     EXPECT_TRUE(geometry.blocked_by_wall);
+    EXPECT_NEAR(geometry.ray_direction_enu[0], std::cos(30.0 * kDegreesToRadians) / std::sqrt(2.0), 1.0e-12);
+    EXPECT_NEAR(geometry.ray_direction_enu[1], std::cos(30.0 * kDegreesToRadians) / std::sqrt(2.0), 1.0e-12);
+    EXPECT_NEAR(geometry.ray_direction_enu[2], 0.5, 1.0e-12);
     ASSERT_EQ(geometry.first_wall_count, 2);
     EXPECT_EQ(geometry.first_wall_intersections[0].wall_id, gnss_sim::UrbanWallId::NORTH);
     EXPECT_EQ(geometry.first_wall_intersections[1].wall_id, gnss_sim::UrbanWallId::EAST);
@@ -153,6 +162,9 @@ TEST(UrbanSceneGeometry, ZenithDoesNotIntersectAnyWall) {
     EXPECT_FALSE(geometry.blocked_by_wall);
     EXPECT_EQ(geometry.primary_wall, gnss_sim::UrbanWallId::NONE);
     EXPECT_EQ(geometry.first_wall_count, 0);
+    EXPECT_NEAR(geometry.ray_direction_enu[0], 0.0, 1.0e-12);
+    EXPECT_NEAR(geometry.ray_direction_enu[1], 0.0, 1.0e-12);
+    EXPECT_NEAR(geometry.ray_direction_enu[2], 1.0, 1.0e-12);
 }
 
 TEST(UrbanSceneGeometry, InvalidConfigurationFailsClearly) {
@@ -187,6 +199,12 @@ TEST(UrbanSceneGeometry, RepeatedEvaluationIsNumericallyIdentical) {
     EXPECT_DOUBLE_EQ(first.skyline_elevation_rad, second.skyline_elevation_rad);
     EXPECT_DOUBLE_EQ(first.horizontal_distance_to_first_wall_m, second.horizontal_distance_to_first_wall_m);
     EXPECT_DOUBLE_EQ(first.roof_clearance_m, second.roof_clearance_m);
+    EXPECT_DOUBLE_EQ(first.ray_origin_enu_m.east_m, second.ray_origin_enu_m.east_m);
+    EXPECT_DOUBLE_EQ(first.ray_origin_enu_m.north_m, second.ray_origin_enu_m.north_m);
+    EXPECT_DOUBLE_EQ(first.ray_origin_enu_m.up_m, second.ray_origin_enu_m.up_m);
+    for (int component = 0; component < 3; ++component) {
+        EXPECT_DOUBLE_EQ(first.ray_direction_enu[component], second.ray_direction_enu[component]);
+    }
     ASSERT_EQ(first.first_wall_count, second.first_wall_count);
     for (int index = 0; index < first.first_wall_count; ++index) {
         EXPECT_EQ(first.first_wall_intersections[index].wall_id, second.first_wall_intersections[index].wall_id);

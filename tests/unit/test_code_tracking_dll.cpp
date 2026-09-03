@@ -205,9 +205,9 @@ TEST(CodeTrackingDllRootSearchStatus, OrdinaryRootsMatchExistingEnumerationExact
 
     ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(
         gps_l1, paths, 2, config, legacy, gnss_sim::kMaxCodeTrackingDllRoots, &legacy_count, &error_message));
-    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots_with_status(
-        gps_l1, paths, 2, config, status_roots, gnss_sim::kMaxCodeTrackingDllRoots, &status_count, &status,
-        &error_message));
+    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots_with_status(gps_l1, paths, 2, config, status_roots,
+                                                                   gnss_sim::kMaxCodeTrackingDllRoots, &status_count,
+                                                                   &status, &error_message));
     ASSERT_EQ(status, gnss_sim::CodeTrackingDllRootSearchStatus::kRootsFound);
     ASSERT_EQ(status_count, legacy_count);
     for (int index = 0; index < legacy_count; ++index) {

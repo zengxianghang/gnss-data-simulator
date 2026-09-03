@@ -43,6 +43,8 @@ struct UrbanRayWallIntersection {
 struct UrbanDirectPathGeometry {
     double azimuth_rad;
     double elevation_rad;
+    EnuPoint ray_origin_enu_m;
+    double ray_direction_enu[3];
     double skyline_elevation_rad;
     double horizontal_distance_to_first_wall_m;
     double roof_clearance_m;

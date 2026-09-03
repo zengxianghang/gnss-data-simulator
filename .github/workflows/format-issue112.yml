@@ -1,0 +1,30 @@
+name: format-issue112
+
+on:
+  push:
+    branches:
+      - issue-112-cn0-metadata-constellation
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-112-cn0-metadata-constellation
+      - name: Apply repository clang-format
+        run: clang-format -i tools/build_cn0_model/cn0_normalized_builder.cpp tests/unit/test_cn0_normalized_builder.cpp
+      - name: Commit formatting if needed
+        run: |
+          if git diff --quiet; then
+            echo "No formatting changes needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/build_cn0_model/cn0_normalized_builder.cpp tests/unit/test_cn0_normalized_builder.cpp
+          git commit -m "style: apply clang-format for PR #113"
+          git push origin HEAD:issue-112-cn0-metadata-constellation

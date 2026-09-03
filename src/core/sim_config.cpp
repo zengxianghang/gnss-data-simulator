@@ -327,6 +327,124 @@ bool parse_measurement_error(const cJSON* root, SimConfig* config, std::string* 
            parse_measurement_fade(object, &config->measurement_error.rea_fade, error_message);
 }
 
+bool parse_urban_rf_material(const cJSON* object, const char* section_name, UrbanRfMaterialConfig* config,
+                             std::string* error_message) {
+    if (object == nullptr) {
+        return true;
+    }
+    const char* const allowed_keys[] = {
+        "relative_permittivity_real",     "conductivity_c_s_per_m", "conductivity_exponent",
+        "outer_glass_thickness_m",        "cavity_thickness_m",     "inner_glass_thickness_m",
+        "coating_sheet_resistance_ohm_sq"};
+    if (!validate_object_keys(object, section_name, allowed_keys, 7U, error_message)) {
+        return false;
+    }
+    return read_optional_number(object, "relative_permittivity_real", &config->relative_permittivity_real,
+                                error_message) &&
+           read_optional_number(object, "conductivity_c_s_per_m", &config->conductivity_c_s_per_m, error_message) &&
+           read_optional_number(object, "conductivity_exponent", &config->conductivity_exponent, error_message) &&
+           read_optional_number(object, "outer_glass_thickness_m", &config->outer_glass_thickness_m, error_message) &&
+           read_optional_number(object, "cavity_thickness_m", &config->cavity_thickness_m, error_message) &&
+           read_optional_number(object, "inner_glass_thickness_m", &config->inner_glass_thickness_m, error_message) &&
+           read_optional_number(object, "coating_sheet_resistance_ohm_sq", &config->coating_sheet_resistance_ohm_sq,
+                                error_message);
+}
+
+bool parse_urban_rf_polarization(const cJSON* object, const char* section_name,
+                                 UrbanRfPolarizationResponseConfig* config, std::string* error_message) {
+    if (object == nullptr) {
+        return true;
+    }
+    const char* const allowed_keys[] = {"gain_db_horizon", "gain_db_zenith", "phase_deg_horizon", "phase_deg_zenith"};
+    if (!validate_object_keys(object, section_name, allowed_keys, 4U, error_message)) {
+        return false;
+    }
+    return read_optional_number(object, "gain_db_horizon", &config->gain_db_horizon, error_message) &&
+           read_optional_number(object, "gain_db_zenith", &config->gain_db_zenith, error_message) &&
+           read_optional_number(object, "phase_deg_horizon", &config->phase_deg_horizon, error_message) &&
+           read_optional_number(object, "phase_deg_zenith", &config->phase_deg_zenith, error_message);
+}
+
+bool parse_urban_rf_antenna(const cJSON* object, const char* section_name, UrbanRfAntennaConfig* config,
+                            std::string* error_message) {
+    if (object == nullptr) {
+        return true;
+    }
+    const char* const allowed_keys[] = {"rhcp", "lhcp"};
+    if (!validate_object_keys(object, section_name, allowed_keys, 2U, error_message)) {
+        return false;
+    }
+    const cJSON* rhcp = cJSON_GetObjectItemCaseSensitive(object, "rhcp");
+    const cJSON* lhcp = cJSON_GetObjectItemCaseSensitive(object, "lhcp");
+    const std::string rhcp_name = std::string(section_name) + ".rhcp";
+    const std::string lhcp_name = std::string(section_name) + ".lhcp";
+    return parse_urban_rf_polarization(rhcp, rhcp_name.c_str(), &config->rhcp, error_message) &&
+           parse_urban_rf_polarization(lhcp, lhcp_name.c_str(), &config->lhcp, error_message);
+}
+
+bool parse_urban_rf(const cJSON* root, SimConfig* config, std::string* error_message) {
+    const cJSON* object = cJSON_GetObjectItemCaseSensitive(root, "urban_rf");
+    if (object == nullptr) {
+        return true;
+    }
+    const char* const allowed_keys[] = {"material", "antenna", "signals"};
+    if (!validate_object_keys(object, "urban_rf", allowed_keys, 3U, error_message)) {
+        return false;
+    }
+    if (!parse_urban_rf_material(cJSON_GetObjectItemCaseSensitive(object, "material"), "urban_rf.material",
+                                 &config->urban_rf.default_material, error_message) ||
+        !parse_urban_rf_antenna(cJSON_GetObjectItemCaseSensitive(object, "antenna"), "urban_rf.antenna",
+                                &config->urban_rf.default_antenna, error_message)) {
+        return false;
+    }
+
+    const cJSON* signals = cJSON_GetObjectItemCaseSensitive(object, "signals");
+    if (signals == nullptr) {
+        return true;
+    }
+    if (!cJSON_IsObject(signals)) {
+        set_error(error_message, "urban_rf.signals must be an object keyed by central signal name");
+        return false;
+    }
+    config->urban_rf.signal_overrides.clear();
+    for (const cJSON* item = signals->child; item != nullptr; item = item->next) {
+        if (item->string == nullptr || find_signal_definition_by_name(item->string) == nullptr) {
+            set_error(error_message, std::string("urban_rf.signals contains unknown central signal name: ") +
+                                         (item->string == nullptr ? "<null>" : item->string));
+            return false;
+        }
+        if (!cJSON_IsObject(item)) {
+            set_error(error_message, std::string("urban_rf.signals entry must be an object: ") + item->string);
+            return false;
+        }
+        for (const UrbanRfSignalOverrideConfig& previous : config->urban_rf.signal_overrides) {
+            if (previous.signal_name == item->string) {
+                set_error(error_message, std::string("duplicate urban_rf signal override: ") + item->string);
+                return false;
+            }
+        }
+        const char* const signal_allowed_keys[] = {"material", "antenna"};
+        const std::string signal_section = std::string("urban_rf.signals.") + item->string;
+        if (!validate_object_keys(item, signal_section.c_str(), signal_allowed_keys, 2U, error_message)) {
+            return false;
+        }
+        UrbanRfSignalOverrideConfig override_config{};
+        override_config.signal_name = item->string;
+        override_config.material = config->urban_rf.default_material;
+        override_config.antenna = config->urban_rf.default_antenna;
+        const std::string material_section = signal_section + ".material";
+        const std::string antenna_section = signal_section + ".antenna";
+        if (!parse_urban_rf_material(cJSON_GetObjectItemCaseSensitive(item, "material"), material_section.c_str(),
+                                     &override_config.material, error_message) ||
+            !parse_urban_rf_antenna(cJSON_GetObjectItemCaseSensitive(item, "antenna"), antenna_section.c_str(),
+                                    &override_config.antenna, error_message)) {
+            return false;
+        }
+        config->urban_rf.signal_overrides.push_back(override_config);
+    }
+    return true;
+}
+
 bool parse_cn0_high_dbhz(const cJSON* root, SimConfig* config, std::string* error_message) {
     const cJSON* object = cJSON_GetObjectItemCaseSensitive(root, "cn0_high_dbhz");
     if (object == nullptr) {
@@ -403,6 +521,43 @@ bool valid_measurement_error_config(const MeasurementErrorConfig& config) {
            valid_measurement_fade(config.rea_fade);
 }
 
+bool valid_urban_rf_material(const UrbanRfMaterialConfig& config) {
+    return std::isfinite(config.relative_permittivity_real) && config.relative_permittivity_real > 0.0 &&
+           finite_nonnegative(config.conductivity_c_s_per_m) && finite_nonnegative(config.conductivity_exponent) &&
+           std::isfinite(config.outer_glass_thickness_m) && config.outer_glass_thickness_m > 0.0 &&
+           std::isfinite(config.cavity_thickness_m) && config.cavity_thickness_m > 0.0 &&
+           std::isfinite(config.inner_glass_thickness_m) && config.inner_glass_thickness_m > 0.0 &&
+           std::isfinite(config.coating_sheet_resistance_ohm_sq) && config.coating_sheet_resistance_ohm_sq > 0.0;
+}
+
+bool valid_urban_rf_polarization(const UrbanRfPolarizationResponseConfig& config) {
+    return std::isfinite(config.gain_db_horizon) && std::isfinite(config.gain_db_zenith) &&
+           std::isfinite(config.phase_deg_horizon) && std::isfinite(config.phase_deg_zenith);
+}
+
+bool valid_urban_rf_antenna(const UrbanRfAntennaConfig& config) {
+    return valid_urban_rf_polarization(config.rhcp) && valid_urban_rf_polarization(config.lhcp);
+}
+
+bool valid_urban_rf_config(const UrbanRfConfig& config) {
+    if (!valid_urban_rf_material(config.default_material) || !valid_urban_rf_antenna(config.default_antenna)) {
+        return false;
+    }
+    for (std::size_t index = 0; index < config.signal_overrides.size(); ++index) {
+        const UrbanRfSignalOverrideConfig& override_config = config.signal_overrides[index];
+        if (find_signal_definition_by_name(override_config.signal_name.c_str()) == nullptr ||
+            !valid_urban_rf_material(override_config.material) || !valid_urban_rf_antenna(override_config.antenna)) {
+            return false;
+        }
+        for (std::size_t previous = 0; previous < index; ++previous) {
+            if (config.signal_overrides[previous].signal_name == override_config.signal_name) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 bool valid_cn0_high_baselines(const std::vector<Cn0HighBaselineConfig>& baselines) {
     for (std::size_t index = 0; index < baselines.size(); ++index) {
         const Cn0HighBaselineConfig& baseline = baselines[index];
@@ -460,6 +615,8 @@ SimConfig default_sim_config() {
                                 {0.70, 0.15, 2.5, 2.0},
                                 {0.40, 0.10, 1.5, 0.8},
                                 {0.25, 0.80, 0.20, 4.5}};
+    config.urban_rf.default_material = {6.27, 0.0043, 1.1925, 0.006, 0.012, 0.006, 5.0};
+    config.urban_rf.default_antenna = {{0.0, 0.0, 0.0, 0.0}, {0.0, 0.0, 0.0, 0.0}};
     config.seed = 1U;
     return config;
 }
@@ -494,6 +651,10 @@ bool validate_sim_config(const SimConfig& config, std::string* error_message) {
     }
     if (!valid_measurement_error_config(config.measurement_error)) {
         set_error(error_message, "measurement_error configuration is invalid");
+        return false;
+    }
+    if (!valid_urban_rf_config(config.urban_rf)) {
+        set_error(error_message, "urban_rf configuration is invalid");
         return false;
     }
     if (!valid_cn0_high_baselines(config.cn0_high_dbhz)) {
@@ -573,6 +734,7 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                                         "measurement_noise_enabled",
                                         "bestpos_rtk",
                                         "measurement_error",
+                                        "urban_rf",
                                         "cn0_high_dbhz",
                                         "multipath_enabled",
                                         "receiver_clock_bias_m",
@@ -584,7 +746,7 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                                         "seed"};
 
     SimConfig parsed = default_sim_config();
-    bool success = validate_object_keys(root, "root", allowed_keys, 20U, error_message);
+    bool success = validate_object_keys(root, "root", allowed_keys, 21U, error_message);
 
     double duration_sec = static_cast<double>(parsed.duration_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
     const char* scenario_name = scenario_type_name(parsed.scenario);
@@ -616,7 +778,7 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
             parse_atmosphere_mode(atmosphere_name, &parsed.atmosphere_mode, error_message) &&
             parse_receiver(root, &parsed, error_message) && parse_ttff(root, &parsed, error_message) &&
             parse_rea(root, &parsed, error_message) && parse_bestpos_rtk(root, &parsed, error_message) &&
-            parse_measurement_error(root, &parsed, error_message) &&
+            parse_measurement_error(root, &parsed, error_message) && parse_urban_rf(root, &parsed, error_message) &&
             parse_cn0_high_dbhz(root, &parsed, error_message) && parse_seed(root, &parsed, error_message) &&
             validate_sim_config(parsed, error_message);
     }

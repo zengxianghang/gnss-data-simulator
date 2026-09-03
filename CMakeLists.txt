@@ -110,6 +110,7 @@ add_library(gnss_sim_core STATIC
     src/model/measurement_model.cpp
     src/model/receiver_truth.cpp
     src/model/signal_tracking.cpp
+    src/model/urban_rf_model.cpp
     src/model/urban_scene_geometry.cpp
     src/output/novatel_nav_writer.cpp
     src/output/novatel_range_writer.cpp
@@ -255,6 +256,7 @@ if(BUILD_TESTING)
         tests/unit/test_sim_time.cpp
         tests/unit/test_solution_engine.cpp
         tests/unit/test_solution_signal_policy.cpp
+        tests/unit/test_urban_rf_model.cpp
         tests/unit/test_urban_scene_geometry.cpp
     )
     target_include_directories(gnss_sim_unit_tests PRIVATE

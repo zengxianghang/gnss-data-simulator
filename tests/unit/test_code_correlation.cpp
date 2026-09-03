@@ -17,8 +17,8 @@ const gnss_sim::SignalDefinition& signal(gnss_sim::SignalId signal_id) {
 std::complex<double> correlation_chips(const gnss_sim::SignalDefinition& definition, double delay_chips) {
     std::complex<double> result{};
     std::string error_message;
-    EXPECT_TRUE(gnss_sim::ideal_code_correlation_chips(definition.code_correlation, delay_chips, &result,
-                                                       &error_message))
+    EXPECT_TRUE(
+        gnss_sim::ideal_code_correlation_chips(definition.code_correlation, delay_chips, &result, &error_message))
         << definition.name << ": " << error_message;
     return result;
 }

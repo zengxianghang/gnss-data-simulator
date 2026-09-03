@@ -79,11 +79,9 @@ TEST(UrbanReceivedPower, ConstructiveAndDestructiveFieldsMapToPowerDomainCn0) {
     gnss_sim::UrbanEffectiveCn0 high{};
     gnss_sim::UrbanEffectiveCn0 low{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::compute_effective_cn0_from_paths(45.0, gps_l1, constructive, 2, 0.0, &high,
-                                                           &error_message))
+    ASSERT_TRUE(gnss_sim::compute_effective_cn0_from_paths(45.0, gps_l1, constructive, 2, 0.0, &high, &error_message))
         << error_message;
-    ASSERT_TRUE(gnss_sim::compute_effective_cn0_from_paths(45.0, gps_l1, destructive, 2, 0.0, &low,
-                                                           &error_message))
+    ASSERT_TRUE(gnss_sim::compute_effective_cn0_from_paths(45.0, gps_l1, destructive, 2, 0.0, &low, &error_message))
         << error_message;
     EXPECT_NEAR(high.composite_power_ratio, 2.25, 1.0e-14);
     EXPECT_NEAR(high.effective_cn0_dbhz, 45.0 + 10.0 * std::log10(2.25), 1.0e-12);
@@ -100,8 +98,7 @@ TEST(UrbanReceivedPower, CodeDelayDecorrelatesASeparatedPathAtDirectPrompt) {
     };
     gnss_sim::UrbanEffectiveCn0 effective{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::compute_effective_cn0_from_paths(43.0, gps_l1, paths, 2, 0.0, &effective,
-                                                           &error_message))
+    ASSERT_TRUE(gnss_sim::compute_effective_cn0_from_paths(43.0, gps_l1, paths, 2, 0.0, &effective, &error_message))
         << error_message;
     EXPECT_NEAR(effective.composite_correlation.real(), 1.0, 1.0e-14);
     EXPECT_NEAR(effective.composite_correlation.imag(), 0.0, 1.0e-14);
@@ -116,8 +113,7 @@ TEST(UrbanReceivedPower, ExactCancellationHasNoArbitraryCn0Floor) {
     };
     gnss_sim::UrbanEffectiveCn0 effective{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::compute_effective_cn0_from_paths(45.0, gps_l1, paths, 2, 0.0, &effective,
-                                                           &error_message))
+    ASSERT_TRUE(gnss_sim::compute_effective_cn0_from_paths(45.0, gps_l1, paths, 2, 0.0, &effective, &error_message))
         << error_message;
     EXPECT_DOUBLE_EQ(effective.composite_power_ratio, 0.0);
     EXPECT_DOUBLE_EQ(effective.carrier_to_noise_density_hz, 0.0);
@@ -140,8 +136,8 @@ TEST(UrbanReceivedPower, RooftopGrazingAppliesDiffractionTransferExactlyOnce) {
     make_synthetic_geometry(0.0, skyline_rad / kDegreesToRadians, &receiver, &geometry);
     gnss_sim::UrbanReceivedPathSet paths{};
     ASSERT_TRUE(gnss_sim::compute_urban_received_path_set(normalized_model(gps_l1.signal_id, 47.0), scene,
-                                                         config.urban_rf, gps_l1, 0, test_time(), receiver, geometry,
-                                                         &paths, &error_message))
+                                                          config.urban_rf, gps_l1, 0, test_time(), receiver, geometry,
+                                                          &paths, &error_message))
         << error_message;
     ASSERT_EQ(paths.diffraction_status, gnss_sim::UrbanRooftopDiffractionStatus::VALID);
     ASSERT_EQ(paths.reflections.path_count, 1);
@@ -154,9 +150,8 @@ TEST(UrbanReceivedPower, RooftopGrazingAppliesDiffractionTransferExactlyOnce) {
 
     const gnss_sim::CodeTrackingDllPath direct_only[] = {{paths.paths[0].code_delay_sec, paths.direct_voltage}};
     gnss_sim::UrbanEffectiveCn0 direct_effective{};
-    ASSERT_TRUE(gnss_sim::compute_effective_cn0_from_paths(paths.open_cn0_dbhz, gps_l1, direct_only, 1,
-                                                           paths.paths[0].code_delay_sec, &direct_effective,
-                                                           &error_message))
+    ASSERT_TRUE(gnss_sim::compute_effective_cn0_from_paths(
+        paths.open_cn0_dbhz, gps_l1, direct_only, 1, paths.paths[0].code_delay_sec, &direct_effective, &error_message))
         << error_message;
     EXPECT_NEAR(direct_effective.effective_cn0_dbhz, paths.open_cn0_dbhz - 6.020599913279624, 1.0e-9);
 }
@@ -172,8 +167,8 @@ TEST(UrbanReceivedPower, FrozenBlockedGeometryRetainsIndependentReflectionAsSeco
     gnss_sim::UrbanReceivedPathSet paths{};
     std::string error_message;
     ASSERT_TRUE(gnss_sim::compute_urban_received_path_set(normalized_model(gps_l1.signal_id, 46.0), scene,
-                                                         config.urban_rf, gps_l1, 0, test_time(), receiver, geometry,
-                                                         &paths, &error_message))
+                                                          config.urban_rf, gps_l1, 0, test_time(), receiver, geometry,
+                                                          &paths, &error_message))
         << error_message;
     ASSERT_EQ(paths.diffraction_status, gnss_sim::UrbanRooftopDiffractionStatus::VALID);
     ASSERT_EQ(paths.reflections.path_count, 1);
@@ -199,19 +194,19 @@ TEST(UrbanReceivedPower, ChangingOnlyHighBaselineTranslatesOpenAndEffectiveCn0) 
     gnss_sim::UrbanReceivedPathSet higher_paths{};
     std::string error_message;
     ASSERT_TRUE(gnss_sim::compute_urban_received_path_set(normalized_model(gps_l1.signal_id, 45.0), scene,
-                                                         config.urban_rf, gps_l1, 0, test_time(), receiver, geometry,
-                                                         &lower_paths, &error_message))
+                                                          config.urban_rf, gps_l1, 0, test_time(), receiver, geometry,
+                                                          &lower_paths, &error_message))
         << error_message;
     ASSERT_TRUE(gnss_sim::compute_urban_received_path_set(normalized_model(gps_l1.signal_id, 48.0), scene,
-                                                         config.urban_rf, gps_l1, 0, test_time(), receiver, geometry,
-                                                         &higher_paths, &error_message))
+                                                          config.urban_rf, gps_l1, 0, test_time(), receiver, geometry,
+                                                          &higher_paths, &error_message))
         << error_message;
     EXPECT_NEAR(higher_paths.open_cn0_dbhz - lower_paths.open_cn0_dbhz, 3.0, 1.0e-12);
     ASSERT_EQ(higher_paths.path_count, lower_paths.path_count);
     for (int index = 0; index < lower_paths.path_count; ++index) {
         EXPECT_NEAR(higher_paths.paths[index].code_delay_sec, lower_paths.paths[index].code_delay_sec, 1.0e-18);
-        EXPECT_NEAR(std::abs(higher_paths.paths[index].complex_voltage - lower_paths.paths[index].complex_voltage),
-                    0.0, 1.0e-14);
+        EXPECT_NEAR(std::abs(higher_paths.paths[index].complex_voltage - lower_paths.paths[index].complex_voltage), 0.0,
+                    1.0e-14);
     }
 
     gnss_sim::UrbanEffectiveCn0 lower{};
@@ -243,9 +238,9 @@ TEST(UrbanReceivedPower, ClearSideRoofTransitionIsContinuous) {
     gnss_sim::UrbanReceivedPathSet high{};
     const gnss_sim::Cn0Model model = normalized_model(gps_l1.signal_id, 47.0);
     ASSERT_TRUE(gnss_sim::compute_urban_received_path_set(model, scene, config.urban_rf, gps_l1, 0, test_time(),
-                                                         receiver_low, geometry_low, &low, &error_message));
+                                                          receiver_low, geometry_low, &low, &error_message));
     ASSERT_TRUE(gnss_sim::compute_urban_received_path_set(model, scene, config.urban_rf, gps_l1, 0, test_time(),
-                                                         receiver_high, geometry_high, &high, &error_message));
+                                                          receiver_high, geometry_high, &high, &error_message));
     ASSERT_GT(low.path_count, 0);
     ASSERT_GT(high.path_count, 0);
     EXPECT_FALSE(low.direct_geometry.line_of_sight);

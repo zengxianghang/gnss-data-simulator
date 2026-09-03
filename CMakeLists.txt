@@ -256,8 +256,8 @@ if(BUILD_TESTING)
         tests/unit/test_sim_time.cpp
         tests/unit/test_solution_engine.cpp
         tests/unit/test_solution_signal_policy.cpp
-    tests/unit/test_urban_rf_model.cpp
-    tests/unit/test_urban_scene_geometry.cpp
+        tests/unit/test_urban_rf_model.cpp
+        tests/unit/test_urban_scene_geometry.cpp
     )
     target_include_directories(gnss_sim_unit_tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src")

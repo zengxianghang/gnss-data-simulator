@@ -47,11 +47,12 @@ std::string model_row(double elevation_min_deg, double elevation_max_deg, bool i
     return output.str();
 }
 
-std::string normalized_model_row(double elevation_min_deg, double elevation_max_deg, bool inclusive, const char* status,
-                                 std::uint64_t source_count, const char* delta_p50_db) {
+std::string normalized_model_row(const char* signal, double elevation_min_deg, double elevation_max_deg, bool inclusive,
+                                 const char* status, std::uint64_t source_count, const char* delta_p50_db) {
     std::ostringstream output;
-    output << "gnss-cn0-model-v2,NORMALIZED_ELEVATION_SHAPE,GPS,1C," << elevation_min_deg << ',' << elevation_max_deg
-           << ',' << (inclusive ? 1 : 0) << ',' << status << ',' << source_count << ',' << delta_p50_db;
+    output << "gnss-cn0-model-v2,NORMALIZED_ELEVATION_SHAPE,GPS," << signal << ',' << elevation_min_deg << ','
+           << elevation_max_deg << ',' << (inclusive ? 1 : 0) << ',' << status << ',' << source_count << ','
+           << delta_p50_db;
     return output.str();
 }
 
@@ -139,6 +140,10 @@ TEST(Cn0Model, CalibratedCentersEdgesAndBetweenCenterInterpolationAreGolden) {
     EXPECT_FALSE(model.identity.hash.empty());
     EXPECT_GT(model.identity.size_bytes, 0U);
 
+    gnss_sim::SimConfig config = gnss_sim::default_sim_config();
+    config.cn0_high_dbhz.push_back({"GPS L1 C/A", 52.0});
+    ASSERT_TRUE(gnss_sim::configure_cn0_model_runtime(config, &model, &error)) << error;
+
     const double sow = 180000.0;
     const double at_15 = estimate_model(model, gnss_sim::SignalId::kGpsL1Ca, 15.0, sow);
     const double at_30 = estimate_model(model, gnss_sim::SignalId::kGpsL1Ca, 30.0, sow);
@@ -151,10 +156,10 @@ TEST(Cn0Model, CalibratedCentersEdgesAndBetweenCenterInterpolationAreGolden) {
     EXPECT_NEAR(estimate_model(model, gnss_sim::SignalId::kGpsL1Ca, 90.0, sow) - at_75, 0.0, 1e-12);
 }
 
-TEST(Cn0Model, NormalizedSchemaIsRecognizedWithoutAbsoluteReinterpretation) {
+TEST(Cn0Model, NormalizedSchemaRequiresRuntimeBaselineBeforeAbsoluteEvaluation) {
     const std::string content = std::string(kNormalizedModelHeader) + "\n" +
-                                normalized_model_row(0.0, 45.0, false, "READY", 3U, "-8.500000") + "\n" +
-                                normalized_model_row(45.0, 90.0, true, "READY", 3U, "-0.500000") + "\n";
+                                normalized_model_row("1C", 0.0, 45.0, false, "READY", 3U, "-8.500000") + "\n" +
+                                normalized_model_row("1C", 45.0, 90.0, true, "READY", 3U, "-0.500000") + "\n";
     const TemporaryModel file(content);
     gnss_sim::Cn0Model model{};
     std::string error;
@@ -170,6 +175,94 @@ TEST(Cn0Model, NormalizedSchemaIsRecognizedWithoutAbsoluteReinterpretation) {
     ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2300, 100.0, &time));
     double cn0_dbhz = 0.0;
     EXPECT_FALSE(gnss_sim::cn0_model_estimate_dbhz(model, gnss_sim::SignalId::kGpsL1Ca, 20.0, time, &cn0_dbhz));
+
+    gnss_sim::SimConfig config = gnss_sim::default_sim_config();
+    config.cn0_high_dbhz.push_back({"GPS L1 C/A", 47.0});
+    ASSERT_TRUE(gnss_sim::configure_cn0_model_runtime(config, &model, &error)) << error;
+    EXPECT_TRUE(gnss_sim::cn0_model_estimate_dbhz(model, gnss_sim::SignalId::kGpsL1Ca, 20.0, time, &cn0_dbhz));
+}
+
+TEST(Cn0Model, NormalizedBaselineShiftTranslatesOnlySelectedSignalAndPreservesShape) {
+    const std::string content = std::string(kNormalizedModelHeader) + "\n" +
+                                normalized_model_row("1C", 0.0, 45.0, false, "READY", 4U, "-8.000000") + "\n" +
+                                normalized_model_row("1C", 45.0, 90.0, true, "READY", 4U, "-1.000000") + "\n" +
+                                normalized_model_row("5Q", 0.0, 45.0, false, "READY", 3U, "-6.000000") + "\n" +
+                                normalized_model_row("5Q", 45.0, 90.0, true, "READY", 3U, "-0.500000") + "\n";
+    const TemporaryModel file(content);
+    gnss_sim::Cn0Model base{};
+    gnss_sim::Cn0Model shifted{};
+    std::string error;
+    ASSERT_TRUE(gnss_sim::load_cn0_model_csv(file.path().c_str(), 77U, &base, &error)) << error;
+    ASSERT_TRUE(gnss_sim::load_cn0_model_csv(file.path().c_str(), 77U, &shifted, &error)) << error;
+
+    gnss_sim::SimConfig base_config = gnss_sim::default_sim_config();
+    base_config.cn0_high_dbhz = {{"GPS L1 C/A", 47.0}, {"GPS L5Q", 49.0}};
+    gnss_sim::SimConfig shifted_config = base_config;
+    shifted_config.cn0_high_dbhz[0].cn0_dbhz += 3.0;
+    ASSERT_TRUE(gnss_sim::configure_cn0_model_runtime(base_config, &base, &error)) << error;
+    ASSERT_TRUE(gnss_sim::configure_cn0_model_runtime(shifted_config, &shifted, &error)) << error;
+
+    const double sow = 200000.0;
+    const double l1_low = estimate_model(base, gnss_sim::SignalId::kGpsL1Ca, 22.5, sow);
+    const double l1_high = estimate_model(base, gnss_sim::SignalId::kGpsL1Ca, 67.5, sow);
+    const double shifted_l1_low = estimate_model(shifted, gnss_sim::SignalId::kGpsL1Ca, 22.5, sow);
+    const double shifted_l1_high = estimate_model(shifted, gnss_sim::SignalId::kGpsL1Ca, 67.5, sow);
+    EXPECT_NEAR(shifted_l1_low - l1_low, 3.0, 1e-12);
+    EXPECT_NEAR(shifted_l1_high - l1_high, 3.0, 1e-12);
+    EXPECT_NEAR((shifted_l1_high - shifted_l1_low) - (l1_high - l1_low), 0.0, 1e-12);
+
+    const double l5 = estimate_model(base, gnss_sim::SignalId::kGpsL5Q, 22.5, sow);
+    const double shifted_l5 = estimate_model(shifted, gnss_sim::SignalId::kGpsL5Q, 22.5, sow);
+    EXPECT_DOUBLE_EQ(l5, shifted_l5);
+}
+
+TEST(Cn0Model, NormalizedReadyBinsInterpolateButSparseGapFallsBackWithoutBridging) {
+    const std::string interpolation_content =
+        std::string(kNormalizedModelHeader) + "\n" +
+        normalized_model_row("1C", 0.0, 30.0, false, "READY", 3U, "-9.000000") + "\n" +
+        normalized_model_row("1C", 30.0, 60.0, false, "READY", 3U, "-3.000000") + "\n" +
+        normalized_model_row("1C", 60.0, 90.0, true, "READY", 3U, "0.000000") + "\n";
+    const TemporaryModel interpolation_file(interpolation_content);
+    gnss_sim::Cn0Model interpolation{};
+    std::string error;
+    ASSERT_TRUE(gnss_sim::load_cn0_model_csv(interpolation_file.path().c_str(), 17U, &interpolation, &error)) << error;
+    gnss_sim::SimConfig config = gnss_sim::default_sim_config();
+    config.cn0_high_dbhz = {{"GPS L1 C/A", 47.0}};
+    ASSERT_TRUE(gnss_sim::configure_cn0_model_runtime(config, &interpolation, &error)) << error;
+    const double sow = 210000.0;
+    const double at_15 = estimate_model(interpolation, gnss_sim::SignalId::kGpsL1Ca, 15.0, sow);
+    const double at_30 = estimate_model(interpolation, gnss_sim::SignalId::kGpsL1Ca, 30.0, sow);
+    const double at_45 = estimate_model(interpolation, gnss_sim::SignalId::kGpsL1Ca, 45.0, sow);
+    EXPECT_NEAR(at_30 - at_15, 3.0, 1e-12);
+    EXPECT_NEAR(at_45 - at_30, 3.0, 1e-12);
+
+    const std::string gap_content = std::string(kNormalizedModelHeader) + "\n" +
+                                    normalized_model_row("1C", 0.0, 30.0, false, "READY", 3U, "-9.000000") + "\n" +
+                                    normalized_model_row("1C", 30.0, 60.0, false, "SPARSE", 1U, "-4.000000") + "\n" +
+                                    normalized_model_row("1C", 60.0, 90.0, true, "READY", 3U, "0.000000") + "\n";
+    const TemporaryModel gap_file(gap_content);
+    gnss_sim::Cn0Model gap{};
+    ASSERT_TRUE(gnss_sim::load_cn0_model_csv(gap_file.path().c_str(), 17U, &gap, &error)) << error;
+    ASSERT_TRUE(gnss_sim::configure_cn0_model_runtime(config, &gap, &error)) << error;
+    const gnss_sim::Cn0Model builtin = gnss_sim::make_builtin_cn0_model(17U);
+    EXPECT_DOUBLE_EQ(estimate_model(gap, gnss_sim::SignalId::kGpsL1Ca, 45.0, sow),
+                     estimate_model(builtin, gnss_sim::SignalId::kGpsL1Ca, 45.0, sow));
+    EXPECT_NE(estimate_model(gap, gnss_sim::SignalId::kGpsL1Ca, 15.0, sow),
+              estimate_model(builtin, gnss_sim::SignalId::kGpsL1Ca, 15.0, sow));
+}
+
+TEST(Cn0Model, NormalizedReadySignalWithoutReceiverBaselineFailsFast) {
+    const std::string content = std::string(kNormalizedModelHeader) + "\n" +
+                                normalized_model_row("1C", 0.0, 90.0, true, "READY", 2U, "-2.000000") + "\n" +
+                                normalized_model_row("5Q", 0.0, 90.0, true, "READY", 2U, "-1.000000") + "\n";
+    const TemporaryModel file(content);
+    gnss_sim::Cn0Model model{};
+    std::string error;
+    ASSERT_TRUE(gnss_sim::load_cn0_model_csv(file.path().c_str(), 31U, &model, &error)) << error;
+    gnss_sim::SimConfig config = gnss_sim::default_sim_config();
+    config.cn0_high_dbhz = {{"GPS L1 C/A", 47.0}};
+    EXPECT_FALSE(gnss_sim::configure_cn0_model_runtime(config, &model, &error));
+    EXPECT_NE(error.find("GPS L5Q"), std::string::npos);
 }
 
 TEST(Cn0Model, MissingSignalAndSparseGapUseExactBuiltinBaselinePolicy) {
@@ -180,6 +273,9 @@ TEST(Cn0Model, MissingSignalAndSparseGapUseExactBuiltinBaselinePolicy) {
     gnss_sim::Cn0Model model{};
     std::string error;
     ASSERT_TRUE(gnss_sim::load_cn0_model_csv(file.path().c_str(), 77U, &model, &error)) << error;
+    gnss_sim::SimConfig config = gnss_sim::default_sim_config();
+    config.cn0_high_dbhz = {{"GPS L1 C/A", 54.0}};
+    ASSERT_TRUE(gnss_sim::configure_cn0_model_runtime(config, &model, &error)) << error;
     const gnss_sim::Cn0Model builtin = gnss_sim::make_builtin_cn0_model(77U);
     const double sow = 200000.0;
 

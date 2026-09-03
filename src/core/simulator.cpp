@@ -979,7 +979,12 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
     } else {
         runtime.cn0_model = make_builtin_cn0_model(config.seed);
     }
+    if (!configure_cn0_model_runtime(config, &runtime.cn0_model, error_message)) {
+        destroy_navigation_state(runtime.navigation);
+        return false;
+    }
     result.cn0_model_source = cn0_model_source_name(runtime.cn0_model.source);
+    result.cn0_model_semantic = cn0_model_semantic_name(runtime.cn0_model.semantic);
     result.cn0_model_schema_version = runtime.cn0_model.identity.schema_version;
     result.cn0_model_name = runtime.cn0_model.identity.file_name;
     result.cn0_model_hash = runtime.cn0_model.identity.hash;

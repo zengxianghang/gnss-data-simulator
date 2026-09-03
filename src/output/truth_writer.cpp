@@ -222,6 +222,18 @@ std::string config_json(const SimConfig& config, int indent) {
            << ", \"doppler_extra_sigma_mps\": " << config.measurement_error.rea_fade.doppler_extra_sigma_mps
            << ", \"cn0_drop_db\": " << config.measurement_error.rea_fade.cn0_drop_db << "}\n";
     output << inner << "},\n";
+    output << inner << "\"cn0_high_dbhz\": {";
+    if (config.cn0_high_dbhz.empty()) {
+        output << "},\n";
+    } else {
+        output << '\n';
+        for (std::size_t index = 0; index < config.cn0_high_dbhz.size(); ++index) {
+            const Cn0HighBaselineConfig& baseline = config.cn0_high_dbhz[index];
+            output << inner << "  \"" << json_escape(baseline.signal_name.c_str()) << "\": " << baseline.cn0_dbhz;
+            output << (index + 1U == config.cn0_high_dbhz.size() ? "\n" : ",\n");
+        }
+        output << inner << "},\n";
+    }
     output << inner << "\"seed\": " << config.seed << "\n";
     output << pad << '}';
     return output.str();
@@ -541,6 +553,7 @@ bool finalize_truth_writer(TruthWriter* writer, const SimulatorRunSummary& summa
              << "  },\n"
              << "  \"cn0_model\": {\n"
              << "    \"source\": \"" << json_escape(summary.cn0_model_source.c_str()) << "\",\n"
+             << "    \"semantic\": \"" << json_escape(summary.cn0_model_semantic.c_str()) << "\",\n"
              << "    \"schema_version\": \"" << json_escape(summary.cn0_model_schema_version.c_str()) << "\",\n"
              << "    \"name\": \"" << json_escape(summary.cn0_model_name.c_str()) << "\",\n"
              << "    \"hash_algorithm\": \"" << cn0_hash_algorithm << "\",\n"

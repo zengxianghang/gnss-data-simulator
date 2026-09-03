@@ -2,6 +2,7 @@
 #define GNSS_SIM_SRC_MODEL_CN0_MODEL_H_
 
 #include "gnss/signal_definitions.h"
+#include "gnss_sim/sim_config.h"
 #include "gnss_sim/sim_types.h"
 
 #include <cstdint>
@@ -34,6 +35,11 @@ struct Cn0CalibratedBin {
     bool ready{};
 };
 
+struct Cn0SignalBaseline {
+    SignalId signal_id{SignalId::kGpsL1Ca};
+    double cn0_high_dbhz{};
+};
+
 struct Cn0ModelIdentity {
     std::string schema_version;
     std::string file_name;
@@ -46,11 +52,13 @@ struct Cn0Model {
     Cn0ModelSemantic semantic{Cn0ModelSemantic::kBuiltinAbsoluteCn0};
     std::uint64_t seed{};
     std::vector<Cn0CalibratedBin> calibrated_bins;
+    std::vector<Cn0SignalBaseline> high_baselines;
     Cn0ModelIdentity identity;
 };
 
 Cn0Model make_builtin_cn0_model(std::uint64_t seed);
 bool load_cn0_model_csv(const char* file_path, std::uint64_t seed, Cn0Model* model, std::string* error_message);
+bool configure_cn0_model_runtime(const SimConfig& config, Cn0Model* model, std::string* error_message);
 bool cn0_model_estimate_dbhz(const Cn0Model& model, SignalId signal_id, double elevation_deg, const SimTime& time,
                              double* cn0_dbhz);
 const char* cn0_model_source_name(Cn0ModelSource source);

@@ -271,30 +271,4 @@ bool evaluate_urban_antenna_response(const UrbanRfAntennaConfig& config, UrbanCi
     return true;
 }
 
-bool compute_urban_reflected_port_factor(const UrbanRfReflectionResponse& reflection,
-                                         const UrbanRfAntennaConfig& antenna, double arrival_elevation_rad,
-                                         std::complex<double>* port_factor, std::string* error_message) {
-    if (port_factor == nullptr || !finite_complex(reflection.gamma_rhcp_from_rhcp) ||
-        !finite_complex(reflection.gamma_lhcp_from_rhcp)) {
-        set_error(error_message, "urban RF reflected port-factor request is invalid");
-        return false;
-    }
-    std::complex<double> rhcp_response{};
-    std::complex<double> lhcp_response{};
-    if (!evaluate_urban_antenna_response(antenna, UrbanCircularPolarization::kRhcp, arrival_elevation_rad,
-                                         &rhcp_response, error_message) ||
-        !evaluate_urban_antenna_response(antenna, UrbanCircularPolarization::kLhcp, arrival_elevation_rad,
-                                         &lhcp_response, error_message)) {
-        return false;
-    }
-    const std::complex<double> result =
-        reflection.gamma_rhcp_from_rhcp * rhcp_response + reflection.gamma_lhcp_from_rhcp * lhcp_response;
-    if (!finite_complex(result)) {
-        set_error(error_message, "urban RF reflected port-factor calculation failed");
-        return false;
-    }
-    *port_factor = result;
-    return true;
-}
-
 } // namespace gnss_sim

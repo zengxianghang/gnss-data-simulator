@@ -102,12 +102,14 @@ enum class CodeCorrelationModel {
 
 // Relationship of a secondary subcarrier to the primary subcarrier for
 // composite correlation models. TMBOC time multiplexing does not use a fixed
-// phase relation and therefore uses kNotApplicable.
+// phase relation and therefore uses kNotApplicable. Quadrature sign is kept
+// explicitly because complex code correlation depends on +90 versus -90 deg.
 enum class CompositeSubcarrierPhase {
     kNotApplicable = 0,
     kInPhase,
     kAntiPhase,
-    kQuadrature,
+    kPositiveQuadrature,
+    kNegativeQuadrature,
 };
 
 struct CodeCorrelationProfile {

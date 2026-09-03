@@ -317,6 +317,101 @@ bool calibrated_absolute_nominal_dbhz(const Cn0Model& model, SignalId signal_id,
     return true;
 }
 
+bool calibrated_normalized_delta_db(const Cn0Model& model, SignalId signal_id, double elevation_deg, double* delta_db,
+                                    bool* supported) {
+    if (delta_db == nullptr || supported == nullptr) {
+        return false;
+    }
+    *supported = false;
+
+    std::size_t current_index = model.calibrated_bins.size();
+    for (std::size_t index = 0; index < model.calibrated_bins.size(); ++index) {
+        const Cn0CalibratedBin& bin = model.calibrated_bins[index];
+        if (bin.signal_id == signal_id && bin_contains(bin, elevation_deg)) {
+            current_index = index;
+            break;
+        }
+    }
+    if (current_index == model.calibrated_bins.size() || !model.calibrated_bins[current_index].ready) {
+        return true;
+    }
+
+    const Cn0CalibratedBin& current = model.calibrated_bins[current_index];
+    if (!std::isfinite(current.delta_p50_db)) {
+        return false;
+    }
+    *supported = true;
+    if (std::fabs(elevation_deg - current.elevation_center_deg) <= kBinToleranceDeg) {
+        *delta_db = current.delta_p50_db;
+        return true;
+    }
+
+    const Cn0CalibratedBin* neighbor = nullptr;
+    if (elevation_deg < current.elevation_center_deg) {
+        for (std::size_t index = current_index; index > 0; --index) {
+            const Cn0CalibratedBin& candidate = model.calibrated_bins[index - 1];
+            if (candidate.signal_id == signal_id) {
+                neighbor = &candidate;
+                break;
+            }
+        }
+        if (neighbor != nullptr && neighbor->ready && std::isfinite(neighbor->delta_p50_db) &&
+            bins_touch(*neighbor, current)) {
+            const double span = current.elevation_center_deg - neighbor->elevation_center_deg;
+            const double fraction = (elevation_deg - neighbor->elevation_center_deg) / span;
+            *delta_db = neighbor->delta_p50_db + fraction * (current.delta_p50_db - neighbor->delta_p50_db);
+            return true;
+        }
+    } else {
+        for (std::size_t index = current_index + 1; index < model.calibrated_bins.size(); ++index) {
+            const Cn0CalibratedBin& candidate = model.calibrated_bins[index];
+            if (candidate.signal_id == signal_id) {
+                neighbor = &candidate;
+                break;
+            }
+        }
+        if (neighbor != nullptr && neighbor->ready && std::isfinite(neighbor->delta_p50_db) &&
+            bins_touch(current, *neighbor)) {
+            const double span = neighbor->elevation_center_deg - current.elevation_center_deg;
+            const double fraction = (elevation_deg - current.elevation_center_deg) / span;
+            *delta_db = current.delta_p50_db + fraction * (neighbor->delta_p50_db - current.delta_p50_db);
+            return true;
+        }
+    }
+
+    *delta_db = current.delta_p50_db;
+    return true;
+}
+
+const SignalDefinition* signal_definition_by_name(const std::string& name) {
+    std::size_t count = 0;
+    const SignalDefinition* definitions = signal_definitions(&count);
+    for (std::size_t index = 0; index < count; ++index) {
+        if (name == definitions[index].name) {
+            return definitions + index;
+        }
+    }
+    return nullptr;
+}
+
+const Cn0SignalBaseline* find_high_baseline(const Cn0Model& model, SignalId signal_id) {
+    for (const Cn0SignalBaseline& baseline : model.high_baselines) {
+        if (baseline.signal_id == signal_id) {
+            return &baseline;
+        }
+    }
+    return nullptr;
+}
+
+bool normalized_signal_requires_baseline(const Cn0Model& model, SignalId signal_id) {
+    for (const Cn0CalibratedBin& bin : model.calibrated_bins) {
+        if (bin.signal_id == signal_id && bin.ready) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool file_identity(const char* file_path, Cn0ModelIdentity* identity, std::string* error_message) {
     if (file_path == nullptr || identity == nullptr) {
         set_error(error_message, "CN0 model identity request has invalid arguments");
@@ -665,6 +760,46 @@ bool load_cn0_model_csv(const char* file_path, std::uint64_t seed, Cn0Model* mod
     return true;
 }
 
+bool configure_cn0_model_runtime(const SimConfig& config, Cn0Model* model, std::string* error_message) {
+    if (model == nullptr) {
+        set_error(error_message, "CN0 runtime configuration model must not be null");
+        return false;
+    }
+
+    model->high_baselines.clear();
+    model->high_baselines.reserve(config.cn0_high_dbhz.size());
+    for (const Cn0HighBaselineConfig& configured : config.cn0_high_dbhz) {
+        const SignalDefinition* definition = signal_definition_by_name(configured.signal_name);
+        if (definition == nullptr || !std::isfinite(configured.cn0_dbhz)) {
+            set_error(error_message, "CN0 runtime baseline configuration is invalid for signal: " +
+                                         configured.signal_name);
+            return false;
+        }
+        if (find_high_baseline(*model, definition->signal_id) != nullptr) {
+            set_error(error_message, "CN0 runtime baseline is duplicated for signal: " + configured.signal_name);
+            return false;
+        }
+        model->high_baselines.push_back({definition->signal_id, configured.cn0_dbhz});
+    }
+
+    if (model->semantic != Cn0ModelSemantic::kNormalizedElevationShape) {
+        return true;
+    }
+
+    std::size_t definition_count = 0;
+    const SignalDefinition* definitions = signal_definitions(&definition_count);
+    for (std::size_t index = 0; index < definition_count; ++index) {
+        const SignalDefinition& definition = definitions[index];
+        if (normalized_signal_requires_baseline(*model, definition.signal_id) &&
+            find_high_baseline(*model, definition.signal_id) == nullptr) {
+            set_error(error_message, "normalized CN0 model requires cn0_high_dbhz for signal: " +
+                                         std::string(definition.name));
+            return false;
+        }
+    }
+    return true;
+}
+
 bool cn0_model_estimate_dbhz(const Cn0Model& model, SignalId signal_id, double elevation_deg, const SimTime& time,
                              double* cn0_dbhz) {
     if (cn0_dbhz == nullptr || !std::isfinite(elevation_deg) || !valid_time(time) ||
@@ -678,13 +813,30 @@ bool cn0_model_estimate_dbhz(const Cn0Model& model, SignalId signal_id, double e
             nominal_dbhz = builtin_nominal_dbhz(signal_id, elevation_deg);
             break;
         case Cn0ModelSource::kCalibratedCsv:
-            if (model.semantic != Cn0ModelSemantic::kAbsoluteStationCn0 ||
-                !calibrated_absolute_nominal_dbhz(model, signal_id, elevation_deg, &nominal_dbhz)) {
-                // NORMALIZED_ELEVATION_SHAPE is intentionally not interpreted as
-                // absolute dB-Hz until the receiver-baseline composition in #107.
-                return false;
+            if (model.semantic == Cn0ModelSemantic::kAbsoluteStationCn0) {
+                if (!calibrated_absolute_nominal_dbhz(model, signal_id, elevation_deg, &nominal_dbhz)) {
+                    return false;
+                }
+                break;
             }
-            break;
+            if (model.semantic == Cn0ModelSemantic::kNormalizedElevationShape) {
+                double delta_db = 0.0;
+                bool supported = false;
+                if (!calibrated_normalized_delta_db(model, signal_id, elevation_deg, &delta_db, &supported)) {
+                    return false;
+                }
+                if (!supported) {
+                    nominal_dbhz = builtin_nominal_dbhz(signal_id, elevation_deg);
+                    break;
+                }
+                const Cn0SignalBaseline* baseline = find_high_baseline(model, signal_id);
+                if (baseline == nullptr || !std::isfinite(baseline->cn0_high_dbhz)) {
+                    return false;
+                }
+                nominal_dbhz = baseline->cn0_high_dbhz + delta_db;
+                break;
+            }
+            return false;
     }
 
     const std::int64_t absolute_time_ns = static_cast<std::int64_t>(time.gps_week) * GPS_WEEK_NANOSECONDS + time.tow_ns;

@@ -245,12 +245,13 @@ bool compute_complex_knife_edge_coefficient(double fresnel_v, std::complex<doubl
     return true;
 }
 
-bool compute_urban_rooftop_diffraction(const UrbanSceneGeometryConfig& scene_config,
-                                       const SignalDefinition& signal, int glonass_fcn,
-                                       const ReceiverTruth& receiver, const SatelliteGeometry& satellite_geometry,
-                                       UrbanRooftopDiffractionPath* diffraction,
-                                       UrbanRooftopDiffractionStatus* status, std::string* error_message) {
-    if (diffraction == nullptr || status == nullptr || !validate_urban_scene_geometry_config(scene_config, error_message) ||
+bool compute_urban_rooftop_diffraction(const UrbanSceneGeometryConfig& scene_config, const SignalDefinition& signal,
+                                       int glonass_fcn, const ReceiverTruth& receiver,
+                                       const SatelliteGeometry& satellite_geometry,
+                                       UrbanRooftopDiffractionPath* diffraction, UrbanRooftopDiffractionStatus* status,
+                                       std::string* error_message) {
+    if (diffraction == nullptr || status == nullptr ||
+        !validate_urban_scene_geometry_config(scene_config, error_message) ||
         !finite_positive(satellite_geometry.geometric_range_m)) {
         set_error(error_message, "urban rooftop diffraction request is invalid");
         return false;
@@ -303,10 +304,10 @@ bool compute_urban_rooftop_diffraction(const UrbanSceneGeometryConfig& scene_con
     double receiver_coordinate_m = 0.0;
     double source_radius_m = 0.0;
     double receiver_radius_m = 0.0;
-    if (!edge_coordinate_and_radius(result.satellite_enu_m, wall.roof_edge_anchor_enu_m,
-                                    wall.roof_edge_direction_enu, &source_coordinate_m, &source_radius_m) ||
-        !edge_coordinate_and_radius(result.receiver_enu_m, wall.roof_edge_anchor_enu_m,
-                                    wall.roof_edge_direction_enu, &receiver_coordinate_m, &receiver_radius_m)) {
+    if (!edge_coordinate_and_radius(result.satellite_enu_m, wall.roof_edge_anchor_enu_m, wall.roof_edge_direction_enu,
+                                    &source_coordinate_m, &source_radius_m) ||
+        !edge_coordinate_and_radius(result.receiver_enu_m, wall.roof_edge_anchor_enu_m, wall.roof_edge_direction_enu,
+                                    &receiver_coordinate_m, &receiver_radius_m)) {
         set_error(error_message, "urban rooftop equivalent-edge geometry is degenerate");
         return false;
     }
@@ -347,8 +348,8 @@ bool compute_urban_rooftop_diffraction(const UrbanSceneGeometryConfig& scene_con
         set_error(error_message, "urban rooftop stable excess-path geometry is invalid");
         return false;
     }
-    result.excess_path_length_m = result.source_edge_distance_m * result.receiver_edge_distance_m *
-                                  direction_sum_squared / excess_denominator_m;
+    result.excess_path_length_m =
+        result.source_edge_distance_m * result.receiver_edge_distance_m * direction_sum_squared / excess_denominator_m;
     if (!std::isfinite(result.excess_path_length_m) || result.excess_path_length_m < -kExcessToleranceM) {
         set_error(error_message, "urban rooftop excess-path calculation is invalid");
         return false;

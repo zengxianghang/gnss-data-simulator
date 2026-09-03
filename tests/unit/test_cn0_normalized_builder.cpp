@@ -14,10 +14,21 @@ using gnss_sim::GnssConstellation;
 using gnss_sim::SignalId;
 using gnss_sim::cn0_builder::Cn0AggregationConfig;
 using gnss_sim::cn0_builder::Cn0BinStatus;
+using gnss_sim::cn0_builder::Cn0InputSource;
 using gnss_sim::cn0_builder::Cn0NormalizationConfig;
 using gnss_sim::cn0_builder::Cn0NormalizedBin;
+using gnss_sim::cn0_builder::Cn0NormalizedBuildResult;
 using gnss_sim::cn0_builder::Cn0NormalizedSourceResult;
 using gnss_sim::cn0_builder::Cn0SourceNormalizedBin;
+
+std::string test_data(const char* file_name) {
+    return std::string(GNSS_SIM_TEST_DATA_DIR) + "/" + file_name;
+}
+
+std::string read_file(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
+}
 
 Cn0NormalizedSourceResult source_with_delta(double absolute_p50_dbhz, double reference_p50_dbhz,
                                             Cn0BinStatus status = Cn0BinStatus::kReady) {
@@ -80,6 +91,51 @@ TEST(Cn0NormalizedBuilder, V2WriterRoundTripsAsNormalizedSemantic) {
     ASSERT_EQ(model.calibrated_bins.size(), 1U);
     EXPECT_DOUBLE_EQ(model.calibrated_bins[0].delta_p50_db, -8.0);
     std::remove(path.string().c_str());
+}
+
+TEST(Cn0NormalizedBuilder, FixedRinexBytesAndConfigProduceByteIdenticalV2Outputs) {
+    const std::vector<Cn0InputSource> sources = {
+        {test_data("cn0_stream_acceptance_obs.rnx"), test_data("multi_gnss_acceptance_nav.rnx")}};
+    Cn0AggregationConfig aggregation{};
+    aggregation.min_samples_per_bin = 1;
+    Cn0NormalizationConfig normalization{};
+    normalization.reference_elevation_min_deg = 0.0;
+    normalization.reference_elevation_max_deg = 90.0;
+    normalization.min_reference_samples = 1;
+    normalization.min_sources_per_bin = 1;
+
+    Cn0NormalizedBuildResult first{};
+    Cn0NormalizedBuildResult second{};
+    std::string error;
+    ASSERT_TRUE(gnss_sim::cn0_builder::build_normalized_cn0_model(sources, aggregation, normalization, &first, &error))
+        << error;
+    ASSERT_TRUE(gnss_sim::cn0_builder::build_normalized_cn0_model(sources, aggregation, normalization, &second, &error))
+        << error;
+
+    const std::filesystem::path directory = std::filesystem::temp_directory_path();
+    const std::filesystem::path model_a = directory / "gnss_sim_normalized_cn0_model_a.csv";
+    const std::filesystem::path model_b = directory / "gnss_sim_normalized_cn0_model_b.csv";
+    const std::filesystem::path meta_a = directory / "gnss_sim_normalized_cn0_meta_a.json";
+    const std::filesystem::path meta_b = directory / "gnss_sim_normalized_cn0_meta_b.json";
+    ASSERT_TRUE(gnss_sim::cn0_builder::write_normalized_cn0_model_csv(model_a.string(), first.bins, &error)) << error;
+    ASSERT_TRUE(gnss_sim::cn0_builder::write_normalized_cn0_model_csv(model_b.string(), second.bins, &error)) << error;
+    ASSERT_TRUE(gnss_sim::cn0_builder::write_normalized_cn0_metadata_json(meta_a.string(), aggregation, normalization,
+                                                                          first, &error))
+        << error;
+    ASSERT_TRUE(gnss_sim::cn0_builder::write_normalized_cn0_metadata_json(meta_b.string(), aggregation, normalization,
+                                                                          second, &error))
+        << error;
+
+    EXPECT_EQ(read_file(model_a), read_file(model_b));
+    EXPECT_EQ(read_file(meta_a), read_file(meta_b));
+    EXPECT_EQ(first.aggregation_summary.accepted_samples, second.aggregation_summary.accepted_samples);
+    EXPECT_EQ(first.sources.size(), second.sources.size());
+    EXPECT_EQ(first.bins.size(), second.bins.size());
+
+    std::remove(model_a.string().c_str());
+    std::remove(model_b.string().c_str());
+    std::remove(meta_a.string().c_str());
+    std::remove(meta_b.string().c_str());
 }
 
 TEST(Cn0NormalizedBuilder, MetadataKeepsConstellationWhenRinexSignalCodesCollide) {

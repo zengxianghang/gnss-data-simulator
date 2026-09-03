@@ -12,6 +12,7 @@ namespace {
 
 using gnss_sim::GnssConstellation;
 using gnss_sim::SignalId;
+using gnss_sim::cn0_builder::Cn0AggregationConfig;
 using gnss_sim::cn0_builder::Cn0BinStatus;
 using gnss_sim::cn0_builder::Cn0NormalizationConfig;
 using gnss_sim::cn0_builder::Cn0NormalizedBin;
@@ -140,7 +141,7 @@ TEST(Cn0NormalizedBuilder, MetadataKeepsConstellationWhenRinexSignalCodesCollide
                                                                           result, &error))
         << error;
     std::ifstream input(path, std::ios::binary);
-    const std::string metadata(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
+    const std::string metadata{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
 
     EXPECT_NE(metadata.find("\"constellation\":\"GPS\",\"signal\":\"1C\",\"status\":\"READY\",\"count\":100,\"p50_dbhz\":48.000000"),
               std::string::npos);

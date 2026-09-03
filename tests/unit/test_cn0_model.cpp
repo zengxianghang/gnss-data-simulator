@@ -15,6 +15,9 @@ constexpr const char* kModelHeader =
     "schema_version,constellation,signal,elevation_min_deg,elevation_max_deg,upper_edge_inclusive,status,count,"
     "p05_dbhz,p10_dbhz,p25_dbhz,p50_dbhz,p75_dbhz,p90_dbhz,p95_dbhz,mean_dbhz,stddev_dbhz,mad_dbhz,"
     "delta_count,delta_p50_dbhz,delta_p90_dbhz,delta_p99_dbhz,ar1_status,ar1";
+constexpr const char* kNormalizedModelHeader =
+    "schema_version,model_semantic,constellation,signal,elevation_min_deg,elevation_max_deg,upper_edge_inclusive,"
+    "status,contributing_source_count,delta_p50_db";
 
 std::string runtime_model_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/runtime_cn0_model.csv";
@@ -41,6 +44,15 @@ std::string model_row(double elevation_min_deg, double elevation_max_deg, bool i
            << ',' << status << ',' << count << ',' << (p50_dbhz - 1.0) << ',' << (p50_dbhz - 1.0) << ','
            << (p50_dbhz - 1.0) << ',' << p50_dbhz << ',' << (p50_dbhz + 1.0) << ',' << (p50_dbhz + 1.0) << ','
            << (p50_dbhz + 1.0) << ',' << p50_dbhz << ",1,1,0,,,,INSUFFICIENT_SUPPORT,";
+    return output.str();
+}
+
+std::string normalized_model_row(double elevation_min_deg, double elevation_max_deg, bool inclusive, const char* status,
+                                 std::uint64_t source_count, const char* delta_p50_db) {
+    std::ostringstream output;
+    output << "gnss-cn0-model-v2,NORMALIZED_ELEVATION_SHAPE,GPS,1C," << elevation_min_deg << ','
+           << elevation_max_deg << ',' << (inclusive ? 1 : 0) << ',' << status << ',' << source_count << ','
+           << delta_p50_db;
     return output.str();
 }
 
@@ -121,6 +133,8 @@ TEST(Cn0Model, CalibratedCentersEdgesAndBetweenCenterInterpolationAreGolden) {
     std::string error;
     ASSERT_TRUE(gnss_sim::load_cn0_model_csv(runtime_model_path().c_str(), 1234U, &model, &error)) << error;
     EXPECT_EQ(model.source, gnss_sim::Cn0ModelSource::kCalibratedCsv);
+    EXPECT_EQ(model.semantic, gnss_sim::Cn0ModelSemantic::kAbsoluteStationCn0);
+    EXPECT_STREQ(gnss_sim::cn0_model_semantic_name(model.semantic), "ABSOLUTE_STATION_CN0");
     EXPECT_EQ(model.identity.schema_version, "gnss-cn0-model-v1");
     EXPECT_EQ(model.identity.file_name, "runtime_cn0_model.csv");
     EXPECT_FALSE(model.identity.hash.empty());
@@ -136,6 +150,27 @@ TEST(Cn0Model, CalibratedCentersEdgesAndBetweenCenterInterpolationAreGolden) {
     EXPECT_NEAR(at_75 - at_45, 10.0, 1e-12);
     EXPECT_NEAR(estimate_model(model, gnss_sim::SignalId::kGpsL1Ca, 0.0, sow) - at_15, 0.0, 1e-12);
     EXPECT_NEAR(estimate_model(model, gnss_sim::SignalId::kGpsL1Ca, 90.0, sow) - at_75, 0.0, 1e-12);
+}
+
+TEST(Cn0Model, NormalizedSchemaIsRecognizedWithoutAbsoluteReinterpretation) {
+    const std::string content = std::string(kNormalizedModelHeader) + "\n" +
+                                normalized_model_row(0.0, 45.0, false, "READY", 3U, "-8.500000") + "\n" +
+                                normalized_model_row(45.0, 90.0, true, "READY", 3U, "-0.500000") + "\n";
+    const TemporaryModel file(content);
+    gnss_sim::Cn0Model model{};
+    std::string error;
+    ASSERT_TRUE(gnss_sim::load_cn0_model_csv(file.path().c_str(), 11U, &model, &error)) << error;
+    EXPECT_EQ(model.semantic, gnss_sim::Cn0ModelSemantic::kNormalizedElevationShape);
+    EXPECT_STREQ(gnss_sim::cn0_model_semantic_name(model.semantic), "NORMALIZED_ELEVATION_SHAPE");
+    EXPECT_EQ(model.identity.schema_version, "gnss-cn0-model-v2");
+    ASSERT_EQ(model.calibrated_bins.size(), 2U);
+    EXPECT_DOUBLE_EQ(model.calibrated_bins[0].delta_p50_db, -8.5);
+    EXPECT_EQ(model.calibrated_bins[0].support_count, 3U);
+
+    gnss_sim::SimTime time{};
+    ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2300, 100.0, &time));
+    double cn0_dbhz = 0.0;
+    EXPECT_FALSE(gnss_sim::cn0_model_estimate_dbhz(model, gnss_sim::SignalId::kGpsL1Ca, 20.0, time, &cn0_dbhz));
 }
 
 TEST(Cn0Model, MissingSignalAndSparseGapUseExactBuiltinBaselinePolicy) {
@@ -165,8 +200,11 @@ TEST(Cn0Model, ExplicitMalformedModelsFailWithoutFallback) {
     const std::string missing_delta_statistics =
         std::string(kModelHeader) +
         "\ngnss-cn0-model-v1,GPS,1C,0,90,1,READY,100,39,39,39,40,41,41,41,40,1,1,1,,,,INSUFFICIENT_SUPPORT,\n";
+    const std::string wrong_semantic =
+        std::string(kNormalizedModelHeader) +
+        "\ngnss-cn0-model-v2,ABSOLUTE_STATION_CN0,GPS,1C,0,90,1,READY,2,-1.0\n";
     const std::string cases[] = {std::string("bad-header\n") + valid_row + "\n", duplicate, nonfinite,
-                                 missing_delta_statistics};
+                                 missing_delta_statistics, wrong_semantic};
 
     for (const std::string& content : cases) {
         const TemporaryModel file(content);

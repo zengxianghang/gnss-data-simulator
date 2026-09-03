@@ -1,5 +1,6 @@
 #include "gnss_sim/sim_config.h"
 
+#include "gnss/signal_definitions.h"
 #include "gnss_sim/sim_time.h"
 
 #include <cJSON.h>
@@ -175,6 +176,20 @@ bool parse_atmosphere_mode(const char* value, AtmosphereMode* atmosphere_mode, s
     return false;
 }
 
+const SignalDefinition* find_signal_definition_by_name(const char* name) {
+    if (name == nullptr) {
+        return nullptr;
+    }
+    std::size_t count = 0;
+    const SignalDefinition* definitions = signal_definitions(&count);
+    for (std::size_t index = 0; index < count; ++index) {
+        if (std::strcmp(definitions[index].name, name) == 0) {
+            return &definitions[index];
+        }
+    }
+    return nullptr;
+}
+
 bool parse_receiver(const cJSON* root, SimConfig* config, std::string* error_message) {
     const cJSON* receiver = cJSON_GetObjectItemCaseSensitive(root, "receiver");
     if (receiver == nullptr) {
@@ -312,6 +327,38 @@ bool parse_measurement_error(const cJSON* root, SimConfig* config, std::string* 
            parse_measurement_fade(object, &config->measurement_error.rea_fade, error_message);
 }
 
+bool parse_cn0_high_dbhz(const cJSON* root, SimConfig* config, std::string* error_message) {
+    const cJSON* object = cJSON_GetObjectItemCaseSensitive(root, "cn0_high_dbhz");
+    if (object == nullptr) {
+        return true;
+    }
+    if (!cJSON_IsObject(object)) {
+        set_error(error_message, "cn0_high_dbhz must be a JSON object keyed by central signal name");
+        return false;
+    }
+
+    config->cn0_high_dbhz.clear();
+    for (const cJSON* item = object->child; item != nullptr; item = item->next) {
+        if (item->string == nullptr || find_signal_definition_by_name(item->string) == nullptr) {
+            set_error(error_message, std::string("cn0_high_dbhz contains unknown central signal name: ") +
+                                         (item->string == nullptr ? "<null>" : item->string));
+            return false;
+        }
+        if (!cJSON_IsNumber(item) || !std::isfinite(item->valuedouble)) {
+            set_error(error_message, std::string("cn0_high_dbhz value must be finite for signal: ") + item->string);
+            return false;
+        }
+        for (const Cn0HighBaselineConfig& previous : config->cn0_high_dbhz) {
+            if (previous.signal_name == item->string) {
+                set_error(error_message, std::string("duplicate cn0_high_dbhz signal: ") + item->string);
+                return false;
+            }
+        }
+        config->cn0_high_dbhz.push_back({item->string, item->valuedouble});
+    }
+    return true;
+}
+
 bool parse_seed(const cJSON* root, SimConfig* config, std::string* error_message) {
     const cJSON* seed = cJSON_GetObjectItemCaseSensitive(root, "seed");
     if (seed == nullptr) {
@@ -354,6 +401,21 @@ bool valid_measurement_error_config(const MeasurementErrorConfig& config) {
            valid_measurement_transient(config.ttff_hot) && valid_measurement_transient(config.ttff_warm) &&
            valid_measurement_transient(config.ttff_cold) && valid_measurement_transient(config.rea_reacquisition) &&
            valid_measurement_fade(config.rea_fade);
+}
+
+bool valid_cn0_high_baselines(const std::vector<Cn0HighBaselineConfig>& baselines) {
+    for (std::size_t index = 0; index < baselines.size(); ++index) {
+        const Cn0HighBaselineConfig& baseline = baselines[index];
+        if (!std::isfinite(baseline.cn0_dbhz) || find_signal_definition_by_name(baseline.signal_name.c_str()) == nullptr) {
+            return false;
+        }
+        for (std::size_t previous = 0; previous < index; ++previous) {
+            if (baselines[previous].signal_name == baseline.signal_name) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 bool valid_atmosphere_mode(AtmosphereMode atmosphere_mode) {
@@ -433,6 +495,10 @@ bool validate_sim_config(const SimConfig& config, std::string* error_message) {
         set_error(error_message, "measurement_error configuration is invalid");
         return false;
     }
+    if (!valid_cn0_high_baselines(config.cn0_high_dbhz)) {
+        set_error(error_message, "cn0_high_dbhz configuration is invalid");
+        return false;
+    }
     if (config.multipath_enabled) {
         set_error(error_message, "multipath is not supported in V1");
         return false;
@@ -506,6 +572,7 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                                         "measurement_noise_enabled",
                                         "bestpos_rtk",
                                         "measurement_error",
+                                        "cn0_high_dbhz",
                                         "multipath_enabled",
                                         "receiver_clock_bias_m",
                                         "receiver_clock_drift_mps",
@@ -516,7 +583,7 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                                         "seed"};
 
     SimConfig parsed = default_sim_config();
-    bool success = validate_object_keys(root, "root", allowed_keys, 19U, error_message);
+    bool success = validate_object_keys(root, "root", allowed_keys, 20U, error_message);
 
     double duration_sec = static_cast<double>(parsed.duration_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
     const char* scenario_name = scenario_type_name(parsed.scenario);
@@ -548,7 +615,8 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
             parse_atmosphere_mode(atmosphere_name, &parsed.atmosphere_mode, error_message) &&
             parse_receiver(root, &parsed, error_message) && parse_ttff(root, &parsed, error_message) &&
             parse_rea(root, &parsed, error_message) && parse_bestpos_rtk(root, &parsed, error_message) &&
-            parse_measurement_error(root, &parsed, error_message) && parse_seed(root, &parsed, error_message) &&
+            parse_measurement_error(root, &parsed, error_message) &&
+            parse_cn0_high_dbhz(root, &parsed, error_message) && parse_seed(root, &parsed, error_message) &&
             validate_sim_config(parsed, error_message);
     }
 

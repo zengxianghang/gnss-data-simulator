@@ -310,8 +310,8 @@ TEST(UrbanRooftopDiffraction, FrozenFourWallReachabilitySweepFindsLosEdgeTransit
 
             gnss_sim::UrbanDirectPathGeometry direct{};
             error_message.clear();
-            ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(scene, geometry.azimuth_rad, geometry.elevation_rad,
-                                                                     &direct, &error_message))
+            ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(scene, geometry.azimuth_rad,
+                                                                     geometry.elevation_rad, &direct, &error_message))
                 << "az=" << azimuth_deg << " offset_q=" << offset_quarter_degree << ": " << error_message;
             ASSERT_TRUE(direct.above_local_horizon);
 

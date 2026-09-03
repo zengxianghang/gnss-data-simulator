@@ -76,7 +76,7 @@ The V1 solver:
 6. computes prompt power and local discriminator slope for every root;
 7. surfaces stable and unstable roots rather than hiding side-peak solutions.
 
-The search is deliberately bounded. If a caller supplies a path-delay span requiring more than the fixed V1 scan budget, the solver fails explicitly instead of silently coarsening the grid and risking missed BOC roots.
+The search is deliberately bounded. If a caller supplies a path-delay span requiring more than the fixed V1 scan budget, the solver fails explicitly instead of silently coarsening the grid and risking missed BOC roots. The required interval count is validated as a finite bounded floating-point value **before** conversion to the integer loop count, so pathological delay spans cannot rely on an out-of-range floating-to-integer conversion.
 
 ## Root selection
 
@@ -90,7 +90,7 @@ Among stable roots, choose the root nearest the previous tracked code phase. Exa
 
 Among stable roots, choose the largest prompt-power candidate. Exact-power ties prefer the candidate nearest zero relative delay, then lower code phase.
 
-The root set remains visible to later tracking-state code; #119 does not hide alternative stable roots behind a first-match rule.
+The root set remains visible to later tracking-state code; #119 does not hide alternative stable roots behind a first-match rule. Unknown selection-mode enum values fail explicitly rather than inheriting a first-candidate result.
 
 ## Physical regression behavior
 
@@ -103,6 +103,7 @@ Permanent tests cover:
 - changing total E/L spacing changes the two-path equilibrium;
 - complex path voltages are summed as supplied without RF reinterpretation;
 - unsupported signal profiles and malformed inputs fail explicitly;
+- excessive path-delay spans and unknown root-selection modes fail explicitly;
 - repeated root enumeration is bitwise deterministic for identical inputs.
 
 ## Explicit exclusions

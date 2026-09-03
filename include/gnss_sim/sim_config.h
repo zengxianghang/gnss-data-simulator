@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace gnss_sim {
 
@@ -72,6 +73,15 @@ struct MeasurementErrorConfig {
     MeasurementFadeErrorConfig rea_fade;
 };
 
+// Receiver/antenna-specific absolute high-elevation C/N0 calibration.
+// signal_name must match SignalDefinition::name from the central signal table.
+// The list is intentionally empty by default: production values must be
+// calibrated/configured rather than fabricated by the simulator.
+struct Cn0HighBaselineConfig {
+    std::string signal_name;
+    double cn0_dbhz;
+};
+
 struct SimConfig {
     int schema_version;
     ScenarioType scenario;
@@ -91,6 +101,7 @@ struct SimConfig {
     ReaConfig rea;
     BestposRtkConfig bestpos_rtk;
     MeasurementErrorConfig measurement_error;
+    std::vector<Cn0HighBaselineConfig> cn0_high_dbhz;
     std::uint64_t seed;
 };
 

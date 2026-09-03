@@ -88,9 +88,8 @@ void schedule_existing(gnss_sim::SignalTracker* tracker, const gnss_sim::SimTime
         << error_message;
 }
 
-void acquire_immediately(gnss_sim::SignalTracker* tracker, gnss_sim::SignalId signal_id,
-                         const gnss_sim::SimTime& start, gnss_sim::SignalTrackingModelConfig* config,
-                         bool direct_line_of_sight = true) {
+void acquire_immediately(gnss_sim::SignalTracker* tracker, gnss_sim::SignalId signal_id, const gnss_sim::SimTime& start,
+                         gnss_sim::SignalTrackingModelConfig* config, bool direct_line_of_sight = true) {
     ASSERT_NE(config, nullptr);
     config->acquisition_cn0_persistence_ns = 0;
     schedule(tracker, signal_id, start, gnss_sim::AcquisitionContext::kHot, *config);
@@ -323,8 +322,8 @@ TEST(UrbanSignalTrackingClassification, UsesCommonCn0AndDllResultRatherThanRefle
 
     const gnss_sim::CodeTrackingDllRoot code_biased = root_for(gps_l1, 0.02);
     ASSERT_TRUE(add_ms(start, 3, &current));
-    ASSERT_TRUE(gnss_sim::update_urban_signal_tracker(&tracker, current, input(45.0, 45.0, true, &code_biased, 1), config,
-                                                      &error_message));
+    ASSERT_TRUE(gnss_sim::update_urban_signal_tracker(&tracker, current, input(45.0, 45.0, true, &code_biased, 1),
+                                                      config, &error_message));
     EXPECT_EQ(tracker.urban_state, gnss_sim::UrbanSignalState::kLosMultipath);
 
     ASSERT_TRUE(add_ms(start, 4, &current));

@@ -78,7 +78,8 @@ TEST(SignalCorrelationMetadata, MinimumIssue119SignalsHaveAuthoritativeProfiles)
     EXPECT_DOUBLE_EQ(bds_b1c.code_correlation.primary_subcarrier_rate_hz, 1.023e6);
     EXPECT_DOUBLE_EQ(bds_b1c.code_correlation.secondary_subcarrier_rate_hz, 6.138e6);
     EXPECT_DOUBLE_EQ(bds_b1c.code_correlation.secondary_power_fraction, 4.0 / 33.0);
-    EXPECT_EQ(bds_b1c.code_correlation.secondary_phase, gnss_sim::CompositeSubcarrierPhase::kQuadrature);
+    EXPECT_EQ(bds_b1c.code_correlation.secondary_phase,
+              gnss_sim::CompositeSubcarrierPhase::kNegativeQuadrature);
     EXPECT_EQ(bds_b2a.code_correlation.model, gnss_sim::CodeCorrelationModel::kBpsk);
     EXPECT_DOUBLE_EQ(bds_b2a.code_correlation.chip_rate_hz, 10.23e6);
 }
@@ -128,13 +129,18 @@ TEST(SignalCorrelationMetadata, InvalidProfilesAreRejectedWithoutSilentRepair) {
 
     gnss_sim::CodeCorrelationProfile cboc_wrong_phase{
         gnss_sim::CodeCorrelationModel::kCboc,          1.023e6, 1.023e6, 6.138e6, 1.0 / 11.0,
-        gnss_sim::CompositeSubcarrierPhase::kQuadrature};
+        gnss_sim::CompositeSubcarrierPhase::kPositiveQuadrature};
     EXPECT_FALSE(gnss_sim::validate_code_correlation_profile(cboc_wrong_phase, &error_message));
 
     gnss_sim::CodeCorrelationProfile qmboc_wrong_phase{
         gnss_sim::CodeCorrelationModel::kQmboc,        1.023e6, 1.023e6, 6.138e6, 4.0 / 33.0,
         gnss_sim::CompositeSubcarrierPhase::kAntiPhase};
     EXPECT_FALSE(gnss_sim::validate_code_correlation_profile(qmboc_wrong_phase, &error_message));
+
+    gnss_sim::CodeCorrelationProfile qmboc_positive{
+        gnss_sim::CodeCorrelationModel::kQmboc, 1.023e6, 1.023e6, 6.138e6, 4.0 / 33.0,
+        gnss_sim::CompositeSubcarrierPhase::kPositiveQuadrature};
+    EXPECT_TRUE(gnss_sim::validate_code_correlation_profile(qmboc_positive, &error_message));
 
     gnss_sim::CodeCorrelationProfile nonfinite{gnss_sim::CodeCorrelationModel::kBpsk,
                                                std::numeric_limits<double>::quiet_NaN(),

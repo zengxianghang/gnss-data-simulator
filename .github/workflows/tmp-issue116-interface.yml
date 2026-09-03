@@ -1,0 +1,37 @@
+name: tmp-issue116-interface
+on:
+  push:
+    branches: [issue-116-low-e-rf-model]
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-116-low-e-rf-model
+      - shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/model/urban_rf_model.cpp')
+          s=p.read_text()
+          start=s.find('bool compute_urban_reflected_port_factor(')
+          if start < 0:
+              raise SystemExit(0)
+          end=s.find('\n}\n\n} // namespace gnss_sim', start)
+          if end < 0:
+              raise SystemExit('cannot locate end of reflected port-factor helper')
+          s=s[:start] + s[end+3:]
+          p.write_text(s)
+          PY
+          clang-format -i src/model/urban_rf_model.cpp src/model/urban_rf_model.h
+          git diff --check
+          if git diff --quiet -- src/model/urban_rf_model.cpp src/model/urban_rf_model.h; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/model/urban_rf_model.cpp src/model/urban_rf_model.h
+          git commit -m "Keep RF and antenna phase domains separate"
+          git push origin HEAD:issue-116-low-e-rf-model

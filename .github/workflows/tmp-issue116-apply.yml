@@ -1,0 +1,871 @@
+name: tmp-issue116-apply
+
+on:
+  push:
+    branches:
+      - issue-116-low-e-rf-model
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-116-low-e-rf-model
+      - name: Apply issue 116 implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f src/model/urban_rf_model.cpp ]; then
+            echo "Issue 116 implementation already present"
+            exit 0
+          fi
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected exactly one match in {path}: {old[:80]!r}, got {text.count(old)}")
+              p.write_text(text.replace(old, new, 1))
+
+          Path('src/model/urban_rf_model.h').write_text(r'''#ifndef GNSS_SIM_SRC_MODEL_URBAN_RF_MODEL_H_
+          #define GNSS_SIM_SRC_MODEL_URBAN_RF_MODEL_H_
+
+          #include "gnss/signal_definitions.h"
+          #include "gnss_sim/sim_config.h"
+
+          #include <complex>
+          #include <string>
+
+          namespace gnss_sim {
+
+          enum class UrbanCircularPolarization {
+              kRhcp,
+              kLhcp,
+          };
+
+          struct UrbanRfResolvedConfig {
+              UrbanRfMaterialConfig material;
+              UrbanRfAntennaConfig antenna;
+          };
+
+          struct UrbanRfReflectionResponse {
+              double glass_conductivity_s_per_m;
+              std::complex<double> glass_relative_permittivity;
+              std::complex<double> gamma_te_tangent;
+              std::complex<double> gamma_tm_tangent;
+              std::complex<double> gamma_rhcp_from_rhcp;
+              std::complex<double> gamma_lhcp_from_rhcp;
+          };
+
+          bool validate_urban_rf_material_config(const UrbanRfMaterialConfig& config, std::string* error_message);
+          bool validate_urban_rf_antenna_config(const UrbanRfAntennaConfig& config, std::string* error_message);
+          bool resolve_urban_rf_signal_config(const UrbanRfConfig& config, const SignalDefinition& signal,
+                                              UrbanRfResolvedConfig* resolved, std::string* error_message);
+          bool compute_low_e_curtain_wall_reflection(const UrbanRfMaterialConfig& config, double frequency_hz,
+                                                     double incidence_angle_rad, UrbanRfReflectionResponse* response,
+                                                     std::string* error_message);
+          bool evaluate_urban_antenna_response(const UrbanRfAntennaConfig& config, UrbanCircularPolarization polarization,
+                                               double arrival_elevation_rad, std::complex<double>* voltage_response,
+                                               std::string* error_message);
+          bool compute_urban_reflected_port_factor(const UrbanRfReflectionResponse& reflection,
+                                                   const UrbanRfAntennaConfig& antenna,
+                                                   double arrival_elevation_rad,
+                                                   std::complex<double>* port_factor,
+                                                   std::string* error_message);
+
+          } // namespace gnss_sim
+
+          #endif // GNSS_SIM_SRC_MODEL_URBAN_RF_MODEL_H_
+          ''')
+
+          Path('src/model/urban_rf_model.cpp').write_text(r'''#include "model/urban_rf_model.h"
+
+          #include <cmath>
+          #include <complex>
+
+          namespace gnss_sim {
+          namespace {
+
+          constexpr double kPi = 3.141592653589793238462643383279502884;
+          constexpr double kSpeedOfLightMps = 299792458.0;
+          constexpr double kVacuumPermittivityFpm = 8.8541878128e-12;
+          constexpr double kFreeSpaceImpedanceOhm = 376.730313668;
+          constexpr double kDegreesToRadians = kPi / 180.0;
+          constexpr double kMinimumCosIncidence = 1.0e-12;
+
+          enum class LinearPolarization {
+              kTe,
+              kTm,
+          };
+
+          struct Matrix2 {
+              std::complex<double> a;
+              std::complex<double> b;
+              std::complex<double> c;
+              std::complex<double> d;
+          };
+
+          void set_error(std::string* error_message, const char* message) {
+              if (error_message != nullptr) {
+                  *error_message = message;
+              }
+          }
+
+          bool finite_complex(const std::complex<double>& value) {
+              return std::isfinite(value.real()) && std::isfinite(value.imag());
+          }
+
+          bool finite_positive(double value) {
+              return std::isfinite(value) && value > 0.0;
+          }
+
+          bool finite_nonnegative(double value) {
+              return std::isfinite(value) && value >= 0.0;
+          }
+
+          bool validate_polarization_response(const UrbanRfPolarizationResponseConfig& config) {
+              return std::isfinite(config.gain_db_horizon) && std::isfinite(config.gain_db_zenith) &&
+                     std::isfinite(config.phase_deg_horizon) && std::isfinite(config.phase_deg_zenith);
+          }
+
+          Matrix2 multiply(const Matrix2& left, const Matrix2& right) {
+              return {left.a * right.a + left.b * right.c, left.a * right.b + left.b * right.d,
+                      left.c * right.a + left.d * right.c, left.c * right.b + left.d * right.d};
+          }
+
+          std::complex<double> passive_forward_root(const std::complex<double>& value) {
+              std::complex<double> root = std::sqrt(value);
+              if (root.real() < 0.0 || (std::fabs(root.real()) <= 1.0e-15 && root.imag() > 0.0)) {
+                  root = -root;
+              }
+              return root;
+          }
+
+          bool layer_matrix(const std::complex<double>& relative_permittivity, double sin_incidence_squared,
+                            double thickness_m, double k0_rad_per_m, LinearPolarization polarization, Matrix2* matrix) {
+              if (matrix == nullptr) {
+                  return false;
+              }
+              const std::complex<double> q =
+                  passive_forward_root(relative_permittivity - std::complex<double>(sin_incidence_squared, 0.0));
+              if (!finite_complex(q) || std::abs(q) <= 0.0) {
+                  return false;
+              }
+              const std::complex<double> admittance =
+                  polarization == LinearPolarization::kTe ? q : relative_permittivity / q;
+              if (!finite_complex(admittance) || std::abs(admittance) <= 0.0) {
+                  return false;
+              }
+              const std::complex<double> delta = k0_rad_per_m * thickness_m * q;
+              const std::complex<double> cosine = std::cos(delta);
+              const std::complex<double> sine = std::sin(delta);
+              const std::complex<double> j(0.0, 1.0);
+              const Matrix2 result{cosine, j * sine / admittance, j * admittance * sine, cosine};
+              if (!finite_complex(result.a) || !finite_complex(result.b) || !finite_complex(result.c) ||
+                  !finite_complex(result.d)) {
+                  return false;
+              }
+              *matrix = result;
+              return true;
+          }
+
+          bool reflection_for_polarization(const UrbanRfMaterialConfig& config,
+                                           const std::complex<double>& glass_relative_permittivity,
+                                           double frequency_hz, double incidence_angle_rad,
+                                           LinearPolarization polarization, std::complex<double>* reflection) {
+              const double cosine_incidence = std::cos(incidence_angle_rad);
+              if (reflection == nullptr || !std::isfinite(cosine_incidence) || cosine_incidence <= kMinimumCosIncidence) {
+                  return false;
+              }
+              const double sin_incidence = std::sin(incidence_angle_rad);
+              const double sin_incidence_squared = sin_incidence * sin_incidence;
+              const double k0_rad_per_m = 2.0 * kPi * frequency_hz / kSpeedOfLightMps;
+
+              Matrix2 outer_glass{};
+              Matrix2 cavity{};
+              Matrix2 inner_glass{};
+              if (!layer_matrix(glass_relative_permittivity, sin_incidence_squared, config.outer_glass_thickness_m,
+                                k0_rad_per_m, polarization, &outer_glass) ||
+                  !layer_matrix({1.0, 0.0}, sin_incidence_squared, config.cavity_thickness_m, k0_rad_per_m,
+                                polarization, &cavity) ||
+                  !layer_matrix(glass_relative_permittivity, sin_incidence_squared, config.inner_glass_thickness_m,
+                                k0_rad_per_m, polarization, &inner_glass)) {
+                  return false;
+              }
+
+              const Matrix2 sheet{{1.0, 0.0}, {0.0, 0.0},
+                                  {kFreeSpaceImpedanceOhm / config.coating_sheet_resistance_ohm_sq, 0.0}, {1.0, 0.0}};
+              const Matrix2 stack = multiply(multiply(multiply(outer_glass, sheet), cavity), inner_glass);
+              const std::complex<double> q_air(cosine_incidence, 0.0);
+              const std::complex<double> air_admittance =
+                  polarization == LinearPolarization::kTe ? q_air : std::complex<double>(1.0, 0.0) / q_air;
+              const std::complex<double> denominator = stack.a + stack.b * air_admittance;
+              if (!finite_complex(denominator) || std::abs(denominator) <= 0.0) {
+                  return false;
+              }
+              const std::complex<double> input_admittance =
+                  (stack.c + stack.d * air_admittance) / denominator;
+              const std::complex<double> reflection_denominator = air_admittance + input_admittance;
+              if (!finite_complex(input_admittance) || !finite_complex(reflection_denominator) ||
+                  std::abs(reflection_denominator) <= 0.0) {
+                  return false;
+              }
+              const std::complex<double> result =
+                  (air_admittance - input_admittance) / reflection_denominator;
+              if (!finite_complex(result)) {
+                  return false;
+              }
+              *reflection = result;
+              return true;
+          }
+
+          const UrbanRfPolarizationResponseConfig& polarization_config(const UrbanRfAntennaConfig& config,
+                                                                       UrbanCircularPolarization polarization) {
+              return polarization == UrbanCircularPolarization::kRhcp ? config.rhcp : config.lhcp;
+          }
+
+          } // namespace
+
+          bool validate_urban_rf_material_config(const UrbanRfMaterialConfig& config, std::string* error_message) {
+              if (!finite_positive(config.relative_permittivity_real) ||
+                  !finite_nonnegative(config.conductivity_c_s_per_m) ||
+                  !finite_nonnegative(config.conductivity_exponent) || !finite_positive(config.outer_glass_thickness_m) ||
+                  !finite_positive(config.cavity_thickness_m) || !finite_positive(config.inner_glass_thickness_m) ||
+                  !finite_positive(config.coating_sheet_resistance_ohm_sq)) {
+                  set_error(error_message, "urban RF material configuration is invalid");
+                  return false;
+              }
+              return true;
+          }
+
+          bool validate_urban_rf_antenna_config(const UrbanRfAntennaConfig& config, std::string* error_message) {
+              if (!validate_polarization_response(config.rhcp) || !validate_polarization_response(config.lhcp)) {
+                  set_error(error_message, "urban RF antenna configuration is invalid");
+                  return false;
+              }
+              return true;
+          }
+
+          bool resolve_urban_rf_signal_config(const UrbanRfConfig& config, const SignalDefinition& signal,
+                                              UrbanRfResolvedConfig* resolved, std::string* error_message) {
+              if (resolved == nullptr || signal.name == nullptr ||
+                  !validate_urban_rf_material_config(config.default_material, error_message) ||
+                  !validate_urban_rf_antenna_config(config.default_antenna, error_message)) {
+                  if (resolved == nullptr) {
+                      set_error(error_message, "urban RF resolved configuration output is null");
+                  }
+                  return false;
+              }
+
+              UrbanRfResolvedConfig result{config.default_material, config.default_antenna};
+              for (const UrbanRfSignalOverrideConfig& override_config : config.signal_overrides) {
+                  if (override_config.signal_name == signal.name) {
+                      result.material = override_config.material;
+                      result.antenna = override_config.antenna;
+                      break;
+                  }
+              }
+              if (!validate_urban_rf_material_config(result.material, error_message) ||
+                  !validate_urban_rf_antenna_config(result.antenna, error_message)) {
+                  return false;
+              }
+              *resolved = result;
+              return true;
+          }
+
+          bool compute_low_e_curtain_wall_reflection(const UrbanRfMaterialConfig& config, double frequency_hz,
+                                                     double incidence_angle_rad, UrbanRfReflectionResponse* response,
+                                                     std::string* error_message) {
+              if (response == nullptr || !validate_urban_rf_material_config(config, error_message) ||
+                  !finite_positive(frequency_hz) || !std::isfinite(incidence_angle_rad) || incidence_angle_rad < 0.0 ||
+                  incidence_angle_rad >= 0.5 * kPi) {
+                  if (response == nullptr) {
+                      set_error(error_message, "urban RF reflection output is null");
+                  } else if (!finite_positive(frequency_hz)) {
+                      set_error(error_message, "urban RF carrier frequency must be finite and positive");
+                  } else if (!std::isfinite(incidence_angle_rad) || incidence_angle_rad < 0.0 ||
+                             incidence_angle_rad >= 0.5 * kPi) {
+                      set_error(error_message, "urban RF incidence angle must be within [0, pi/2)");
+                  }
+                  return false;
+              }
+
+              const double frequency_ghz = frequency_hz / 1.0e9;
+              const double conductivity =
+                  config.conductivity_c_s_per_m * std::pow(frequency_ghz, config.conductivity_exponent);
+              if (!finite_nonnegative(conductivity)) {
+                  set_error(error_message, "urban RF glass conductivity calculation failed");
+                  return false;
+              }
+              const double omega = 2.0 * kPi * frequency_hz;
+              const std::complex<double> relative_permittivity(
+                  config.relative_permittivity_real, -conductivity / (omega * kVacuumPermittivityFpm));
+              if (!finite_complex(relative_permittivity)) {
+                  set_error(error_message, "urban RF complex glass permittivity calculation failed");
+                  return false;
+              }
+
+              UrbanRfReflectionResponse result{};
+              result.glass_conductivity_s_per_m = conductivity;
+              result.glass_relative_permittivity = relative_permittivity;
+              if (!reflection_for_polarization(config, relative_permittivity, frequency_hz, incidence_angle_rad,
+                                               LinearPolarization::kTe, &result.gamma_te_tangent) ||
+                  !reflection_for_polarization(config, relative_permittivity, frequency_hz, incidence_angle_rad,
+                                               LinearPolarization::kTm, &result.gamma_tm_tangent)) {
+                  set_error(error_message, "urban RF multilayer reflection calculation failed");
+                  return false;
+              }
+
+              const std::complex<double> gamma_p_basis = -result.gamma_tm_tangent;
+              result.gamma_rhcp_from_rhcp = 0.5 * (result.gamma_te_tangent + gamma_p_basis);
+              result.gamma_lhcp_from_rhcp = 0.5 * (result.gamma_te_tangent - gamma_p_basis);
+              if (!finite_complex(result.gamma_rhcp_from_rhcp) || !finite_complex(result.gamma_lhcp_from_rhcp)) {
+                  set_error(error_message, "urban RF circular-polarization projection failed");
+                  return false;
+              }
+              *response = result;
+              return true;
+          }
+
+          bool evaluate_urban_antenna_response(const UrbanRfAntennaConfig& config, UrbanCircularPolarization polarization,
+                                               double arrival_elevation_rad, std::complex<double>* voltage_response,
+                                               std::string* error_message) {
+              if (voltage_response == nullptr || !validate_urban_rf_antenna_config(config, error_message) ||
+                  !std::isfinite(arrival_elevation_rad) || arrival_elevation_rad < 0.0 ||
+                  arrival_elevation_rad > 0.5 * kPi) {
+                  if (voltage_response == nullptr) {
+                      set_error(error_message, "urban RF antenna response output is null");
+                  } else if (!std::isfinite(arrival_elevation_rad) || arrival_elevation_rad < 0.0 ||
+                             arrival_elevation_rad > 0.5 * kPi) {
+                      set_error(error_message, "urban RF arrival elevation must be within [0, pi/2]");
+                  }
+                  return false;
+              }
+
+              const UrbanRfPolarizationResponseConfig& selected = polarization_config(config, polarization);
+              const double fraction = arrival_elevation_rad / (0.5 * kPi);
+              const double gain_db =
+                  selected.gain_db_horizon + fraction * (selected.gain_db_zenith - selected.gain_db_horizon);
+              const double phase_deg =
+                  selected.phase_deg_horizon + fraction * (selected.phase_deg_zenith - selected.phase_deg_horizon);
+              const double amplitude = std::pow(10.0, gain_db / 20.0);
+              const std::complex<double> result = std::polar(amplitude, phase_deg * kDegreesToRadians);
+              if (!finite_complex(result)) {
+                  set_error(error_message, "urban RF antenna interpolation failed");
+                  return false;
+              }
+              *voltage_response = result;
+              return true;
+          }
+
+          bool compute_urban_reflected_port_factor(const UrbanRfReflectionResponse& reflection,
+                                                   const UrbanRfAntennaConfig& antenna, double arrival_elevation_rad,
+                                                   std::complex<double>* port_factor, std::string* error_message) {
+              if (port_factor == nullptr || !finite_complex(reflection.gamma_rhcp_from_rhcp) ||
+                  !finite_complex(reflection.gamma_lhcp_from_rhcp)) {
+                  set_error(error_message, "urban RF reflected port-factor request is invalid");
+                  return false;
+              }
+              std::complex<double> rhcp_response{};
+              std::complex<double> lhcp_response{};
+              if (!evaluate_urban_antenna_response(antenna, UrbanCircularPolarization::kRhcp, arrival_elevation_rad,
+                                                   &rhcp_response, error_message) ||
+                  !evaluate_urban_antenna_response(antenna, UrbanCircularPolarization::kLhcp, arrival_elevation_rad,
+                                                   &lhcp_response, error_message)) {
+                  return false;
+              }
+              const std::complex<double> result =
+                  reflection.gamma_rhcp_from_rhcp * rhcp_response + reflection.gamma_lhcp_from_rhcp * lhcp_response;
+              if (!finite_complex(result)) {
+                  set_error(error_message, "urban RF reflected port-factor calculation failed");
+                  return false;
+              }
+              *port_factor = result;
+              return true;
+          }
+
+          } // namespace gnss_sim
+          ''')
+
+          Path('tests/unit/test_urban_rf_model.cpp').write_text(r'''#include "gnss/signal_definitions.h"
+          #include "gnss_sim/sim_config.h"
+          #include "model/urban_rf_model.h"
+
+          #include <cstdio>
+          #include <fstream>
+          #include <gtest/gtest.h>
+          #include <cmath>
+          #include <complex>
+          #include <string>
+
+          namespace {
+
+          constexpr double kPi = 3.141592653589793238462643383279502884;
+          constexpr double kDegreesToRadians = kPi / 180.0;
+          constexpr const char* kConfigPath = "gnss_sim_urban_rf_test.json";
+
+          struct ConfigFileGuard {
+              ~ConfigFileGuard() {
+                  static_cast<void>(std::remove(kConfigPath));
+              }
+          };
+
+          void write_config(const char* text) {
+              std::ofstream output(kConfigPath, std::ios::binary | std::ios::trunc);
+              output << text;
+          }
+
+          double complex_distance(const std::complex<double>& left, const std::complex<double>& right) {
+              return std::abs(left - right);
+          }
+
+          TEST(UrbanRfModel, FrozenDefaultPresetMatchesIssue116) {
+              const gnss_sim::SimConfig config = gnss_sim::default_sim_config();
+              EXPECT_DOUBLE_EQ(config.urban_rf.default_material.relative_permittivity_real, 6.27);
+              EXPECT_DOUBLE_EQ(config.urban_rf.default_material.conductivity_c_s_per_m, 0.0043);
+              EXPECT_DOUBLE_EQ(config.urban_rf.default_material.conductivity_exponent, 1.1925);
+              EXPECT_DOUBLE_EQ(config.urban_rf.default_material.outer_glass_thickness_m, 0.006);
+              EXPECT_DOUBLE_EQ(config.urban_rf.default_material.cavity_thickness_m, 0.012);
+              EXPECT_DOUBLE_EQ(config.urban_rf.default_material.inner_glass_thickness_m, 0.006);
+              EXPECT_DOUBLE_EQ(config.urban_rf.default_material.coating_sheet_resistance_ohm_sq, 5.0);
+              EXPECT_TRUE(config.urban_rf.signal_overrides.empty());
+              EXPECT_DOUBLE_EQ(config.urban_rf.default_antenna.rhcp.gain_db_horizon, 0.0);
+              EXPECT_DOUBLE_EQ(config.urban_rf.default_antenna.lhcp.gain_db_zenith, 0.0);
+          }
+
+          TEST(UrbanRfModel, NormalIncidenceHasEqualTangentialTeTmAndReversesHandedness) {
+              const gnss_sim::UrbanRfMaterialConfig material = gnss_sim::default_sim_config().urban_rf.default_material;
+              gnss_sim::UrbanRfReflectionResponse response{};
+              std::string error_message;
+              ASSERT_TRUE(gnss_sim::compute_low_e_curtain_wall_reflection(material, 1575.42e6, 0.0, &response,
+                                                                          &error_message))
+                  << error_message;
+              EXPECT_LT(complex_distance(response.gamma_te_tangent, response.gamma_tm_tangent), 1.0e-12);
+              EXPECT_LT(std::abs(response.gamma_rhcp_from_rhcp), 1.0e-12);
+              EXPECT_GT(std::abs(response.gamma_lhcp_from_rhcp), 0.90);
+              EXPECT_LT(std::abs(response.gamma_lhcp_from_rhcp), 1.0 + 1.0e-12);
+              EXPECT_LT(response.glass_relative_permittivity.imag(), 0.0);
+              EXPECT_GT(response.glass_conductivity_s_per_m, 0.0);
+          }
+
+          TEST(UrbanRfModel, FrequencyAngleThicknessAndSheetResistanceChangeComplexResponse) {
+              const gnss_sim::UrbanRfMaterialConfig baseline = gnss_sim::default_sim_config().urban_rf.default_material;
+              std::string error_message;
+              gnss_sim::UrbanRfReflectionResponse l1_normal{};
+              gnss_sim::UrbanRfReflectionResponse l5_normal{};
+              gnss_sim::UrbanRfReflectionResponse l1_grazing{};
+              ASSERT_TRUE(gnss_sim::compute_low_e_curtain_wall_reflection(baseline, 1575.42e6, 0.0, &l1_normal,
+                                                                          &error_message));
+              ASSERT_TRUE(gnss_sim::compute_low_e_curtain_wall_reflection(baseline, 1176.45e6, 0.0, &l5_normal,
+                                                                          &error_message));
+              ASSERT_TRUE(gnss_sim::compute_low_e_curtain_wall_reflection(
+                  baseline, 1575.42e6, 85.0 * kDegreesToRadians, &l1_grazing, &error_message));
+              EXPECT_GT(complex_distance(l1_normal.gamma_te_tangent, l5_normal.gamma_te_tangent), 1.0e-3);
+              EXPECT_GT(std::abs(l1_grazing.gamma_te_tangent), std::abs(l1_normal.gamma_te_tangent));
+              EXPECT_GT(std::fabs(std::arg(l1_normal.gamma_te_tangent)), 0.1);
+
+              gnss_sim::UrbanRfMaterialConfig thicker = baseline;
+              thicker.outer_glass_thickness_m = 0.008;
+              gnss_sim::UrbanRfReflectionResponse thick_response{};
+              ASSERT_TRUE(gnss_sim::compute_low_e_curtain_wall_reflection(thicker, 1575.42e6,
+                                                                          30.0 * kDegreesToRadians, &thick_response,
+                                                                          &error_message));
+              gnss_sim::UrbanRfReflectionResponse baseline_oblique{};
+              ASSERT_TRUE(gnss_sim::compute_low_e_curtain_wall_reflection(baseline, 1575.42e6,
+                                                                          30.0 * kDegreesToRadians,
+                                                                          &baseline_oblique, &error_message));
+              EXPECT_GT(complex_distance(thick_response.gamma_te_tangent, baseline_oblique.gamma_te_tangent), 1.0e-4);
+
+              gnss_sim::UrbanRfMaterialConfig different_sheet = baseline;
+              different_sheet.coating_sheet_resistance_ohm_sq = 12.0;
+              gnss_sim::UrbanRfReflectionResponse sheet_response{};
+              ASSERT_TRUE(gnss_sim::compute_low_e_curtain_wall_reflection(different_sheet, 1575.42e6,
+                                                                          30.0 * kDegreesToRadians, &sheet_response,
+                                                                          &error_message));
+              EXPECT_GT(complex_distance(sheet_response.gamma_te_tangent, baseline_oblique.gamma_te_tangent), 1.0e-3);
+          }
+
+          TEST(UrbanRfModel, AntennaInterpolatesComplexVoltageResponse) {
+              gnss_sim::UrbanRfAntennaConfig antenna{};
+              antenna.rhcp = {-20.0, 0.0, 0.0, 90.0};
+              antenna.lhcp = {-30.0, -10.0, -90.0, 0.0};
+              std::complex<double> response{};
+              std::string error_message;
+              ASSERT_TRUE(gnss_sim::evaluate_urban_antenna_response(antenna, gnss_sim::UrbanCircularPolarization::kRhcp,
+                                                                    45.0 * kDegreesToRadians, &response,
+                                                                    &error_message))
+                  << error_message;
+              EXPECT_NEAR(std::abs(response), std::pow(10.0, -10.0 / 20.0), 1.0e-12);
+              EXPECT_NEAR(std::arg(response), 45.0 * kDegreesToRadians, 1.0e-12);
+          }
+
+          TEST(UrbanRfModel, JsonPerSignalOverrideStartsFromDefaultAndOnlyChangesNamedSignal) {
+              ConfigFileGuard guard;
+              write_config(R"json({
+                  "urban_rf": {
+                      "material": {"coating_sheet_resistance_ohm_sq": 6.0},
+                      "antenna": {"rhcp": {"gain_db_zenith": 1.0}},
+                      "signals": {
+                          "GPS L1 C/A": {
+                              "material": {"coating_sheet_resistance_ohm_sq": 9.0},
+                              "antenna": {"rhcp": {"gain_db_zenith": 3.0}}
+                          }
+                      }
+                  }
+              })json");
+              gnss_sim::SimConfig config{};
+              std::string error_message;
+              ASSERT_TRUE(gnss_sim::load_sim_config_json(kConfigPath, &config, &error_message)) << error_message;
+              EXPECT_DOUBLE_EQ(config.urban_rf.default_material.coating_sheet_resistance_ohm_sq, 6.0);
+              EXPECT_DOUBLE_EQ(config.urban_rf.default_antenna.rhcp.gain_db_zenith, 1.0);
+              ASSERT_EQ(config.urban_rf.signal_overrides.size(), 1U);
+
+              const gnss_sim::SignalDefinition* gps = gnss_sim::find_signal_definition(gnss_sim::SignalId::kGpsL1Ca);
+              const gnss_sim::SignalDefinition* gal = gnss_sim::find_signal_definition(gnss_sim::SignalId::kGalileoE1);
+              ASSERT_NE(gps, nullptr);
+              ASSERT_NE(gal, nullptr);
+              gnss_sim::UrbanRfResolvedConfig gps_config{};
+              gnss_sim::UrbanRfResolvedConfig gal_config{};
+              ASSERT_TRUE(gnss_sim::resolve_urban_rf_signal_config(config.urban_rf, *gps, &gps_config, &error_message));
+              ASSERT_TRUE(gnss_sim::resolve_urban_rf_signal_config(config.urban_rf, *gal, &gal_config, &error_message));
+              EXPECT_DOUBLE_EQ(gps_config.material.coating_sheet_resistance_ohm_sq, 9.0);
+              EXPECT_DOUBLE_EQ(gps_config.antenna.rhcp.gain_db_zenith, 3.0);
+              EXPECT_DOUBLE_EQ(gal_config.material.coating_sheet_resistance_ohm_sq, 6.0);
+              EXPECT_DOUBLE_EQ(gal_config.antenna.rhcp.gain_db_zenith, 1.0);
+          }
+
+          TEST(UrbanRfModel, RejectsUnknownSignalAndNonphysicalParameters) {
+              ConfigFileGuard guard;
+              const char* cases[] = {
+                  R"json({"urban_rf":{"material":{"coating_sheet_resistance_ohm_sq":0}}})json",
+                  R"json({"urban_rf":{"material":{"outer_glass_thickness_m":-0.01}}})json",
+                  R"json({"urban_rf":{"signals":{"GPS L9":{"material":{"coating_sheet_resistance_ohm_sq":5}}}}})json",
+              };
+              for (const char* text : cases) {
+                  write_config(text);
+                  gnss_sim::SimConfig config{};
+                  std::string error_message;
+                  EXPECT_FALSE(gnss_sim::load_sim_config_json(kConfigPath, &config, &error_message));
+                  EXPECT_NE(error_message.find("urban_rf"), std::string::npos) << error_message;
+              }
+
+              gnss_sim::UrbanRfReflectionResponse response{};
+              std::string error_message;
+              const gnss_sim::UrbanRfMaterialConfig material = gnss_sim::default_sim_config().urban_rf.default_material;
+              EXPECT_FALSE(gnss_sim::compute_low_e_curtain_wall_reflection(material, 0.0, 0.0, &response,
+                                                                           &error_message));
+              EXPECT_FALSE(gnss_sim::compute_low_e_curtain_wall_reflection(material, 1575.42e6, 0.5 * kPi, &response,
+                                                                           &error_message));
+          }
+
+          TEST(UrbanRfModel, SameInputIsNumericallyDeterministic) {
+              const gnss_sim::UrbanRfMaterialConfig material = gnss_sim::default_sim_config().urban_rf.default_material;
+              gnss_sim::UrbanRfReflectionResponse first{};
+              gnss_sim::UrbanRfReflectionResponse second{};
+              std::string error_message;
+              ASSERT_TRUE(gnss_sim::compute_low_e_curtain_wall_reflection(material, 1575.42e6,
+                                                                          37.0 * kDegreesToRadians, &first,
+                                                                          &error_message));
+              ASSERT_TRUE(gnss_sim::compute_low_e_curtain_wall_reflection(material, 1575.42e6,
+                                                                          37.0 * kDegreesToRadians, &second,
+                                                                          &error_message));
+              EXPECT_EQ(first.glass_conductivity_s_per_m, second.glass_conductivity_s_per_m);
+              EXPECT_EQ(first.glass_relative_permittivity, second.glass_relative_permittivity);
+              EXPECT_EQ(first.gamma_te_tangent, second.gamma_te_tangent);
+              EXPECT_EQ(first.gamma_tm_tangent, second.gamma_tm_tangent);
+              EXPECT_EQ(first.gamma_rhcp_from_rhcp, second.gamma_rhcp_from_rhcp);
+              EXPECT_EQ(first.gamma_lhcp_from_rhcp, second.gamma_lhcp_from_rhcp);
+          }
+
+          } // namespace
+          ''')
+
+          replace_once('include/gnss_sim/sim_config.h', '''struct MeasurementErrorConfig {
+              double psr_sigma_m;
+              double doppler_sigma_mps;
+              double adr_sigma_m;
+              double cn0_sigma_dbhz;
+              double psr_correlation_tau_sec;
+              MeasurementTransientErrorConfig ttff_hot;
+              MeasurementTransientErrorConfig ttff_warm;
+              MeasurementTransientErrorConfig ttff_cold;
+              MeasurementTransientErrorConfig rea_reacquisition;
+              MeasurementFadeErrorConfig rea_fade;
+          };
+
+          // Receiver/antenna-specific absolute high-elevation C/N0 calibration.''', '''struct MeasurementErrorConfig {
+              double psr_sigma_m;
+              double doppler_sigma_mps;
+              double adr_sigma_m;
+              double cn0_sigma_dbhz;
+              double psr_correlation_tau_sec;
+              MeasurementTransientErrorConfig ttff_hot;
+              MeasurementTransientErrorConfig ttff_warm;
+              MeasurementTransientErrorConfig ttff_cold;
+              MeasurementTransientErrorConfig rea_reacquisition;
+              MeasurementFadeErrorConfig rea_fade;
+          };
+
+          struct UrbanRfMaterialConfig {
+              double relative_permittivity_real;
+              double conductivity_c_s_per_m;
+              double conductivity_exponent;
+              double outer_glass_thickness_m;
+              double cavity_thickness_m;
+              double inner_glass_thickness_m;
+              double coating_sheet_resistance_ohm_sq;
+          };
+
+          struct UrbanRfPolarizationResponseConfig {
+              double gain_db_horizon;
+              double gain_db_zenith;
+              double phase_deg_horizon;
+              double phase_deg_zenith;
+          };
+
+          struct UrbanRfAntennaConfig {
+              UrbanRfPolarizationResponseConfig rhcp;
+              UrbanRfPolarizationResponseConfig lhcp;
+          };
+
+          struct UrbanRfSignalOverrideConfig {
+              std::string signal_name;
+              UrbanRfMaterialConfig material;
+              UrbanRfAntennaConfig antenna;
+          };
+
+          struct UrbanRfConfig {
+              UrbanRfMaterialConfig default_material;
+              UrbanRfAntennaConfig default_antenna;
+              std::vector<UrbanRfSignalOverrideConfig> signal_overrides;
+          };
+
+          // Receiver/antenna-specific absolute high-elevation C/N0 calibration.''')
+
+          replace_once('include/gnss_sim/sim_config.h', '''    MeasurementErrorConfig measurement_error;
+              std::vector<Cn0HighBaselineConfig> cn0_high_dbhz;''', '''    MeasurementErrorConfig measurement_error;
+              UrbanRfConfig urban_rf;
+              std::vector<Cn0HighBaselineConfig> cn0_high_dbhz;''')
+
+          parser_code = r'''
+          bool parse_urban_rf_material(const cJSON* object, const char* section_name, UrbanRfMaterialConfig* config,
+                                       std::string* error_message) {
+              if (object == nullptr) {
+                  return true;
+              }
+              const char* const allowed_keys[] = {"relative_permittivity_real",
+                                                  "conductivity_c_s_per_m",
+                                                  "conductivity_exponent",
+                                                  "outer_glass_thickness_m",
+                                                  "cavity_thickness_m",
+                                                  "inner_glass_thickness_m",
+                                                  "coating_sheet_resistance_ohm_sq"};
+              if (!validate_object_keys(object, section_name, allowed_keys, 7U, error_message)) {
+                  return false;
+              }
+              return read_optional_number(object, "relative_permittivity_real", &config->relative_permittivity_real,
+                                          error_message) &&
+                     read_optional_number(object, "conductivity_c_s_per_m", &config->conductivity_c_s_per_m,
+                                          error_message) &&
+                     read_optional_number(object, "conductivity_exponent", &config->conductivity_exponent,
+                                          error_message) &&
+                     read_optional_number(object, "outer_glass_thickness_m", &config->outer_glass_thickness_m,
+                                          error_message) &&
+                     read_optional_number(object, "cavity_thickness_m", &config->cavity_thickness_m, error_message) &&
+                     read_optional_number(object, "inner_glass_thickness_m", &config->inner_glass_thickness_m,
+                                          error_message) &&
+                     read_optional_number(object, "coating_sheet_resistance_ohm_sq",
+                                          &config->coating_sheet_resistance_ohm_sq, error_message);
+          }
+
+          bool parse_urban_rf_polarization(const cJSON* object, const char* section_name,
+                                           UrbanRfPolarizationResponseConfig* config, std::string* error_message) {
+              if (object == nullptr) {
+                  return true;
+              }
+              const char* const allowed_keys[] = {"gain_db_horizon", "gain_db_zenith", "phase_deg_horizon",
+                                                  "phase_deg_zenith"};
+              if (!validate_object_keys(object, section_name, allowed_keys, 4U, error_message)) {
+                  return false;
+              }
+              return read_optional_number(object, "gain_db_horizon", &config->gain_db_horizon, error_message) &&
+                     read_optional_number(object, "gain_db_zenith", &config->gain_db_zenith, error_message) &&
+                     read_optional_number(object, "phase_deg_horizon", &config->phase_deg_horizon, error_message) &&
+                     read_optional_number(object, "phase_deg_zenith", &config->phase_deg_zenith, error_message);
+          }
+
+          bool parse_urban_rf_antenna(const cJSON* object, const char* section_name, UrbanRfAntennaConfig* config,
+                                      std::string* error_message) {
+              if (object == nullptr) {
+                  return true;
+              }
+              const char* const allowed_keys[] = {"rhcp", "lhcp"};
+              if (!validate_object_keys(object, section_name, allowed_keys, 2U, error_message)) {
+                  return false;
+              }
+              const cJSON* rhcp = cJSON_GetObjectItemCaseSensitive(object, "rhcp");
+              const cJSON* lhcp = cJSON_GetObjectItemCaseSensitive(object, "lhcp");
+              const std::string rhcp_name = std::string(section_name) + ".rhcp";
+              const std::string lhcp_name = std::string(section_name) + ".lhcp";
+              return parse_urban_rf_polarization(rhcp, rhcp_name.c_str(), &config->rhcp, error_message) &&
+                     parse_urban_rf_polarization(lhcp, lhcp_name.c_str(), &config->lhcp, error_message);
+          }
+
+          bool parse_urban_rf(const cJSON* root, SimConfig* config, std::string* error_message) {
+              const cJSON* object = cJSON_GetObjectItemCaseSensitive(root, "urban_rf");
+              if (object == nullptr) {
+                  return true;
+              }
+              const char* const allowed_keys[] = {"material", "antenna", "signals"};
+              if (!validate_object_keys(object, "urban_rf", allowed_keys, 3U, error_message)) {
+                  return false;
+              }
+              if (!parse_urban_rf_material(cJSON_GetObjectItemCaseSensitive(object, "material"), "urban_rf.material",
+                                           &config->urban_rf.default_material, error_message) ||
+                  !parse_urban_rf_antenna(cJSON_GetObjectItemCaseSensitive(object, "antenna"), "urban_rf.antenna",
+                                          &config->urban_rf.default_antenna, error_message)) {
+                  return false;
+              }
+
+              const cJSON* signals = cJSON_GetObjectItemCaseSensitive(object, "signals");
+              if (signals == nullptr) {
+                  return true;
+              }
+              if (!cJSON_IsObject(signals)) {
+                  set_error(error_message, "urban_rf.signals must be an object keyed by central signal name");
+                  return false;
+              }
+              config->urban_rf.signal_overrides.clear();
+              for (const cJSON* item = signals->child; item != nullptr; item = item->next) {
+                  if (item->string == nullptr || find_signal_definition_by_name(item->string) == nullptr) {
+                      set_error(error_message, std::string("urban_rf.signals contains unknown central signal name: ") +
+                                                   (item->string == nullptr ? "<null>" : item->string));
+                      return false;
+                  }
+                  if (!cJSON_IsObject(item)) {
+                      set_error(error_message, std::string("urban_rf.signals entry must be an object: ") + item->string);
+                      return false;
+                  }
+                  for (const UrbanRfSignalOverrideConfig& previous : config->urban_rf.signal_overrides) {
+                      if (previous.signal_name == item->string) {
+                          set_error(error_message, std::string("duplicate urban_rf signal override: ") + item->string);
+                          return false;
+                      }
+                  }
+                  const char* const signal_allowed_keys[] = {"material", "antenna"};
+                  const std::string signal_section = std::string("urban_rf.signals.") + item->string;
+                  if (!validate_object_keys(item, signal_section.c_str(), signal_allowed_keys, 2U, error_message)) {
+                      return false;
+                  }
+                  UrbanRfSignalOverrideConfig override_config{};
+                  override_config.signal_name = item->string;
+                  override_config.material = config->urban_rf.default_material;
+                  override_config.antenna = config->urban_rf.default_antenna;
+                  const std::string material_section = signal_section + ".material";
+                  const std::string antenna_section = signal_section + ".antenna";
+                  if (!parse_urban_rf_material(cJSON_GetObjectItemCaseSensitive(item, "material"),
+                                               material_section.c_str(), &override_config.material, error_message) ||
+                      !parse_urban_rf_antenna(cJSON_GetObjectItemCaseSensitive(item, "antenna"),
+                                              antenna_section.c_str(), &override_config.antenna, error_message)) {
+                      return false;
+                  }
+                  config->urban_rf.signal_overrides.push_back(override_config);
+              }
+              return true;
+          }
+
+          '''
+          replace_once('src/core/sim_config.cpp', 'bool parse_cn0_high_dbhz(const cJSON* root, SimConfig* config, std::string* error_message) {', parser_code + 'bool parse_cn0_high_dbhz(const cJSON* root, SimConfig* config, std::string* error_message) {')
+
+          validation_code = r'''
+          bool valid_urban_rf_material(const UrbanRfMaterialConfig& config) {
+              return std::isfinite(config.relative_permittivity_real) && config.relative_permittivity_real > 0.0 &&
+                     finite_nonnegative(config.conductivity_c_s_per_m) && finite_nonnegative(config.conductivity_exponent) &&
+                     std::isfinite(config.outer_glass_thickness_m) && config.outer_glass_thickness_m > 0.0 &&
+                     std::isfinite(config.cavity_thickness_m) && config.cavity_thickness_m > 0.0 &&
+                     std::isfinite(config.inner_glass_thickness_m) && config.inner_glass_thickness_m > 0.0 &&
+                     std::isfinite(config.coating_sheet_resistance_ohm_sq) &&
+                     config.coating_sheet_resistance_ohm_sq > 0.0;
+          }
+
+          bool valid_urban_rf_polarization(const UrbanRfPolarizationResponseConfig& config) {
+              return std::isfinite(config.gain_db_horizon) && std::isfinite(config.gain_db_zenith) &&
+                     std::isfinite(config.phase_deg_horizon) && std::isfinite(config.phase_deg_zenith);
+          }
+
+          bool valid_urban_rf_antenna(const UrbanRfAntennaConfig& config) {
+              return valid_urban_rf_polarization(config.rhcp) && valid_urban_rf_polarization(config.lhcp);
+          }
+
+          bool valid_urban_rf_config(const UrbanRfConfig& config) {
+              if (!valid_urban_rf_material(config.default_material) || !valid_urban_rf_antenna(config.default_antenna)) {
+                  return false;
+              }
+              for (std::size_t index = 0; index < config.signal_overrides.size(); ++index) {
+                  const UrbanRfSignalOverrideConfig& override_config = config.signal_overrides[index];
+                  if (find_signal_definition_by_name(override_config.signal_name.c_str()) == nullptr ||
+                      !valid_urban_rf_material(override_config.material) || !valid_urban_rf_antenna(override_config.antenna)) {
+                      return false;
+                  }
+                  for (std::size_t previous = 0; previous < index; ++previous) {
+                      if (config.signal_overrides[previous].signal_name == override_config.signal_name) {
+                          return false;
+                      }
+                  }
+              }
+              return true;
+          }
+
+          '''
+          replace_once('src/core/sim_config.cpp', 'bool valid_cn0_high_baselines(const std::vector<Cn0HighBaselineConfig>& baselines) {', validation_code + 'bool valid_cn0_high_baselines(const std::vector<Cn0HighBaselineConfig>& baselines) {')
+
+          replace_once('src/core/sim_config.cpp', '''                                {0.25, 0.80, 0.20, 4.5}};
+              config.seed = 1U;''', '''                                {0.25, 0.80, 0.20, 4.5}};
+              config.urban_rf.default_material = {6.27, 0.0043, 1.1925, 0.006, 0.012, 0.006, 5.0};
+              config.urban_rf.default_antenna = {{0.0, 0.0, 0.0, 0.0}, {0.0, 0.0, 0.0, 0.0}};
+              config.seed = 1U;''')
+
+          replace_once('src/core/sim_config.cpp', '''    if (!valid_cn0_high_baselines(config.cn0_high_dbhz)) {
+                  set_error(error_message, "cn0_high_dbhz configuration is invalid");
+                  return false;
+              }''', '''    if (!valid_urban_rf_config(config.urban_rf)) {
+                  set_error(error_message, "urban_rf configuration is invalid");
+                  return false;
+              }
+              if (!valid_cn0_high_baselines(config.cn0_high_dbhz)) {
+                  set_error(error_message, "cn0_high_dbhz configuration is invalid");
+                  return false;
+              }''')
+
+          replace_once('src/core/sim_config.cpp', '''                                        "measurement_error",
+                                          "cn0_high_dbhz",''', '''                                        "measurement_error",
+                                          "urban_rf",
+                                          "cn0_high_dbhz",''')
+          replace_once('src/core/sim_config.cpp', 'bool success = validate_object_keys(root, "root", allowed_keys, 20U, error_message);', 'bool success = validate_object_keys(root, "root", allowed_keys, 21U, error_message);')
+          replace_once('src/core/sim_config.cpp', '''            parse_measurement_error(root, &parsed, error_message) &&
+                  parse_cn0_high_dbhz(root, &parsed, error_message)''', '''            parse_measurement_error(root, &parsed, error_message) &&
+                  parse_urban_rf(root, &parsed, error_message) &&
+                  parse_cn0_high_dbhz(root, &parsed, error_message)''')
+
+          replace_once('CMakeLists.txt', '''    src/model/signal_tracking.cpp
+              src/model/urban_scene_geometry.cpp''', '''    src/model/signal_tracking.cpp
+              src/model/urban_rf_model.cpp
+              src/model/urban_scene_geometry.cpp''')
+          replace_once('CMakeLists.txt', '''        tests/unit/test_solution_signal_policy.cpp
+              tests/unit/test_urban_scene_geometry.cpp''', '''        tests/unit/test_solution_signal_policy.cpp
+              tests/unit/test_urban_rf_model.cpp
+              tests/unit/test_urban_scene_geometry.cpp''')
+          PY
+          clang-format -i include/gnss_sim/sim_config.h src/core/sim_config.cpp src/model/urban_rf_model.h src/model/urban_rf_model.cpp tests/unit/test_urban_rf_model.cpp
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CMakeLists.txt include/gnss_sim/sim_config.h src/core/sim_config.cpp src/model/urban_rf_model.h src/model/urban_rf_model.cpp tests/unit/test_urban_rf_model.cpp
+          git commit -m "Implement Low-E curtain-wall RF response model"
+          git push origin HEAD:issue-116-low-e-rf-model

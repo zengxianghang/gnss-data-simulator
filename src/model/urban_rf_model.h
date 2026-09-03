@@ -38,9 +38,6 @@ bool compute_low_e_curtain_wall_reflection(const UrbanRfMaterialConfig& config, 
 bool evaluate_urban_antenna_response(const UrbanRfAntennaConfig& config, UrbanCircularPolarization polarization,
                                      double arrival_elevation_rad, std::complex<double>* voltage_response,
                                      std::string* error_message);
-bool compute_urban_reflected_port_factor(const UrbanRfReflectionResponse& reflection,
-                                         const UrbanRfAntennaConfig& antenna, double arrival_elevation_rad,
-                                         std::complex<double>* port_factor, std::string* error_message);
 
 } // namespace gnss_sim
 

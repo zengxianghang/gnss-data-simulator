@@ -41,10 +41,11 @@ constexpr CodeCorrelationProfile cboc_correlation(double chip_rate_hz, double pr
 
 constexpr CodeCorrelationProfile qmboc_correlation(double chip_rate_hz, double primary_subcarrier_rate_hz,
                                                    double secondary_subcarrier_rate_hz,
-                                                   double secondary_power_fraction) {
+                                                   double secondary_power_fraction,
+                                                   CompositeSubcarrierPhase secondary_phase) {
     return {CodeCorrelationModel::kQmboc, chip_rate_hz,
             primary_subcarrier_rate_hz,   secondary_subcarrier_rate_hz,
-            secondary_power_fraction,     CompositeSubcarrierPhase::kQuadrature};
+            secondary_power_fraction,     secondary_phase};
 }
 
 void set_error(std::string* error_message, const char* message) {
@@ -119,7 +120,7 @@ constexpr SignalDefinition kSignalDefinitions[] = {
      NavMessageFamily::kBeidouD1D2, CodeBiasModel::kBeidouB3I, 2, bpsk_correlation(10.23e6)},
     {GnssConstellation::kBeidou, SignalId::kBeidouB1C, "BeiDou B1C", "1P", CarrierFrequencyModel::kFixed, 1575.42e6,
      NavMessageFamily::kBeidouBcnav1, CodeBiasModel::kBeidouB1C, 7,
-     qmboc_correlation(1.023e6, 1.023e6, 6.138e6, 4.0 / 33.0)},
+     qmboc_correlation(1.023e6, 1.023e6, 6.138e6, 4.0 / 33.0, CompositeSubcarrierPhase::kNegativeQuadrature)},
     {GnssConstellation::kBeidou, SignalId::kBeidouB2A, "BeiDou B2a", "5P", CarrierFrequencyModel::kFixed, 1176.45e6,
      NavMessageFamily::kBeidouBcnav2, CodeBiasModel::kBeidouB2A, 9, bpsk_correlation(10.23e6)},
     {GnssConstellation::kBeidou, SignalId::kBeidouB2B, "BeiDou B2b", "7D", CarrierFrequencyModel::kFixed, 1207.14e6,
@@ -218,7 +219,9 @@ bool validate_code_correlation_profile(const CodeCorrelationProfile& profile, st
             return true;
 
         case CodeCorrelationModel::kQmboc:
-            if (!composite_rates_valid(profile) || profile.secondary_phase != CompositeSubcarrierPhase::kQuadrature) {
+            if (!composite_rates_valid(profile) ||
+                (profile.secondary_phase != CompositeSubcarrierPhase::kPositiveQuadrature &&
+                 profile.secondary_phase != CompositeSubcarrierPhase::kNegativeQuadrature)) {
                 set_error(error_message, "QMBOC correlation profile parameters are inconsistent");
                 return false;
             }

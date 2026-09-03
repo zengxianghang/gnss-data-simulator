@@ -17,35 +17,34 @@ constexpr int kGlonassMinFcn = -7;
 constexpr int kGlonassMaxFcn = 6;
 
 constexpr CodeCorrelationProfile unsupported_correlation() {
-    return {CodeCorrelationModel::kUnsupported, 0.0, 0.0, 0.0, 0.0,
-            CompositeSubcarrierPhase::kNotApplicable};
+    return {CodeCorrelationModel::kUnsupported, 0.0, 0.0, 0.0, 0.0, CompositeSubcarrierPhase::kNotApplicable};
 }
 
 constexpr CodeCorrelationProfile bpsk_correlation(double chip_rate_hz) {
-    return {CodeCorrelationModel::kBpsk, chip_rate_hz, 0.0, 0.0, 0.0,
-            CompositeSubcarrierPhase::kNotApplicable};
+    return {CodeCorrelationModel::kBpsk, chip_rate_hz, 0.0, 0.0, 0.0, CompositeSubcarrierPhase::kNotApplicable};
 }
 
 constexpr CodeCorrelationProfile tmboc_correlation(double chip_rate_hz, double primary_subcarrier_rate_hz,
-                                                    double secondary_subcarrier_rate_hz,
-                                                    double secondary_power_fraction) {
-    return {CodeCorrelationModel::kTmboc, chip_rate_hz, primary_subcarrier_rate_hz, secondary_subcarrier_rate_hz,
-            secondary_power_fraction, CompositeSubcarrierPhase::kNotApplicable};
+                                                   double secondary_subcarrier_rate_hz,
+                                                   double secondary_power_fraction) {
+    return {CodeCorrelationModel::kTmboc, chip_rate_hz,
+            primary_subcarrier_rate_hz,   secondary_subcarrier_rate_hz,
+            secondary_power_fraction,     CompositeSubcarrierPhase::kNotApplicable};
 }
 
 constexpr CodeCorrelationProfile cboc_correlation(double chip_rate_hz, double primary_subcarrier_rate_hz,
-                                                   double secondary_subcarrier_rate_hz,
-                                                   double secondary_power_fraction,
-                                                   CompositeSubcarrierPhase secondary_phase) {
-    return {CodeCorrelationModel::kCboc, chip_rate_hz, primary_subcarrier_rate_hz, secondary_subcarrier_rate_hz,
-            secondary_power_fraction, secondary_phase};
+                                                  double secondary_subcarrier_rate_hz, double secondary_power_fraction,
+                                                  CompositeSubcarrierPhase secondary_phase) {
+    return {CodeCorrelationModel::kCboc, chip_rate_hz,   primary_subcarrier_rate_hz, secondary_subcarrier_rate_hz,
+            secondary_power_fraction,    secondary_phase};
 }
 
 constexpr CodeCorrelationProfile qmboc_correlation(double chip_rate_hz, double primary_subcarrier_rate_hz,
-                                                    double secondary_subcarrier_rate_hz,
-                                                    double secondary_power_fraction) {
-    return {CodeCorrelationModel::kQmboc, chip_rate_hz, primary_subcarrier_rate_hz, secondary_subcarrier_rate_hz,
-            secondary_power_fraction, CompositeSubcarrierPhase::kQuadrature};
+                                                   double secondary_subcarrier_rate_hz,
+                                                   double secondary_power_fraction) {
+    return {CodeCorrelationModel::kQmboc, chip_rate_hz,
+            primary_subcarrier_rate_hz,   secondary_subcarrier_rate_hz,
+            secondary_power_fraction,     CompositeSubcarrierPhase::kQuadrature};
 }
 
 void set_error(std::string* error_message, const char* message) {
@@ -77,8 +76,7 @@ constexpr SignalDefinition kSignalDefinitions[] = {
     {GnssConstellation::kGps, SignalId::kGpsL1Ca, "GPS L1 C/A", "1C", CarrierFrequencyModel::kFixed, 1575.42e6,
      NavMessageFamily::kGpsLnav, CodeBiasModel::kGpsL1Ca, 0, bpsk_correlation(1.023e6)},
     {GnssConstellation::kGps, SignalId::kGpsL1C, "GPS L1C", "1L", CarrierFrequencyModel::kFixed, 1575.42e6,
-     NavMessageFamily::kGpsCnav2, CodeBiasModel::kGpsL1C, 16,
-     tmboc_correlation(1.023e6, 1.023e6, 6.138e6, 4.0 / 33.0)},
+     NavMessageFamily::kGpsCnav2, CodeBiasModel::kGpsL1C, 16, tmboc_correlation(1.023e6, 1.023e6, 6.138e6, 4.0 / 33.0)},
     {GnssConstellation::kGps, SignalId::kGpsL2P, "GPS L2P", "2P", CarrierFrequencyModel::kFixed, 1227.60e6,
      NavMessageFamily::kGpsLnav, CodeBiasModel::kGpsL2P, 5, bpsk_correlation(10.23e6)},
     {GnssConstellation::kGps, SignalId::kGpsL2C, "GPS L2C", "2S", CarrierFrequencyModel::kFixed, 1227.60e6,
@@ -212,17 +210,15 @@ bool validate_code_correlation_profile(const CodeCorrelationProfile& profile, st
             return true;
 
         case CodeCorrelationModel::kCboc:
-            if (!composite_rates_valid(profile) ||
-                (profile.secondary_phase != CompositeSubcarrierPhase::kInPhase &&
-                 profile.secondary_phase != CompositeSubcarrierPhase::kAntiPhase)) {
+            if (!composite_rates_valid(profile) || (profile.secondary_phase != CompositeSubcarrierPhase::kInPhase &&
+                                                    profile.secondary_phase != CompositeSubcarrierPhase::kAntiPhase)) {
                 set_error(error_message, "CBOC correlation profile parameters are inconsistent");
                 return false;
             }
             return true;
 
         case CodeCorrelationModel::kQmboc:
-            if (!composite_rates_valid(profile) ||
-                profile.secondary_phase != CompositeSubcarrierPhase::kQuadrature) {
+            if (!composite_rates_valid(profile) || profile.secondary_phase != CompositeSubcarrierPhase::kQuadrature) {
                 set_error(error_message, "QMBOC correlation profile parameters are inconsistent");
                 return false;
             }

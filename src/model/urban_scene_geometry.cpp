@@ -176,6 +176,7 @@ bool compute_urban_direct_path_geometry(const UrbanSceneGeometryConfig& config, 
     UrbanDirectPathGeometry result{};
     result.azimuth_rad = azimuth_rad;
     result.elevation_rad = elevation_rad;
+    result.ray_origin_enu_m = {0.0, 0.0, config.antenna_height_m};
     result.primary_wall = UrbanWallId::NONE;
     result.above_local_horizon = elevation_rad >= 0.0;
 
@@ -188,6 +189,7 @@ bool compute_urban_direct_path_geometry(const UrbanSceneGeometryConfig& config, 
     const double ray_east = cos_elevation * std::sin(azimuth_rad);
     const double ray_north = cos_elevation * std::cos(azimuth_rad);
     const double ray_up = std::sin(elevation_rad);
+    set_vector3(result.ray_direction_enu, ray_east, ray_north, ray_up);
 
     WallCandidate candidates[4]{};
     int candidate_count = 0;
@@ -222,9 +224,9 @@ bool compute_urban_direct_path_geometry(const UrbanSceneGeometryConfig& config, 
         UrbanRayWallIntersection& intersection = result.first_wall_intersections[result.first_wall_count];
         intersection.wall_id = candidates[index].wall_id;
         intersection.ray_distance_m = candidates[index].ray_distance_m;
-        intersection.point_enu_m.east_m = ray_east * intersection.ray_distance_m;
-        intersection.point_enu_m.north_m = ray_north * intersection.ray_distance_m;
-        intersection.point_enu_m.up_m = config.antenna_height_m + ray_up * intersection.ray_distance_m;
+        intersection.point_enu_m.east_m = result.ray_origin_enu_m.east_m + ray_east * intersection.ray_distance_m;
+        intersection.point_enu_m.north_m = result.ray_origin_enu_m.north_m + ray_north * intersection.ray_distance_m;
+        intersection.point_enu_m.up_m = result.ray_origin_enu_m.up_m + ray_up * intersection.ray_distance_m;
         ++result.first_wall_count;
     }
 

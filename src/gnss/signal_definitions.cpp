@@ -40,11 +40,9 @@ constexpr CodeCorrelationProfile cboc_correlation(double chip_rate_hz, double pr
 }
 
 constexpr CodeCorrelationProfile qmboc_correlation(double chip_rate_hz, double primary_subcarrier_rate_hz,
-                                                   double secondary_subcarrier_rate_hz,
-                                                   double secondary_power_fraction,
+                                                   double secondary_subcarrier_rate_hz, double secondary_power_fraction,
                                                    CompositeSubcarrierPhase secondary_phase) {
-    return {CodeCorrelationModel::kQmboc, chip_rate_hz,
-            primary_subcarrier_rate_hz,   secondary_subcarrier_rate_hz,
+    return {CodeCorrelationModel::kQmboc, chip_rate_hz,   primary_subcarrier_rate_hz, secondary_subcarrier_rate_hz,
             secondary_power_fraction,     secondary_phase};
 }
 

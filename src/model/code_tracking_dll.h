@@ -71,10 +71,9 @@ bool find_code_tracking_dll_roots(const SignalDefinition& signal, const CodeTrac
 // only recognizes the exact receiver-domain coherent-null case where every
 // equal-delay complex-voltage group cancels to zero; that valid physical state
 // has no trackable DLL root and is returned as kNoRoots rather than an error.
-inline bool find_code_tracking_dll_roots_with_status(const SignalDefinition& signal,
-                                                     const CodeTrackingDllPath* paths, int path_count,
-                                                     const CodeTrackingDllConfig& config, CodeTrackingDllRoot* roots,
-                                                     int root_capacity, int* root_count,
+inline bool find_code_tracking_dll_roots_with_status(const SignalDefinition& signal, const CodeTrackingDllPath* paths,
+                                                     int path_count, const CodeTrackingDllConfig& config,
+                                                     CodeTrackingDllRoot* roots, int root_capacity, int* root_count,
                                                      CodeTrackingDllRootSearchStatus* status,
                                                      std::string* error_message) {
     if (roots == nullptr || root_count == nullptr || status == nullptr || root_capacity <= 0 ||

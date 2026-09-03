@@ -16,6 +16,7 @@ constexpr int kMaxUrbanReceivedPaths = 1 + kUrbanFirstOrderWallCount;
 
 struct UrbanReceivedPathSet {
     double open_cn0_dbhz;
+    UrbanDirectPathGeometry direct_geometry;
     std::complex<double> direct_voltage;
     UrbanRooftopDiffractionStatus diffraction_status;
     UrbanRooftopDiffractionPath diffraction;

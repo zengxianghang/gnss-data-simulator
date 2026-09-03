@@ -24,8 +24,7 @@ bool ideal_signal_code_correlation(const SignalDefinition& definition, double de
 
 bool signal_code_chip_duration_s(const SignalDefinition& definition, double* chip_duration_s,
                                  std::string* error_message);
-bool signal_code_chip_length_m(const SignalDefinition& definition, double* chip_length_m,
-                               std::string* error_message);
+bool signal_code_chip_length_m(const SignalDefinition& definition, double* chip_length_m, std::string* error_message);
 
 } // namespace gnss_sim
 

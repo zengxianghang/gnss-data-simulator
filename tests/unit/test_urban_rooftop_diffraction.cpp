@@ -138,6 +138,25 @@ TEST(UrbanRooftopDiffraction, ShadowAndClearSidesUseOppositeSignedFresnelV) {
     EXPECT_GT(std::abs(clear.fresnel_coefficient), 0.5);
 }
 
+TEST(UrbanRooftopDiffraction, StandardFresnelParameterUsesSignedClearanceAndEdgeLegs) {
+    const gnss_sim::UrbanSceneGeometryConfig scene = gnss_sim::default_urban_scene_geometry_config();
+    const double elevation_deg = cardinal_skyline_deg(scene) - 1.0;
+    gnss_sim::UrbanRooftopDiffractionStatus status{};
+    const gnss_sim::UrbanRooftopDiffractionPath path =
+        evaluate(elevation_deg, signal(gnss_sim::SignalId::kGpsL1Ca), 0, 0.0, &status);
+
+    ASSERT_EQ(status, gnss_sim::UrbanRooftopDiffractionStatus::VALID);
+    const double expected_v =
+        path.signed_clearance_m *
+        std::sqrt(2.0 * path.edge_path_euclidean_range_m /
+                  (path.wavelength_m * path.source_edge_distance_m * path.receiver_edge_distance_m));
+    EXPECT_NEAR(path.fresnel_v, expected_v, 1.0e-12);
+    EXPECT_NEAR(path.fresnel_v, 0.20497, 1.0e-4);
+
+    const double paraxial_v_squared = 4.0 * path.excess_path_length_m / path.wavelength_m;
+    EXPECT_NEAR(path.fresnel_v * path.fresnel_v, paraxial_v_squared, 1.0e-4 * paraxial_v_squared);
+}
+
 TEST(UrbanRooftopDiffraction, GeometryAndComplexFieldRemainContinuousNearSkyline) {
     const gnss_sim::UrbanSceneGeometryConfig scene = gnss_sim::default_urban_scene_geometry_config();
     const double skyline_deg = cardinal_skyline_deg(scene);

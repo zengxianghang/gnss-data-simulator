@@ -333,11 +333,13 @@ bool find_code_tracking_dll_roots(const SignalDefinition& signal, const CodeTrac
         set_error(error_message, "code tracking DLL root search interval is invalid");
         return false;
     }
-    const int interval_count = static_cast<int>(std::ceil(width / kRootScanStepChips));
-    if (interval_count <= 0 || interval_count > kMaxRootScanIntervals) {
+    const double interval_count_double = std::ceil(width / kRootScanStepChips);
+    if (!std::isfinite(interval_count_double) || interval_count_double < 1.0 ||
+        interval_count_double > static_cast<double>(kMaxRootScanIntervals)) {
         set_error(error_message, "code tracking DLL path-delay span exceeds the bounded V1 root-search interval");
         return false;
     }
+    const int interval_count = static_cast<int>(interval_count_double);
 
     const double zero_tolerance = kDiscriminatorZeroRelativeTolerance * power_scale;
     bool have_last_nonzero = false;
@@ -384,6 +386,10 @@ bool select_code_tracking_dll_root(const CodeTrackingDllRoot* roots, int root_co
         return false;
     }
     *selected_index = -1;
+    if (mode != CodeTrackingDllSelectionMode::TRACKED && mode != CodeTrackingDllSelectionMode::ACQUISITION) {
+        set_error(error_message, "unknown code tracking DLL root-selection mode");
+        return false;
+    }
     if (mode == CodeTrackingDllSelectionMode::TRACKED && !std::isfinite(previous_code_phase_sec)) {
         set_error(error_message, "tracked DLL root selection requires a finite previous code phase");
         return false;

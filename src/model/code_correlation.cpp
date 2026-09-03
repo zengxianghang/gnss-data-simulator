@@ -187,8 +187,7 @@ bool tmboc_autocorrelation(const CodeCorrelationProfile& profile, double delay_c
         !boc_autocorrelation(secondary_multiple, delay_chips, &secondary)) {
         return false;
     }
-    *correlation = (1.0 - profile.secondary_power_fraction) * primary +
-                   profile.secondary_power_fraction * secondary;
+    *correlation = (1.0 - profile.secondary_power_fraction) * primary + profile.secondary_power_fraction * secondary;
     return true;
 }
 
@@ -273,8 +272,7 @@ bool signal_code_chip_duration_s(const SignalDefinition& definition, double* chi
     return true;
 }
 
-bool signal_code_chip_length_m(const SignalDefinition& definition, double* chip_length_m,
-                               std::string* error_message) {
+bool signal_code_chip_length_m(const SignalDefinition& definition, double* chip_length_m, std::string* error_message) {
     if (chip_length_m == nullptr) {
         set_error(error_message, "code chip-length output pointer is null");
         return false;

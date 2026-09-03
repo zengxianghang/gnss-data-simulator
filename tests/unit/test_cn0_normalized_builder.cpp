@@ -143,17 +143,25 @@ TEST(Cn0NormalizedBuilder, MetadataKeepsConstellationWhenRinexSignalCodesCollide
     std::ifstream input(path, std::ios::binary);
     const std::string metadata{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
 
-    EXPECT_NE(metadata.find("\"constellation\":\"GPS\",\"signal\":\"1C\",\"status\":\"READY\",\"count\":100,\"p50_dbhz\":48.000000"),
+    EXPECT_NE(
+        metadata.find(
+            "\"constellation\":\"GPS\",\"signal\":\"1C\",\"status\":\"READY\",\"count\":100,\"p50_dbhz\":48.000000"),
+        std::string::npos);
+    EXPECT_NE(
+        metadata.find(
+            "\"constellation\":\"QZSS\",\"signal\":\"1C\",\"status\":\"READY\",\"count\":100,\"p50_dbhz\":50.000000"),
+        std::string::npos);
+    EXPECT_NE(metadata.find("\"constellation\":\"GPS\",\"signal\":\"1C\",\"elevation_min_deg\":10.000000,\"status\":"
+                            "\"READY\",\"sample_count\":100,\"reference_ready\":true,\"delta_p50_db\":-10.000000"),
               std::string::npos);
-    EXPECT_NE(metadata.find("\"constellation\":\"QZSS\",\"signal\":\"1C\",\"status\":\"READY\",\"count\":100,\"p50_dbhz\":50.000000"),
+    EXPECT_NE(metadata.find("\"constellation\":\"QZSS\",\"signal\":\"1C\",\"elevation_min_deg\":10.000000,\"status\":"
+                            "\"READY\",\"sample_count\":100,\"reference_ready\":true,\"delta_p50_db\":-8.000000"),
               std::string::npos);
-    EXPECT_NE(metadata.find("\"constellation\":\"GPS\",\"signal\":\"1C\",\"elevation_min_deg\":10.000000,\"status\":\"READY\",\"sample_count\":100,\"reference_ready\":true,\"delta_p50_db\":-10.000000"),
+    EXPECT_NE(metadata.find("\"constellation\":\"GPS\",\"signal\":\"1C\",\"elevation_min_deg\":10.000000,\"status\":"
+                            "\"READY\",\"contributing_source_count\":1,\"delta_p50_db\":-10.000000"),
               std::string::npos);
-    EXPECT_NE(metadata.find("\"constellation\":\"QZSS\",\"signal\":\"1C\",\"elevation_min_deg\":10.000000,\"status\":\"READY\",\"sample_count\":100,\"reference_ready\":true,\"delta_p50_db\":-8.000000"),
-              std::string::npos);
-    EXPECT_NE(metadata.find("\"constellation\":\"GPS\",\"signal\":\"1C\",\"elevation_min_deg\":10.000000,\"status\":\"READY\",\"contributing_source_count\":1,\"delta_p50_db\":-10.000000"),
-              std::string::npos);
-    EXPECT_NE(metadata.find("\"constellation\":\"QZSS\",\"signal\":\"1C\",\"elevation_min_deg\":10.000000,\"status\":\"READY\",\"contributing_source_count\":1,\"delta_p50_db\":-8.000000"),
+    EXPECT_NE(metadata.find("\"constellation\":\"QZSS\",\"signal\":\"1C\",\"elevation_min_deg\":10.000000,\"status\":"
+                            "\"READY\",\"contributing_source_count\":1,\"delta_p50_db\":-8.000000"),
               std::string::npos);
     std::remove(path.string().c_str());
 }

@@ -206,7 +206,7 @@ TEST(UrbanRooftopDiffraction, ExcessPathUsesEuclideanGeometryThenAddsRtklibBasel
     ASSERT_EQ(shifted_status, gnss_sim::UrbanRooftopDiffractionStatus::VALID);
     EXPECT_DOUBLE_EQ(zero.excess_path_length_m, shifted.excess_path_length_m);
     EXPECT_DOUBLE_EQ(zero.fresnel_v, shifted.fresnel_v);
-    EXPECT_DOUBLE_EQ(zero.fresnel_coefficient, shifted.fresnel_coefficient);
+    EXPECT_EQ(zero.fresnel_coefficient, shifted.fresnel_coefficient);
     EXPECT_NEAR(shifted.model_path_range_m - zero.model_path_range_m, 25.0, 1.0e-9);
 }
 
@@ -236,8 +236,8 @@ TEST(UrbanRooftopDiffraction, RepeatedEvaluationIsNumericallyIdentical) {
     EXPECT_DOUBLE_EQ(first.diffraction_point_enu_m.up_m, second.diffraction_point_enu_m.up_m);
     EXPECT_DOUBLE_EQ(first.signed_clearance_m, second.signed_clearance_m);
     EXPECT_DOUBLE_EQ(first.fresnel_v, second.fresnel_v);
-    EXPECT_DOUBLE_EQ(first.fresnel_coefficient, second.fresnel_coefficient);
-    EXPECT_DOUBLE_EQ(first.edge_reference_coefficient, second.edge_reference_coefficient);
+    EXPECT_EQ(first.fresnel_coefficient, second.fresnel_coefficient);
+    EXPECT_EQ(first.edge_reference_coefficient, second.edge_reference_coefficient);
 }
 
 } // namespace

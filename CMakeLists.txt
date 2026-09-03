@@ -112,6 +112,7 @@ add_library(gnss_sim_core STATIC
     src/model/measurement_model.cpp
     src/model/receiver_truth.cpp
     src/model/signal_tracking.cpp
+    src/model/urban_received_power.cpp
     src/model/urban_reflection_paths.cpp
     src/model/urban_rooftop_diffraction.cpp
     src/model/urban_rf_model.cpp
@@ -201,7 +202,7 @@ add_executable(validate-rangea-roundtrip
     tools/rangea_roundtrip/main.cpp
 )
 target_link_libraries(validate-rangea-roundtrip PRIVATE rangea_roundtrip_core)
-gnss_sim_set_project_warnings(validate-rangea-roundtrip)
+gnss_sim_set_project_warnings(validate-rangea_roundtrip)
 
 add_library(transient_validator_core STATIC
     tools/transient_validator/transient_validator.cpp
@@ -218,7 +219,7 @@ add_executable(validate-transient-observations
     tools/transient_validator/main.cpp
 )
 target_link_libraries(validate-transient-observations PRIVATE transient_validator_core)
-gnss_sim_set_project_warnings(validate-transient-observations)
+gnss_sim_set_project_warnings(validate-transient_observations)
 
 if(BUILD_TESTING)
     include(FetchContent)
@@ -264,6 +265,7 @@ if(BUILD_TESTING)
         tests/unit/test_sim_time.cpp
         tests/unit/test_solution_engine.cpp
         tests/unit/test_solution_signal_policy.cpp
+        tests/unit/test_urban_received_power.cpp
         tests/unit/test_urban_reflection_paths.cpp
         tests/unit/test_urban_rooftop_diffraction.cpp
         tests/unit/test_urban_rf_model.cpp

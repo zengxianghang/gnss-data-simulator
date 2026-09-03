@@ -1,6 +1,5 @@
-#include "model/signal_tracking.h"
-
 #include "gnss_sim/sim_time.h"
+#include "model/signal_tracking.h"
 
 #include <cmath>
 #include <cstdint>
@@ -22,8 +21,7 @@ bool valid_effective_cn0(double cn0_dbhz) {
     return std::isfinite(cn0_dbhz) || (std::isinf(cn0_dbhz) && cn0_dbhz < 0.0);
 }
 
-bool elapsed_at_least(const SimTime& current_time, const SimTime& start_time, std::int64_t required_ns,
-                      bool* reached) {
+bool elapsed_at_least(const SimTime& current_time, const SimTime& start_time, std::int64_t required_ns, bool* reached) {
     if (reached == nullptr || required_ns < 0) {
         return false;
     }
@@ -54,8 +52,9 @@ void clear_dll_continuity(SignalTracker* tracker) {
     tracker->current_dll_prompt_power = 0.0;
 }
 
-bool select_root(const UrbanSignalTrackingInput& input, CodeTrackingDllSelectionMode mode, double previous_code_phase_sec,
-                 CodeTrackingDllRoot* selected, bool* found, std::string* error_message) {
+bool select_root(const UrbanSignalTrackingInput& input, CodeTrackingDllSelectionMode mode,
+                 double previous_code_phase_sec, CodeTrackingDllRoot* selected, bool* found,
+                 std::string* error_message) {
     if (selected == nullptr || found == nullptr || input.dll_root_count < 0 ||
         (input.dll_root_count > 0 && input.dll_roots == nullptr)) {
         set_error(error_message, "urban DLL root input is invalid");
@@ -98,9 +97,9 @@ void update_direct_classification(SignalTracker* tracker, const UrbanSignalTrack
     }
 
     const double cn0_delta_db = std::abs(input.effective_cn0_dbhz - input.open_cn0_dbhz);
-    const double code_bias_chips = tracker->current_dll_root_valid ? std::abs(tracker->current_dll_code_phase_chips) : 0.0;
-    if (cn0_delta_db >= config.los_multipath_cn0_delta_db ||
-        code_bias_chips >= config.los_multipath_code_bias_chips) {
+    const double code_bias_chips =
+        tracker->current_dll_root_valid ? std::abs(tracker->current_dll_code_phase_chips) : 0.0;
+    if (cn0_delta_db >= config.los_multipath_cn0_delta_db || code_bias_chips >= config.los_multipath_code_bias_chips) {
         tracker->urban_state = UrbanSignalState::kLosMultipath;
     } else {
         tracker->urban_state = UrbanSignalState::kLos;
@@ -208,7 +207,8 @@ bool update_urban_signal_tracker(SignalTracker* tracker, const SimTime& current_
                                  std::string* error_message) {
     if (tracker == nullptr || !valid_time(current_time) || !std::isfinite(input.open_cn0_dbhz) ||
         !valid_effective_cn0(input.effective_cn0_dbhz) || input.dll_root_count < 0 ||
-        (input.dll_root_count > 0 && input.dll_roots == nullptr) || find_signal_definition(tracker->signal_id) == nullptr ||
+        (input.dll_root_count > 0 && input.dll_roots == nullptr) ||
+        find_signal_definition(tracker->signal_id) == nullptr ||
         !validate_signal_tracking_model_config(config, nullptr)) {
         set_error(error_message, "urban signal tracking update has invalid arguments");
         return false;
@@ -292,8 +292,8 @@ bool update_urban_signal_tracker(SignalTracker* tracker, const SimTime& current_
 
     CodeTrackingDllRoot selected_root{};
     bool root_found = false;
-    if (!select_root(input, CodeTrackingDllSelectionMode::TRACKED, tracker->previous_dll_code_phase_sec,
-                     &selected_root, &root_found, error_message)) {
+    if (!select_root(input, CodeTrackingDllSelectionMode::TRACKED, tracker->previous_dll_code_phase_sec, &selected_root,
+                     &root_found, error_message)) {
         return false;
     }
     if (!root_found) {

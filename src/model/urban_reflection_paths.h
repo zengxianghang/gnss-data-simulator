@@ -73,10 +73,9 @@ bool compute_urban_one_wall_reflection(const UrbanSceneGeometryConfig& scene_con
                                        UrbanFirstOrderReflectionPath* path, UrbanReflectionCandidateStatus* status,
                                        std::string* error_message);
 
-bool compute_urban_first_order_reflections(const UrbanSceneGeometryConfig& scene_config,
-                                           const UrbanRfConfig& rf_config, const SignalDefinition& signal,
-                                           int glonass_fcn, const ReceiverTruth& receiver,
-                                           const SatelliteGeometry& satellite_geometry,
+bool compute_urban_first_order_reflections(const UrbanSceneGeometryConfig& scene_config, const UrbanRfConfig& rf_config,
+                                           const SignalDefinition& signal, int glonass_fcn,
+                                           const ReceiverTruth& receiver, const SatelliteGeometry& satellite_geometry,
                                            UrbanFirstOrderReflectionSet* reflections, std::string* error_message);
 
 const char* urban_reflection_candidate_status_name(UrbanReflectionCandidateStatus status);

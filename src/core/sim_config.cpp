@@ -406,7 +406,8 @@ bool valid_measurement_error_config(const MeasurementErrorConfig& config) {
 bool valid_cn0_high_baselines(const std::vector<Cn0HighBaselineConfig>& baselines) {
     for (std::size_t index = 0; index < baselines.size(); ++index) {
         const Cn0HighBaselineConfig& baseline = baselines[index];
-        if (!std::isfinite(baseline.cn0_dbhz) || find_signal_definition_by_name(baseline.signal_name.c_str()) == nullptr) {
+        if (!std::isfinite(baseline.cn0_dbhz) ||
+            find_signal_definition_by_name(baseline.signal_name.c_str()) == nullptr) {
             return false;
         }
         for (std::size_t previous = 0; previous < index; ++previous) {

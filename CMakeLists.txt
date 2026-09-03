@@ -111,6 +111,7 @@ add_library(gnss_sim_core STATIC
     src/model/receiver_truth.cpp
     src/model/signal_tracking.cpp
     src/model/urban_reflection_paths.cpp
+    src/model/urban_rooftop_diffraction.cpp
     src/model/urban_rf_model.cpp
     src/model/urban_scene_geometry.cpp
     src/output/novatel_nav_writer.cpp
@@ -258,6 +259,7 @@ if(BUILD_TESTING)
         tests/unit/test_solution_engine.cpp
         tests/unit/test_solution_signal_policy.cpp
         tests/unit/test_urban_reflection_paths.cpp
+        tests/unit/test_urban_rooftop_diffraction.cpp
         tests/unit/test_urban_rf_model.cpp
         tests/unit/test_urban_scene_geometry.cpp
     )

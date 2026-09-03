@@ -448,9 +448,9 @@ bool write_normalized_cn0_metadata_json(const std::string& output_path, const Cn
             if (reference_index > 0) {
                 output << ',';
             }
-            output << "{\"signal\":\"" << reference.rinex_signal_code << "\",\"status\":\""
-                   << cn0_reference_status_name(reference.status) << "\",\"count\":" << reference.count
-                   << ",\"p50_dbhz\":";
+            output << "{\"constellation\":\"" << constellation_name(reference.constellation) << "\",\"signal\":\""
+                   << reference.rinex_signal_code << "\",\"status\":\"" << cn0_reference_status_name(reference.status)
+                   << "\",\"count\":" << reference.count << ",\"p50_dbhz\":";
             if (reference.status == Cn0ReferenceStatus::kReady && std::isfinite(reference.p50_dbhz)) {
                 output << reference.p50_dbhz;
             } else {
@@ -464,9 +464,9 @@ bool write_normalized_cn0_metadata_json(const std::string& output_path, const Cn
             if (bin_index > 0) {
                 output << ',';
             }
-            output << "{\"signal\":\"" << bin.rinex_signal_code << "\",\"elevation_min_deg\":" << bin.elevation_min_deg
-                   << ",\"status\":\"" << cn0_bin_status_name(bin.source_status)
-                   << "\",\"sample_count\":" << bin.sample_count
+            output << "{\"constellation\":\"" << constellation_name(bin.constellation) << "\",\"signal\":\""
+                   << bin.rinex_signal_code << "\",\"elevation_min_deg\":" << bin.elevation_min_deg << ",\"status\":\""
+                   << cn0_bin_status_name(bin.source_status) << "\",\"sample_count\":" << bin.sample_count
                    << ",\"reference_ready\":" << (bin.reference_ready ? "true" : "false") << ",\"delta_p50_db\":";
             if (bin.reference_ready && bin.sample_count > 0 && std::isfinite(bin.delta_p50_db)) {
                 output << bin.delta_p50_db;
@@ -484,8 +484,9 @@ bool write_normalized_cn0_metadata_json(const std::string& output_path, const Cn
         if (index > 0) {
             output << ',';
         }
-        output << "{\"signal\":\"" << bin.rinex_signal_code << "\",\"elevation_min_deg\":" << bin.elevation_min_deg
-               << ",\"status\":\"" << cn0_bin_status_name(bin.status)
+        output << "{\"constellation\":\"" << constellation_name(bin.constellation) << "\",\"signal\":\""
+               << bin.rinex_signal_code << "\",\"elevation_min_deg\":" << bin.elevation_min_deg << ",\"status\":\""
+               << cn0_bin_status_name(bin.status)
                << "\",\"contributing_source_count\":" << bin.contributing_source_count << ",\"delta_p50_db\":";
         if (bin.contributing_source_count > 0 && std::isfinite(bin.delta_p50_db)) {
             output << bin.delta_p50_db;

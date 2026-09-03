@@ -49,8 +49,8 @@ TEST(CodeTrackingDll, OnePathLosHasStableZeroBiasRoot) {
     std::string error_message;
     ASSERT_TRUE(gnss_sim::compute_code_tracking_dll_discriminator(
         gps_l1, paths, 1, config, chips_to_seconds(gps_l1, -0.01), &negative, &error_message));
-    ASSERT_TRUE(gnss_sim::compute_code_tracking_dll_discriminator(gps_l1, paths, 1, config, 0.0, &zero,
-                                                                 &error_message));
+    ASSERT_TRUE(
+        gnss_sim::compute_code_tracking_dll_discriminator(gps_l1, paths, 1, config, 0.0, &zero, &error_message));
     ASSERT_TRUE(gnss_sim::compute_code_tracking_dll_discriminator(
         gps_l1, paths, 1, config, chips_to_seconds(gps_l1, 0.01), &positive, &error_message));
     EXPECT_LT(negative, 0.0);
@@ -59,9 +59,8 @@ TEST(CodeTrackingDll, OnePathLosHasStableZeroBiasRoot) {
 
     gnss_sim::CodeTrackingDllRoot roots[gnss_sim::kMaxCodeTrackingDllRoots]{};
     int root_count = 0;
-    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(gps_l1, paths, 1, config, roots,
-                                                       gnss_sim::kMaxCodeTrackingDllRoots, &root_count,
-                                                       &error_message));
+    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(
+        gps_l1, paths, 1, config, roots, gnss_sim::kMaxCodeTrackingDllRoots, &root_count, &error_message));
     ASSERT_EQ(root_count, 1);
     EXPECT_TRUE(roots[0].stable);
     EXPECT_NEAR(roots[0].code_phase_chips, 0.0, 1.0e-8);
@@ -79,14 +78,12 @@ TEST(CodeTrackingDll, ConstructiveDelayedPathPullsTrackedCodeLater) {
     gnss_sim::CodeTrackingDllRoot roots[gnss_sim::kMaxCodeTrackingDllRoots]{};
     int root_count = 0;
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(gps_l1, paths, 2, config, roots,
-                                                       gnss_sim::kMaxCodeTrackingDllRoots, &root_count,
-                                                       &error_message));
+    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(
+        gps_l1, paths, 2, config, roots, gnss_sim::kMaxCodeTrackingDllRoots, &root_count, &error_message));
 
     int selected = -1;
-    ASSERT_TRUE(gnss_sim::select_code_tracking_dll_root(roots, root_count,
-                                                       gnss_sim::CodeTrackingDllSelectionMode::ACQUISITION, 0.0,
-                                                       &selected, &error_message));
+    ASSERT_TRUE(gnss_sim::select_code_tracking_dll_root(
+        roots, root_count, gnss_sim::CodeTrackingDllSelectionMode::ACQUISITION, 0.0, &selected, &error_message));
     ASSERT_GE(selected, 0);
     EXPECT_TRUE(roots[selected].stable);
     EXPECT_NEAR(roots[selected].code_phase_chips, 0.05, 1.0e-6);
@@ -103,9 +100,8 @@ TEST(CodeTrackingDll, OppositePhasePathCanProduceNegativeBiasAndMultipleStableRo
     gnss_sim::CodeTrackingDllRoot roots[gnss_sim::kMaxCodeTrackingDllRoots]{};
     int root_count = 0;
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(gps_l1, paths, 2, config, roots,
-                                                       gnss_sim::kMaxCodeTrackingDllRoots, &root_count,
-                                                       &error_message));
+    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(
+        gps_l1, paths, 2, config, roots, gnss_sim::kMaxCodeTrackingDllRoots, &root_count, &error_message));
 
     int stable_count = 0;
     for (int index = 0; index < root_count; ++index) {
@@ -116,16 +112,15 @@ TEST(CodeTrackingDll, OppositePhasePathCanProduceNegativeBiasAndMultipleStableRo
     EXPECT_GE(stable_count, 2);
 
     int selected = -1;
-    ASSERT_TRUE(gnss_sim::select_code_tracking_dll_root(
-        roots, root_count, gnss_sim::CodeTrackingDllSelectionMode::TRACKED, chips_to_seconds(gps_l1, -0.03),
-        &selected, &error_message));
+    ASSERT_TRUE(gnss_sim::select_code_tracking_dll_root(roots, root_count,
+                                                        gnss_sim::CodeTrackingDllSelectionMode::TRACKED,
+                                                        chips_to_seconds(gps_l1, -0.03), &selected, &error_message));
     ASSERT_GE(selected, 0);
     EXPECT_NEAR(roots[selected].code_phase_chips, -0.05, 1.0e-6);
 
     int acquisition = -1;
-    ASSERT_TRUE(gnss_sim::select_code_tracking_dll_root(roots, root_count,
-                                                       gnss_sim::CodeTrackingDllSelectionMode::ACQUISITION, 0.0,
-                                                       &acquisition, &error_message));
+    ASSERT_TRUE(gnss_sim::select_code_tracking_dll_root(
+        roots, root_count, gnss_sim::CodeTrackingDllSelectionMode::ACQUISITION, 0.0, &acquisition, &error_message));
     ASSERT_GE(acquisition, 0);
     EXPECT_NEAR(roots[acquisition].code_phase_chips, -0.05, 1.0e-6);
 }
@@ -137,9 +132,8 @@ TEST(CodeTrackingDll, BocSidePeaksAreSurfacedAndSelectionPolicyIsDeterministic) 
     gnss_sim::CodeTrackingDllRoot roots[gnss_sim::kMaxCodeTrackingDllRoots]{};
     int root_count = 0;
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(gps_l1c, paths, 1, config, roots,
-                                                       gnss_sim::kMaxCodeTrackingDllRoots, &root_count,
-                                                       &error_message));
+    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(
+        gps_l1c, paths, 1, config, roots, gnss_sim::kMaxCodeTrackingDllRoots, &root_count, &error_message));
     EXPECT_GT(root_count, 1);
 
     const int zero_root = nearest_root_index(roots, root_count, 0.0);
@@ -148,15 +142,14 @@ TEST(CodeTrackingDll, BocSidePeaksAreSurfacedAndSelectionPolicyIsDeterministic) 
     EXPECT_NEAR(roots[zero_root].code_phase_chips, 0.0, 1.0e-8);
 
     int acquisition = -1;
-    ASSERT_TRUE(gnss_sim::select_code_tracking_dll_root(roots, root_count,
-                                                       gnss_sim::CodeTrackingDllSelectionMode::ACQUISITION, 0.0,
-                                                       &acquisition, &error_message));
+    ASSERT_TRUE(gnss_sim::select_code_tracking_dll_root(
+        roots, root_count, gnss_sim::CodeTrackingDllSelectionMode::ACQUISITION, 0.0, &acquisition, &error_message));
     EXPECT_EQ(acquisition, zero_root);
 
     int tracked = -1;
-    ASSERT_TRUE(gnss_sim::select_code_tracking_dll_root(
-        roots, root_count, gnss_sim::CodeTrackingDllSelectionMode::TRACKED, chips_to_seconds(gps_l1c, 0.55),
-        &tracked, &error_message));
+    ASSERT_TRUE(gnss_sim::select_code_tracking_dll_root(roots, root_count,
+                                                        gnss_sim::CodeTrackingDllSelectionMode::TRACKED,
+                                                        chips_to_seconds(gps_l1c, 0.55), &tracked, &error_message));
     ASSERT_GE(tracked, 0);
     EXPECT_TRUE(roots[tracked].stable);
     EXPECT_GT(roots[tracked].code_phase_chips, 0.4);
@@ -174,13 +167,11 @@ TEST(CodeTrackingDll, ConfigurableSpacingChangesTwoPathEquilibrium) {
     std::string error_message;
 
     config.early_late_total_spacing_chips = 0.4;
-    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(gps_l1, paths, 2, config, roots,
-                                                       gnss_sim::kMaxCodeTrackingDllRoots, &root_count,
-                                                       &error_message));
+    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(
+        gps_l1, paths, 2, config, roots, gnss_sim::kMaxCodeTrackingDllRoots, &root_count, &error_message));
     int selected = -1;
-    ASSERT_TRUE(gnss_sim::select_code_tracking_dll_root(roots, root_count,
-                                                       gnss_sim::CodeTrackingDllSelectionMode::ACQUISITION, 0.0,
-                                                       &selected, &error_message));
+    ASSERT_TRUE(gnss_sim::select_code_tracking_dll_root(
+        roots, root_count, gnss_sim::CodeTrackingDllSelectionMode::ACQUISITION, 0.0, &selected, &error_message));
     EXPECT_NEAR(roots[selected].code_phase_chips, 0.1, 1.0e-6);
 }
 
@@ -192,8 +183,8 @@ TEST(CodeTrackingDll, CompositeCorrelationUsesNormalizedComplexVoltageWithoutRei
     };
     std::complex<double> correlation{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::compute_code_tracking_composite_correlation(gps_l1, paths, 2, 0.0, &correlation,
-                                                                      &error_message));
+    ASSERT_TRUE(
+        gnss_sim::compute_code_tracking_composite_correlation(gps_l1, paths, 2, 0.0, &correlation, &error_message));
     EXPECT_NEAR(correlation.real(), 1.0, 1.0e-15);
     EXPECT_NEAR(correlation.imag(), 0.5, 1.0e-15);
 }
@@ -210,22 +201,19 @@ TEST(CodeTrackingDll, InvalidInputsFailExplicitly) {
     const gnss_sim::CodeTrackingDllPath zero_path[] = {{0.0, {0.0, 0.0}}};
     gnss_sim::CodeTrackingDllRoot roots[gnss_sim::kMaxCodeTrackingDllRoots]{};
     int root_count = 0;
-    EXPECT_FALSE(gnss_sim::find_code_tracking_dll_roots(gps_l1, zero_path, 1,
-                                                        gnss_sim::default_code_tracking_dll_config(), roots,
-                                                        gnss_sim::kMaxCodeTrackingDllRoots, &root_count,
-                                                        &error_message));
+    EXPECT_FALSE(
+        gnss_sim::find_code_tracking_dll_roots(gps_l1, zero_path, 1, gnss_sim::default_code_tracking_dll_config(),
+                                               roots, gnss_sim::kMaxCodeTrackingDllRoots, &root_count, &error_message));
 
     const gnss_sim::CodeTrackingDllPath path[] = {{0.0, {1.0, 0.0}}};
-    EXPECT_FALSE(gnss_sim::find_code_tracking_dll_roots(gps_l2c, path, 1,
-                                                        gnss_sim::default_code_tracking_dll_config(), roots,
-                                                        gnss_sim::kMaxCodeTrackingDllRoots, &root_count,
+    EXPECT_FALSE(gnss_sim::find_code_tracking_dll_roots(gps_l2c, path, 1, gnss_sim::default_code_tracking_dll_config(),
+                                                        roots, gnss_sim::kMaxCodeTrackingDllRoots, &root_count,
                                                         &error_message));
 
     int selected = -1;
     gnss_sim::CodeTrackingDllRoot unstable{};
     unstable.stable = false;
-    EXPECT_FALSE(gnss_sim::select_code_tracking_dll_root(&unstable, 1,
-                                                         gnss_sim::CodeTrackingDllSelectionMode::TRACKED,
+    EXPECT_FALSE(gnss_sim::select_code_tracking_dll_root(&unstable, 1, gnss_sim::CodeTrackingDllSelectionMode::TRACKED,
                                                          std::numeric_limits<double>::quiet_NaN(), &selected,
                                                          &error_message));
 }
@@ -242,12 +230,10 @@ TEST(CodeTrackingDll, RepeatedRootEnumerationIsNumericallyIdentical) {
     int first_count = 0;
     int second_count = 0;
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(gps_l1, paths, 2, config, first,
-                                                       gnss_sim::kMaxCodeTrackingDllRoots, &first_count,
-                                                       &error_message));
-    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(gps_l1, paths, 2, config, second,
-                                                       gnss_sim::kMaxCodeTrackingDllRoots, &second_count,
-                                                       &error_message));
+    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(
+        gps_l1, paths, 2, config, first, gnss_sim::kMaxCodeTrackingDllRoots, &first_count, &error_message));
+    ASSERT_TRUE(gnss_sim::find_code_tracking_dll_roots(
+        gps_l1, paths, 2, config, second, gnss_sim::kMaxCodeTrackingDllRoots, &second_count, &error_message));
     ASSERT_EQ(first_count, second_count);
     for (int index = 0; index < first_count; ++index) {
         EXPECT_DOUBLE_EQ(first[index].code_phase_sec, second[index].code_phase_sec);

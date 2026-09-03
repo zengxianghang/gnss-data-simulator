@@ -172,8 +172,8 @@ bool refine_sign_change_root(const SignalDefinition& signal, const CodeTrackingD
 }
 
 bool append_root(const SignalDefinition& signal, const CodeTrackingDllPath* paths, int path_count,
-                 const CodeTrackingDllConfig& config, double root_chips, double power_scale,
-                 CodeTrackingDllRoot* roots, int root_capacity, int* root_count, std::string* error_message) {
+                 const CodeTrackingDllConfig& config, double root_chips, double power_scale, CodeTrackingDllRoot* roots,
+                 int root_capacity, int* root_count, std::string* error_message) {
     if (roots == nullptr || root_count == nullptr || *root_count < 0 || *root_count > root_capacity) {
         set_error(error_message, "invalid code tracking DLL root output buffer");
         return false;
@@ -359,9 +359,10 @@ bool find_code_tracking_dll_roots(const SignalDefinition& signal, const CodeTrac
         }
         if (have_last_nonzero && ((last_value < 0.0 && value > 0.0) || (last_value > 0.0 && value < 0.0))) {
             double root_chips = 0.0;
-            if (!refine_sign_change_root(signal, paths, path_count, config, last_x, x, last_value, value, &root_chips) ||
-                !append_root(signal, paths, path_count, config, root_chips, power_scale, roots, root_capacity, root_count,
-                             error_message)) {
+            if (!refine_sign_change_root(signal, paths, path_count, config, last_x, x, last_value, value,
+                                         &root_chips) ||
+                !append_root(signal, paths, path_count, config, root_chips, power_scale, roots, root_capacity,
+                             root_count, error_message)) {
                 *root_count = 0;
                 return false;
             }
@@ -378,9 +379,8 @@ bool find_code_tracking_dll_roots(const SignalDefinition& signal, const CodeTrac
     return true;
 }
 
-bool select_code_tracking_dll_root(const CodeTrackingDllRoot* roots, int root_count,
-                                   CodeTrackingDllSelectionMode mode, double previous_code_phase_sec,
-                                   int* selected_index, std::string* error_message) {
+bool select_code_tracking_dll_root(const CodeTrackingDllRoot* roots, int root_count, CodeTrackingDllSelectionMode mode,
+                                   double previous_code_phase_sec, int* selected_index, std::string* error_message) {
     if (roots == nullptr || root_count <= 0 || selected_index == nullptr) {
         set_error(error_message, "invalid code tracking DLL root-selection arguments");
         return false;

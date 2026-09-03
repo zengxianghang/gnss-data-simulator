@@ -82,6 +82,8 @@ TEST(UrbanRooftopDiffraction, ComplexFresnelAnchorsMatchKnifeEdgeLimits) {
     EXPECT_NEAR(-20.0 * std::log10(std::abs(grazing)), 6.020599913279624, 1.0e-12);
     EXPECT_GT(std::abs(positive_half), std::abs(positive_one));
     EXPECT_GT(std::abs(positive_one), std::abs(positive_two));
+    EXPECT_NEAR(positive_one.real(), -0.10907627388358884, 1.0e-12);
+    EXPECT_NEAR(positive_one.imag(), -0.17081712649323413, 1.0e-12);
     EXPECT_NEAR(std::abs(clear_far), 1.0, 0.03);
 }
 

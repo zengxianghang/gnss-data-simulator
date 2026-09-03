@@ -65,17 +65,25 @@ The RTKLIB corrected direct range is never subtracted from a Euclidean edge path
 
 ## Signed Fresnel clearance and parameter
 
-The clearance magnitude is the shortest distance between the infinite direct ray line and the infinite roof-edge line. Its sign follows the direct roof-clearance classification from `urban_scene_geometry`:
+The clearance magnitude `h` is the shortest distance between the infinite direct ray line and the infinite roof-edge line. Its sign follows the direct roof-clearance classification from `urban_scene_geometry`:
 
 - positive: edge intrudes into the direct path / shadow side;
 - zero: roof grazing;
 - negative: direct ray clears the roof.
 
-The equivalent knife-edge parameter uses the exact excess path and actual signal wavelength:
+Using the two stationary edge-leg distances and the actual signal wavelength, the standard knife-edge Fresnel parameter is
 
-`v = sign(clearance) * sqrt(2 DeltaL / lambda)`.
+`v = h * sqrt(2 (d_S + d_R) / (lambda d_S d_R))`.
 
-This is equivalent to the usual paraxial knife-edge relation near the transition while remaining directly tied to the exact 3-D edge geometry.
+This normalization is consistent with the Fresnel integrals used below. In the paraxial limit,
+
+`DeltaL ~= h^2 (d_S + d_R) / (2 d_S d_R)`
+
+and therefore
+
+`v^2 ~= 4 DeltaL / lambda`.
+
+This relation is regression-tested so a factor-of-two normalization error cannot silently change diffraction attenuation.
 
 Carrier frequency and wavelength come only from the central `SignalDefinition` helpers, including GLONASS FDMA FCN handling.
 

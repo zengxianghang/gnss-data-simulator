@@ -50,6 +50,7 @@ TEST_F(SimConfigTest, FrozenDefaultsAreCentralized) {
     EXPECT_DOUBLE_EQ(config.receiver_clock_drift_mps, 0.0);
     EXPECT_EQ(config.atmosphere_mode, gnss_sim::AtmosphereMode::UNSPECIFIED);
     EXPECT_EQ(config.ttff.startup_mode, gnss_sim::StartupMode::HOT);
+    EXPECT_TRUE(config.cn0_high_dbhz.empty());
 }
 
 TEST_F(SimConfigTest, LoadsValidOverridesWithoutLeakingJsonTypes) {
@@ -62,6 +63,7 @@ TEST_F(SimConfigTest, LoadsValidOverridesWithoutLeakingJsonTypes) {
         "atmosphere_mode": "broadcast",
         "receiver": {"latitude_deg": 21, "longitude_deg": 121, "height_m": 50},
         "ttff": {"startup_mode": "COLD", "power_on_sec": 20, "power_off_sec": 5},
+        "cn0_high_dbhz": {"GPS L1 C/A": 47.25, "Galileo E5a": 49.0},
         "seed": 42
     })json");
 
@@ -75,7 +77,27 @@ TEST_F(SimConfigTest, LoadsValidOverridesWithoutLeakingJsonTypes) {
     EXPECT_DOUBLE_EQ(config.solution_elevation_mask_deg, 7.0);
     EXPECT_EQ(config.atmosphere_mode, gnss_sim::AtmosphereMode::BROADCAST);
     EXPECT_EQ(config.ttff.startup_mode, gnss_sim::StartupMode::COLD);
+    ASSERT_EQ(config.cn0_high_dbhz.size(), 2U);
+    EXPECT_EQ(config.cn0_high_dbhz[0].signal_name, "GPS L1 C/A");
+    EXPECT_DOUBLE_EQ(config.cn0_high_dbhz[0].cn0_dbhz, 47.25);
+    EXPECT_EQ(config.cn0_high_dbhz[1].signal_name, "Galileo E5a");
+    EXPECT_DOUBLE_EQ(config.cn0_high_dbhz[1].cn0_dbhz, 49.0);
     EXPECT_EQ(config.seed, 42U);
+}
+
+TEST_F(SimConfigTest, RejectsUnknownDuplicateAndNonNumericCn0Baselines) {
+    const char* cases[] = {
+        R"json({"cn0_high_dbhz":{"GPS L9":47.0}})json",
+        R"json({"cn0_high_dbhz":{"GPS L1 C/A":47.0,"GPS L1 C/A":48.0}})json",
+        R"json({"cn0_high_dbhz":{"GPS L1 C/A":"47.0"}})json",
+    };
+    for (const char* text : cases) {
+        write_test_config(text);
+        gnss_sim::SimConfig config{};
+        std::string error_message;
+        EXPECT_FALSE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message));
+        EXPECT_NE(error_message.find("cn0_high_dbhz"), std::string::npos) << error_message;
+    }
 }
 
 TEST_F(SimConfigTest, SupportsExplicitNoneWithoutFreezingProjectDefault) {

@@ -158,14 +158,12 @@ bool validate_signal_tracking_model_config(const SignalTrackingModelConfig& conf
         set_error(error_message, "measurement-valid delays must be nonnegative");
         return false;
     }
-    if (!std::isfinite(config.minimum_tracking_cn0_dbhz) ||
-        !std::isfinite(config.acquisition_cn0_threshold_dbhz) ||
+    if (!std::isfinite(config.minimum_tracking_cn0_dbhz) || !std::isfinite(config.acquisition_cn0_threshold_dbhz) ||
         !(config.acquisition_cn0_threshold_dbhz > config.minimum_tracking_cn0_dbhz) ||
         config.acquisition_cn0_persistence_ns < 0 || config.tracking_loss_cn0_persistence_ns < 0 ||
         !std::isfinite(config.dll_root_jump_threshold_chips) || !(config.dll_root_jump_threshold_chips > 0.0) ||
         !std::isfinite(config.los_multipath_cn0_delta_db) || !(config.los_multipath_cn0_delta_db >= 0.0) ||
-        !std::isfinite(config.los_multipath_code_bias_chips) ||
-        !(config.los_multipath_code_bias_chips >= 0.0)) {
+        !std::isfinite(config.los_multipath_code_bias_chips) || !(config.los_multipath_code_bias_chips >= 0.0)) {
         set_error(error_message, "urban signal-tracking thresholds are invalid");
         return false;
     }

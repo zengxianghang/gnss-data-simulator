@@ -50,9 +50,8 @@ std::string model_row(double elevation_min_deg, double elevation_max_deg, bool i
 std::string normalized_model_row(double elevation_min_deg, double elevation_max_deg, bool inclusive, const char* status,
                                  std::uint64_t source_count, const char* delta_p50_db) {
     std::ostringstream output;
-    output << "gnss-cn0-model-v2,NORMALIZED_ELEVATION_SHAPE,GPS,1C," << elevation_min_deg << ','
-           << elevation_max_deg << ',' << (inclusive ? 1 : 0) << ',' << status << ',' << source_count << ','
-           << delta_p50_db;
+    output << "gnss-cn0-model-v2,NORMALIZED_ELEVATION_SHAPE,GPS,1C," << elevation_min_deg << ',' << elevation_max_deg
+           << ',' << (inclusive ? 1 : 0) << ',' << status << ',' << source_count << ',' << delta_p50_db;
     return output.str();
 }
 
@@ -201,8 +200,7 @@ TEST(Cn0Model, ExplicitMalformedModelsFailWithoutFallback) {
         std::string(kModelHeader) +
         "\ngnss-cn0-model-v1,GPS,1C,0,90,1,READY,100,39,39,39,40,41,41,41,40,1,1,1,,,,INSUFFICIENT_SUPPORT,\n";
     const std::string wrong_semantic =
-        std::string(kNormalizedModelHeader) +
-        "\ngnss-cn0-model-v2,ABSOLUTE_STATION_CN0,GPS,1C,0,90,1,READY,2,-1.0\n";
+        std::string(kNormalizedModelHeader) + "\ngnss-cn0-model-v2,ABSOLUTE_STATION_CN0,GPS,1C,0,90,1,READY,2,-1.0\n";
     const std::string cases[] = {std::string("bad-header\n") + valid_row + "\n", duplicate, nonfinite,
                                  missing_delta_statistics, wrong_semantic};
 

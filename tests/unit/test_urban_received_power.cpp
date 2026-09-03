@@ -144,17 +144,21 @@ TEST(UrbanReceivedPower, RooftopGrazingAppliesDiffractionTransferExactlyOnce) {
                                                          &paths, &error_message))
         << error_message;
     ASSERT_EQ(paths.diffraction_status, gnss_sim::UrbanRooftopDiffractionStatus::VALID);
-    ASSERT_EQ(paths.reflections.path_count, 0);
-    ASSERT_EQ(paths.path_count, 1);
+    ASSERT_EQ(paths.reflections.path_count, 1);
+    ASSERT_EQ(paths.path_count, 2);
+    EXPECT_FALSE(paths.direct_geometry.line_of_sight);
     EXPECT_NEAR(paths.diffraction.fresnel_v, 0.0, 1.0e-8);
     EXPECT_NEAR(paths.direct_voltage.real(), 0.5, 1.0e-10);
     EXPECT_NEAR(paths.direct_voltage.imag(), 0.0, 1.0e-10);
-    EXPECT_NEAR(paths.paths[0].code_delay_sec, 0.0, 1.0e-18);
+    EXPECT_NEAR(paths.paths[0].code_delay_sec, paths.diffraction.excess_delay_sec, 1.0e-18);
 
-    gnss_sim::UrbanEffectiveCn0 effective{};
-    ASSERT_TRUE(gnss_sim::compute_urban_effective_cn0(gps_l1, paths, 0.0, &effective, &error_message))
+    const gnss_sim::CodeTrackingDllPath direct_only[] = {{paths.paths[0].code_delay_sec, paths.direct_voltage}};
+    gnss_sim::UrbanEffectiveCn0 direct_effective{};
+    ASSERT_TRUE(gnss_sim::compute_effective_cn0_from_paths(paths.open_cn0_dbhz, gps_l1, direct_only, 1,
+                                                           paths.paths[0].code_delay_sec, &direct_effective,
+                                                           &error_message))
         << error_message;
-    EXPECT_NEAR(effective.effective_cn0_dbhz, paths.open_cn0_dbhz - 6.020599913279624, 1.0e-9);
+    EXPECT_NEAR(direct_effective.effective_cn0_dbhz, paths.open_cn0_dbhz - 6.020599913279624, 1.0e-9);
 }
 
 TEST(UrbanReceivedPower, FrozenBlockedGeometryRetainsIndependentReflectionAsSecondPath) {

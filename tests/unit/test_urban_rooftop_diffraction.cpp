@@ -1,4 +1,6 @@
 #include "gnss/signal_definitions.h"
+#include "gnss_sim/sim_config.h"
+#include "model/urban_reflection_paths.h"
 #include "model/urban_rooftop_diffraction.h"
 
 #include <cmath>
@@ -259,6 +261,110 @@ TEST(UrbanRooftopDiffraction, RepeatedEvaluationIsNumericallyIdentical) {
     EXPECT_DOUBLE_EQ(first.fresnel_v, second.fresnel_v);
     EXPECT_EQ(first.fresnel_coefficient, second.fresnel_coefficient);
     EXPECT_EQ(first.edge_reference_coefficient, second.edge_reference_coefficient);
+}
+
+TEST(UrbanRooftopDiffraction, FrozenFourWallReachabilitySweepFindsLosEdgeTransitionButNoLosSpecularOverlap) {
+    const gnss_sim::UrbanSceneGeometryConfig scene = gnss_sim::default_urban_scene_geometry_config();
+    const gnss_sim::SimConfig sim_config = gnss_sim::default_sim_config();
+    const gnss_sim::SignalDefinition& gps_l1 = signal(gnss_sim::SignalId::kGpsL1Ca);
+
+    // Diagnostic-only reference boundary. The classical knife-edge approximation
+    // treats v <= -0.78 as effectively unobstructed. This test uses that physical
+    // reference only to demonstrate a non-zero clear-side edge-transition region;
+    // it does not freeze a production tracking/state threshold for #121.
+    constexpr double kNegligibleKnifeEdgeV = -0.78;
+    constexpr int kAzimuthStepDeg = 5;
+    constexpr int kOffsetQuarterDegreeStart = -20; // -5 deg from the local skyline.
+    constexpr int kOffsetQuarterDegreeEnd = 40;    // +10 deg from the local skyline.
+    constexpr double kQuarterDegree = 0.25;
+    constexpr int kExpectedAzimuthSamples = 360 / kAzimuthStepDeg;
+    constexpr int kExpectedElevationSamples = kOffsetQuarterDegreeEnd - kOffsetQuarterDegreeStart + 1;
+
+    int total_samples = 0;
+    int line_of_sight_samples = 0;
+    int los_with_specular_reflection_samples = 0;
+    int azimuths_with_los_edge_transition = 0;
+    int azimuths_with_far_clear_los = 0;
+    int azimuths_with_shadow = 0;
+
+    for (int azimuth_deg = 0; azimuth_deg < 360; azimuth_deg += kAzimuthStepDeg) {
+        double skyline_rad = 0.0;
+        double horizontal_distance_m = 0.0;
+        std::string error_message;
+        ASSERT_TRUE(gnss_sim::compute_urban_skyline_elevation(scene, azimuth_deg * kDegreesToRadians, &skyline_rad,
+                                                              &horizontal_distance_m, &error_message))
+            << "az=" << azimuth_deg << ": " << error_message;
+        ASSERT_GT(horizontal_distance_m, 0.0);
+
+        bool has_los_edge_transition = false;
+        bool has_far_clear_los = false;
+        bool has_shadow = false;
+        const double skyline_deg = skyline_rad * kRadiansToDegrees;
+
+        for (int offset_quarter_degree = kOffsetQuarterDegreeStart; offset_quarter_degree <= kOffsetQuarterDegreeEnd;
+             ++offset_quarter_degree) {
+            const double elevation_deg = skyline_deg + kQuarterDegree * static_cast<double>(offset_quarter_degree);
+            gnss_sim::ReceiverTruth receiver{};
+            gnss_sim::SatelliteGeometry geometry{};
+            make_synthetic_geometry(static_cast<double>(azimuth_deg), elevation_deg, 0.0, &receiver, &geometry);
+
+            gnss_sim::UrbanDirectPathGeometry direct{};
+            error_message.clear();
+            ASSERT_TRUE(gnss_sim::compute_urban_direct_path_geometry(scene, geometry.azimuth_rad, geometry.elevation_rad,
+                                                                     &direct, &error_message))
+                << "az=" << azimuth_deg << " offset_q=" << offset_quarter_degree << ": " << error_message;
+            ASSERT_TRUE(direct.above_local_horizon);
+
+            gnss_sim::UrbanFirstOrderReflectionSet reflections{};
+            error_message.clear();
+            ASSERT_TRUE(gnss_sim::compute_urban_first_order_reflections(scene, sim_config.urban_rf, gps_l1, 0, receiver,
+                                                                        geometry, &reflections, &error_message))
+                << "az=" << azimuth_deg << " offset_q=" << offset_quarter_degree << ": " << error_message;
+
+            gnss_sim::UrbanRooftopDiffractionPath diffraction{};
+            gnss_sim::UrbanRooftopDiffractionStatus diffraction_status{};
+            error_message.clear();
+            ASSERT_TRUE(gnss_sim::compute_urban_rooftop_diffraction(scene, gps_l1, 0, receiver, geometry, &diffraction,
+                                                                    &diffraction_status, &error_message))
+                << "az=" << azimuth_deg << " offset_q=" << offset_quarter_degree << ": " << error_message;
+            ASSERT_EQ(diffraction_status, gnss_sim::UrbanRooftopDiffractionStatus::VALID);
+
+            ++total_samples;
+            if (direct.line_of_sight) {
+                ++line_of_sight_samples;
+                if (reflections.path_count > 0) {
+                    ++los_with_specular_reflection_samples;
+                }
+                EXPECT_EQ(reflections.path_count, 0)
+                    << "unexpected LOS+specular overlap at az=" << azimuth_deg << " el=" << elevation_deg;
+                EXPECT_LT(diffraction.fresnel_v, 0.0);
+
+                if (diffraction.fresnel_v > kNegligibleKnifeEdgeV) {
+                    has_los_edge_transition = true;
+                    EXPECT_GT(std::abs(diffraction.fresnel_coefficient - std::complex<double>(1.0, 0.0)), 1.0e-3);
+                } else {
+                    has_far_clear_los = true;
+                }
+            } else if (direct.blocked_by_wall && !direct.grazing_roof) {
+                has_shadow = true;
+                EXPECT_GT(diffraction.fresnel_v, 0.0);
+            }
+        }
+
+        EXPECT_TRUE(has_los_edge_transition) << "no LOS edge-transition sample at az=" << azimuth_deg;
+        EXPECT_TRUE(has_far_clear_los) << "no far-clear LOS sample at az=" << azimuth_deg;
+        EXPECT_TRUE(has_shadow) << "no blocked shadow sample at az=" << azimuth_deg;
+        azimuths_with_los_edge_transition += has_los_edge_transition ? 1 : 0;
+        azimuths_with_far_clear_los += has_far_clear_los ? 1 : 0;
+        azimuths_with_shadow += has_shadow ? 1 : 0;
+    }
+
+    EXPECT_EQ(total_samples, kExpectedAzimuthSamples * kExpectedElevationSamples);
+    EXPECT_GT(line_of_sight_samples, 0);
+    EXPECT_EQ(los_with_specular_reflection_samples, 0);
+    EXPECT_EQ(azimuths_with_los_edge_transition, kExpectedAzimuthSamples);
+    EXPECT_EQ(azimuths_with_far_clear_los, kExpectedAzimuthSamples);
+    EXPECT_EQ(azimuths_with_shadow, kExpectedAzimuthSamples);
 }
 
 } // namespace

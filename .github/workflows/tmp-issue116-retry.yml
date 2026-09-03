@@ -1,0 +1,74 @@
+name: tmp-issue116-retry
+
+on:
+  push:
+    branches:
+      - issue-116-low-e-rf-model
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-116-low-e-rf-model
+      - name: Reuse implementation script with whitespace-tolerant replacement
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f src/model/urban_rf_model.cpp ]; then
+            echo "Issue 116 implementation already present"
+            exit 0
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          import textwrap
+
+          workflow = Path('.github/workflows/tmp-issue116-apply.yml').read_text()
+          marker = "          python - <<'PY'\n"
+          end_marker = "          PY\n"
+          if marker not in workflow:
+              raise SystemExit('cannot find embedded implementation script start')
+          embedded = workflow.split(marker, 1)[1]
+          if end_marker not in embedded:
+              raise SystemExit('cannot find embedded implementation script end')
+          script = textwrap.dedent(embedded.split(end_marker, 1)[0])
+
+          old = '''def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected exactly one match in {path}: {old[:80]!r}, got {text.count(old)}")
+              p.write_text(text.replace(old, new, 1))
+          '''
+          new = '''def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count == 1:
+                  p.write_text(text.replace(old, new, 1))
+                  return
+              words = re.split(r"\\s+", old.strip())
+              pattern = r"\\s+".join(re.escape(word) for word in words if word)
+              matches = list(re.finditer(pattern, text))
+              if len(matches) != 1:
+                  raise SystemExit(f"expected one exact/flexible match in {path}: {old[:80]!r}, exact={count}, flexible={len(matches)}")
+              match = matches[0]
+              p.write_text(text[:match.start()] + new.strip() + text[match.end():])
+          '''
+          if old not in script:
+              raise SystemExit('cannot patch replace_once helper in embedded script')
+          script = script.replace(old, new, 1)
+          exec(compile(script, '<issue116-implementation>', 'exec'), {'Path': Path, 're': re})
+          PY
+          clang-format -i include/gnss_sim/sim_config.h src/core/sim_config.cpp src/model/urban_rf_model.h src/model/urban_rf_model.cpp tests/unit/test_urban_rf_model.cpp
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CMakeLists.txt include/gnss_sim/sim_config.h src/core/sim_config.cpp src/model/urban_rf_model.h src/model/urban_rf_model.cpp tests/unit/test_urban_rf_model.cpp
+          git commit -m "Implement Low-E curtain-wall RF response model"
+          git push origin HEAD:issue-116-low-e-rf-model

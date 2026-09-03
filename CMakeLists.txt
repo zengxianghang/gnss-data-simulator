@@ -252,6 +252,7 @@ if(BUILD_TESTING)
         tests/unit/test_rtklib_adapter.cpp
         tests/unit/test_satellite_engine.cpp
         tests/unit/test_scenario_engine.cpp
+        tests/unit/test_signal_correlation_metadata.cpp
         tests/unit/test_signal_definitions.cpp
         tests/unit/test_signal_tracking.cpp
         tests/unit/test_sim_config.cpp

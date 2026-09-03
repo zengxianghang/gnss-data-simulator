@@ -51,8 +51,7 @@ bool compute_effective_cn0_from_paths(double open_cn0_dbhz, const SignalDefiniti
                                       UrbanEffectiveCn0* result, std::string* error_message);
 
 bool compute_urban_effective_cn0(const SignalDefinition& signal, const UrbanReceivedPathSet& paths,
-                                 double local_code_phase_sec, UrbanEffectiveCn0* result,
-                                 std::string* error_message);
+                                 double local_code_phase_sec, UrbanEffectiveCn0* result, std::string* error_message);
 
 } // namespace gnss_sim
 

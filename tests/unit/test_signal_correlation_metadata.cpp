@@ -106,8 +106,8 @@ TEST(SignalCorrelationMetadata, RepresentativeBpskRatesStaySignalSpecific) {
 }
 
 TEST(SignalCorrelationMetadata, AmbiguousCompositeSignalsFailExplicitlyInsteadOfFallingBack) {
-    for (gnss_sim::SignalId signal_id : {gnss_sim::SignalId::kGpsL2C, gnss_sim::SignalId::kQzssL1C,
-                                         gnss_sim::SignalId::kQzssL2C}) {
+    for (gnss_sim::SignalId signal_id :
+         {gnss_sim::SignalId::kGpsL2C, gnss_sim::SignalId::kQzssL1C, gnss_sim::SignalId::kQzssL2C}) {
         const gnss_sim::SignalDefinition& definition = signal(signal_id);
         EXPECT_EQ(definition.code_correlation.model, gnss_sim::CodeCorrelationModel::kUnsupported);
         EXPECT_FALSE(gnss_sim::signal_has_supported_code_correlation(definition));
@@ -118,28 +118,30 @@ TEST(SignalCorrelationMetadata, InvalidProfilesAreRejectedWithoutSilentRepair) {
     std::string error_message;
 
     gnss_sim::CodeCorrelationProfile unsupported_with_guess{
-        gnss_sim::CodeCorrelationModel::kUnsupported, 1.023e6, 0.0, 0.0, 0.0,
+        gnss_sim::CodeCorrelationModel::kUnsupported,      1.023e6, 0.0, 0.0, 0.0,
         gnss_sim::CompositeSubcarrierPhase::kNotApplicable};
     EXPECT_FALSE(gnss_sim::validate_code_correlation_profile(unsupported_with_guess, &error_message));
 
     gnss_sim::CodeCorrelationProfile bpsk_without_rate{
-        gnss_sim::CodeCorrelationModel::kBpsk, 0.0, 0.0, 0.0, 0.0,
-        gnss_sim::CompositeSubcarrierPhase::kNotApplicable};
+        gnss_sim::CodeCorrelationModel::kBpsk, 0.0, 0.0, 0.0, 0.0, gnss_sim::CompositeSubcarrierPhase::kNotApplicable};
     EXPECT_FALSE(gnss_sim::validate_code_correlation_profile(bpsk_without_rate, &error_message));
 
     gnss_sim::CodeCorrelationProfile cboc_wrong_phase{
-        gnss_sim::CodeCorrelationModel::kCboc, 1.023e6, 1.023e6, 6.138e6, 1.0 / 11.0,
+        gnss_sim::CodeCorrelationModel::kCboc,          1.023e6, 1.023e6, 6.138e6, 1.0 / 11.0,
         gnss_sim::CompositeSubcarrierPhase::kQuadrature};
     EXPECT_FALSE(gnss_sim::validate_code_correlation_profile(cboc_wrong_phase, &error_message));
 
     gnss_sim::CodeCorrelationProfile qmboc_wrong_phase{
-        gnss_sim::CodeCorrelationModel::kQmboc, 1.023e6, 1.023e6, 6.138e6, 4.0 / 33.0,
+        gnss_sim::CodeCorrelationModel::kQmboc,        1.023e6, 1.023e6, 6.138e6, 4.0 / 33.0,
         gnss_sim::CompositeSubcarrierPhase::kAntiPhase};
     EXPECT_FALSE(gnss_sim::validate_code_correlation_profile(qmboc_wrong_phase, &error_message));
 
-    gnss_sim::CodeCorrelationProfile nonfinite{
-        gnss_sim::CodeCorrelationModel::kBpsk, std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0, 0.0,
-        gnss_sim::CompositeSubcarrierPhase::kNotApplicable};
+    gnss_sim::CodeCorrelationProfile nonfinite{gnss_sim::CodeCorrelationModel::kBpsk,
+                                               std::numeric_limits<double>::quiet_NaN(),
+                                               0.0,
+                                               0.0,
+                                               0.0,
+                                               gnss_sim::CompositeSubcarrierPhase::kNotApplicable};
     EXPECT_FALSE(gnss_sim::validate_code_correlation_profile(nonfinite, &error_message));
 }
 

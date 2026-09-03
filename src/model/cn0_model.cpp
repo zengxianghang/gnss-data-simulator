@@ -771,8 +771,8 @@ bool configure_cn0_model_runtime(const SimConfig& config, Cn0Model* model, std::
     for (const Cn0HighBaselineConfig& configured : config.cn0_high_dbhz) {
         const SignalDefinition* definition = signal_definition_by_name(configured.signal_name);
         if (definition == nullptr || !std::isfinite(configured.cn0_dbhz)) {
-            set_error(error_message, "CN0 runtime baseline configuration is invalid for signal: " +
-                                         configured.signal_name);
+            set_error(error_message,
+                      "CN0 runtime baseline configuration is invalid for signal: " + configured.signal_name);
             return false;
         }
         if (find_high_baseline(*model, definition->signal_id) != nullptr) {
@@ -792,8 +792,8 @@ bool configure_cn0_model_runtime(const SimConfig& config, Cn0Model* model, std::
         const SignalDefinition& definition = definitions[index];
         if (normalized_signal_requires_baseline(*model, definition.signal_id) &&
             find_high_baseline(*model, definition.signal_id) == nullptr) {
-            set_error(error_message, "normalized CN0 model requires cn0_high_dbhz for signal: " +
-                                         std::string(definition.name));
+            set_error(error_message,
+                      "normalized CN0 model requires cn0_high_dbhz for signal: " + std::string(definition.name));
             return false;
         }
     }

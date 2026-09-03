@@ -47,9 +47,8 @@ std::string model_row(double elevation_min_deg, double elevation_max_deg, bool i
     return output.str();
 }
 
-std::string normalized_model_row(const char* signal, double elevation_min_deg, double elevation_max_deg,
-                                 bool inclusive, const char* status, std::uint64_t source_count,
-                                 const char* delta_p50_db) {
+std::string normalized_model_row(const char* signal, double elevation_min_deg, double elevation_max_deg, bool inclusive,
+                                 const char* status, std::uint64_t source_count, const char* delta_p50_db) {
     std::ostringstream output;
     output << "gnss-cn0-model-v2,NORMALIZED_ELEVATION_SHAPE,GPS," << signal << ',' << elevation_min_deg << ','
            << elevation_max_deg << ',' << (inclusive ? 1 : 0) << ',' << status << ',' << source_count << ','
@@ -184,12 +183,11 @@ TEST(Cn0Model, NormalizedSchemaRequiresRuntimeBaselineBeforeAbsoluteEvaluation) 
 }
 
 TEST(Cn0Model, NormalizedBaselineShiftTranslatesOnlySelectedSignalAndPreservesShape) {
-    const std::string content =
-        std::string(kNormalizedModelHeader) + "\n" +
-        normalized_model_row("1C", 0.0, 45.0, false, "READY", 4U, "-8.000000") + "\n" +
-        normalized_model_row("1C", 45.0, 90.0, true, "READY", 4U, "-1.000000") + "\n" +
-        normalized_model_row("5Q", 0.0, 45.0, false, "READY", 3U, "-6.000000") + "\n" +
-        normalized_model_row("5Q", 45.0, 90.0, true, "READY", 3U, "-0.500000") + "\n";
+    const std::string content = std::string(kNormalizedModelHeader) + "\n" +
+                                normalized_model_row("1C", 0.0, 45.0, false, "READY", 4U, "-8.000000") + "\n" +
+                                normalized_model_row("1C", 45.0, 90.0, true, "READY", 4U, "-1.000000") + "\n" +
+                                normalized_model_row("5Q", 0.0, 45.0, false, "READY", 3U, "-6.000000") + "\n" +
+                                normalized_model_row("5Q", 45.0, 90.0, true, "READY", 3U, "-0.500000") + "\n";
     const TemporaryModel file(content);
     gnss_sim::Cn0Model base{};
     gnss_sim::Cn0Model shifted{};
@@ -238,11 +236,10 @@ TEST(Cn0Model, NormalizedReadyBinsInterpolateButSparseGapFallsBackWithoutBridgin
     EXPECT_NEAR(at_30 - at_15, 3.0, 1e-12);
     EXPECT_NEAR(at_45 - at_30, 3.0, 1e-12);
 
-    const std::string gap_content =
-        std::string(kNormalizedModelHeader) + "\n" +
-        normalized_model_row("1C", 0.0, 30.0, false, "READY", 3U, "-9.000000") + "\n" +
-        normalized_model_row("1C", 30.0, 60.0, false, "SPARSE", 1U, "-4.000000") + "\n" +
-        normalized_model_row("1C", 60.0, 90.0, true, "READY", 3U, "0.000000") + "\n";
+    const std::string gap_content = std::string(kNormalizedModelHeader) + "\n" +
+                                    normalized_model_row("1C", 0.0, 30.0, false, "READY", 3U, "-9.000000") + "\n" +
+                                    normalized_model_row("1C", 30.0, 60.0, false, "SPARSE", 1U, "-4.000000") + "\n" +
+                                    normalized_model_row("1C", 60.0, 90.0, true, "READY", 3U, "0.000000") + "\n";
     const TemporaryModel gap_file(gap_content);
     gnss_sim::Cn0Model gap{};
     ASSERT_TRUE(gnss_sim::load_cn0_model_csv(gap_file.path().c_str(), 17U, &gap, &error)) << error;
@@ -255,10 +252,9 @@ TEST(Cn0Model, NormalizedReadyBinsInterpolateButSparseGapFallsBackWithoutBridgin
 }
 
 TEST(Cn0Model, NormalizedReadySignalWithoutReceiverBaselineFailsFast) {
-    const std::string content =
-        std::string(kNormalizedModelHeader) + "\n" +
-        normalized_model_row("1C", 0.0, 90.0, true, "READY", 2U, "-2.000000") + "\n" +
-        normalized_model_row("5Q", 0.0, 90.0, true, "READY", 2U, "-1.000000") + "\n";
+    const std::string content = std::string(kNormalizedModelHeader) + "\n" +
+                                normalized_model_row("1C", 0.0, 90.0, true, "READY", 2U, "-2.000000") + "\n" +
+                                normalized_model_row("5Q", 0.0, 90.0, true, "READY", 2U, "-1.000000") + "\n";
     const TemporaryModel file(content);
     gnss_sim::Cn0Model model{};
     std::string error;

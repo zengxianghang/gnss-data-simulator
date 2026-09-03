@@ -40,16 +40,16 @@ double cardinal_skyline_deg(const gnss_sim::UrbanSceneGeometryConfig& scene) {
     double skyline_rad = 0.0;
     double horizontal_distance_m = 0.0;
     std::string error_message;
-    EXPECT_TRUE(gnss_sim::compute_urban_skyline_elevation(scene, 0.0, &skyline_rad, &horizontal_distance_m,
-                                                          &error_message))
+    EXPECT_TRUE(
+        gnss_sim::compute_urban_skyline_elevation(scene, 0.0, &skyline_rad, &horizontal_distance_m, &error_message))
         << error_message;
     EXPECT_NEAR(horizontal_distance_m, scene.wall_distance_m, 1.0e-12);
     return skyline_rad * kRadiansToDegrees;
 }
 
 gnss_sim::UrbanRooftopDiffractionPath evaluate(double elevation_deg, const gnss_sim::SignalDefinition& definition,
-                                                int glonass_fcn, double sagnac_offset_m,
-                                                gnss_sim::UrbanRooftopDiffractionStatus* status) {
+                                               int glonass_fcn, double sagnac_offset_m,
+                                               gnss_sim::UrbanRooftopDiffractionStatus* status) {
     const gnss_sim::UrbanSceneGeometryConfig scene = gnss_sim::default_urban_scene_geometry_config();
     gnss_sim::ReceiverTruth receiver{};
     gnss_sim::SatelliteGeometry geometry{};
@@ -57,8 +57,8 @@ gnss_sim::UrbanRooftopDiffractionPath evaluate(double elevation_deg, const gnss_
 
     gnss_sim::UrbanRooftopDiffractionPath result{};
     std::string error_message;
-    EXPECT_TRUE(gnss_sim::compute_urban_rooftop_diffraction(scene, definition, glonass_fcn, receiver, geometry,
-                                                            &result, status, &error_message))
+    EXPECT_TRUE(gnss_sim::compute_urban_rooftop_diffraction(scene, definition, glonass_fcn, receiver, geometry, &result,
+                                                            status, &error_message))
         << error_message;
     return result;
 }

@@ -64,7 +64,7 @@ void write_observation(std::ofstream& output, bool snapshot_available, const Mea
                        bool range_rate_valid) {
     output << (snapshot_available ? 1 : 0) << ',';
     if (!snapshot_available) {
-        output << ",,,,,,,,,";
+        output << ",,,,,,,,";
         return;
     }
     output << (observation.observation_available ? 1 : 0) << ',' << (observation.pseudorange_valid ? 1 : 0) << ','

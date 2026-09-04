@@ -302,6 +302,7 @@ if(BUILD_TESTING)
         tests/integration/test_all_signal_residuals.cpp
         tests/integration/test_carrier_tracking_runtime.cpp
         tests/integration/test_carrier_tracking_truth.cpp
+        tests/integration/test_carrier_tracking_authentic_validation.cpp
         tests/integration/test_measurement_noise_integration.cpp
         tests/integration/test_nav_equivalence.cpp
         tests/integration/test_rea_fade.cpp

@@ -239,8 +239,7 @@ bool compute_carrier_tracking_jitter(const CarrierTrackingConfig& config, Carrie
 }
 
 bool update_carrier_tracking(const CarrierTrackingConfig& config, const CarrierTrackingInput& input,
-                             CarrierTrackingState* state, CarrierTrackingResult* result,
-                             std::string* error_message) {
+                             CarrierTrackingState* state, CarrierTrackingResult* result, std::string* error_message) {
     if (state == nullptr || result == nullptr) {
         return fail(error_message, "carrier tracking state/result is null");
     }
@@ -286,8 +285,7 @@ bool update_carrier_tracking(const CarrierTrackingConfig& config, const CarrierT
         case CarrierTrackingMode::kFllTrack:
             state->mode_age_sec += input.dt_sec;
             state->carrier_lock_age_sec += input.dt_sec;
-            if (state->fll_pull_in_active &&
-                elapsed_reached(state->mode_age_sec, config.fll_pull_in_duration_sec)) {
+            if (state->fll_pull_in_active && elapsed_reached(state->mode_age_sec, config.fll_pull_in_duration_sec)) {
                 state->fll_pull_in_active = false;
             }
 
@@ -332,9 +330,8 @@ bool update_carrier_tracking(const CarrierTrackingConfig& config, const CarrierT
     }
 
     CarrierTrackingJitter jitter{};
-    if (!compute_carrier_tracking_jitter(config, state->mode, state->fll_pull_in_active,
-                                         input.effective_cn0_dbhz, input.wavelength_m, input.dt_sec, &jitter,
-                                         error_message)) {
+    if (!compute_carrier_tracking_jitter(config, state->mode, state->fll_pull_in_active, input.effective_cn0_dbhz,
+                                         input.wavelength_m, input.dt_sec, &jitter, error_message)) {
         return false;
     }
 

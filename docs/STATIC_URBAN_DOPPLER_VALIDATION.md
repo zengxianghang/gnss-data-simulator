@@ -157,15 +157,15 @@ No minimum velocity degradation is an acceptance target.
 
 ## 1 Hz versus 10 Hz sampling-rate validation
 
-The 10 Hz run provides an independent reconstruction of the carrier-range change over each one-second interval. The initial CI #731 comparison produced:
+The 10 Hz run provides an independent reconstruction of the carrier-range change over each one-second interval. Final implementation CI #734, validating PR head `82bee12c17298513e0c15a31885199d254f585da`, produced:
 
 - matched continuous-lock one-second intervals: **3134**;
 - RMS 1 Hz vs reconstructed 10 Hz rate mismatch: **3.2025e-22 m/s**;
 - maximum mismatch: **1.35525e-20 m/s**;
-- one-second environmental phase change magnitude: approximately **0.0154094 rad**;
+- maximum 10 Hz reconstructed one-second environmental phase change magnitude: **0.0154094 rad**;
 - pi: approximately **3.14159 rad**.
 
-The validator has subsequently been tightened so the phase-change bound itself is computed from the **10 Hz reconstructed one-second carrier-range difference**, not from the 1 Hz `std::remainder` result. This prevents the alias check from being self-referential. The final PR CI must pass this independent version before merge.
+The phase-change bound is computed from the **10 Hz reconstructed one-second carrier-range difference**, not from the 1 Hz `std::remainder` result. This prevents the alias check from being self-referential. CI #734 passed this independent validator together with the full 339-test Ubuntu and Windows suites, format, and tooling checks.
 
 The observed phase motion is over two orders of magnitude below pi, so the current frozen static scene has substantial margin against one-second phase-rate aliasing.
 

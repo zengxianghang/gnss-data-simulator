@@ -73,6 +73,25 @@ struct MeasurementErrorConfig {
     MeasurementFadeErrorConfig rea_fade;
 };
 
+struct CarrierTrackingReceiverConfig {
+    bool enabled;
+    double coherent_integration_sec;
+    double pll_noise_bandwidth_hz;
+    double fll_noise_bandwidth_hz;
+    double fll_pull_in_bandwidth_hz;
+    double fll_pull_in_duration_sec;
+    double pll_enter_cn0_dbhz;
+    double pll_exit_cn0_dbhz;
+    double pll_enter_persistence_sec;
+    double pll_exit_persistence_sec;
+    double fll_enter_cn0_dbhz;
+    double fll_exit_cn0_dbhz;
+    double fll_enter_persistence_sec;
+    double fll_exit_persistence_sec;
+    double doppler_valid_delay_sec;
+    double adr_valid_after_pll_sec;
+};
+
 struct UrbanRfMaterialConfig {
     double relative_permittivity_real;
     double conductivity_c_s_per_m;
@@ -135,6 +154,7 @@ struct SimConfig {
     ReaConfig rea;
     BestposRtkConfig bestpos_rtk;
     MeasurementErrorConfig measurement_error;
+    CarrierTrackingReceiverConfig carrier_tracking;
     UrbanRfConfig urban_rf;
     std::vector<Cn0HighBaselineConfig> cn0_high_dbhz;
     std::uint64_t seed;

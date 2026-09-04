@@ -86,6 +86,27 @@ void clear_observation_state(SignalTracker* tracker) {
     tracker->doppler_valid = false;
     tracker->adr_valid = false;
     tracker->observation_available = false;
+    tracker->carrier_continuity_valid = false;
+}
+
+void reset_urban_tracking_overlay(SignalTracker* tracker, const SimTime& time) {
+    tracker->urban_state = UrbanSignalState::kBlocked;
+    tracker->loss_reason = SignalTrackingLossReason::kNone;
+    tracker->above_acquisition_threshold_since = time;
+    tracker->below_tracking_threshold_since = time;
+    tracker->above_acquisition_threshold_active = false;
+    tracker->below_tracking_threshold_active = false;
+    tracker->has_tracking_lock = false;
+    tracker->previous_dll_root_valid = false;
+    tracker->current_dll_root_valid = false;
+    tracker->previous_dll_code_phase_sec = 0.0;
+    tracker->previous_dll_code_phase_chips = 0.0;
+    tracker->current_dll_code_phase_sec = 0.0;
+    tracker->current_dll_code_phase_chips = 0.0;
+    tracker->current_dll_prompt_power = 0.0;
+    tracker->reacquisition_pending = false;
+    tracker->reacquisition_event = false;
+    tracker->carrier_continuity_valid = false;
 }
 
 } // namespace
@@ -109,6 +130,14 @@ SignalTrackingModelConfig default_signal_tracking_model_config() {
     config.psr_valid_delay_ns = milliseconds(100);
     config.doppler_valid_delay_ns = milliseconds(150);
     config.adr_valid_delay_ns = milliseconds(500);
+
+    config.minimum_tracking_cn0_dbhz = 10.0;
+    config.acquisition_cn0_threshold_dbhz = 18.0;
+    config.acquisition_cn0_persistence_ns = milliseconds(200);
+    config.tracking_loss_cn0_persistence_ns = milliseconds(500);
+    config.dll_root_jump_threshold_chips = 0.25;
+    config.los_multipath_cn0_delta_db = 0.5;
+    config.los_multipath_code_bias_chips = 0.02;
     return config;
 }
 
@@ -127,6 +156,15 @@ bool validate_signal_tracking_model_config(const SignalTrackingModelConfig& conf
     }
     if (config.psr_valid_delay_ns < 0 || config.doppler_valid_delay_ns < 0 || config.adr_valid_delay_ns < 0) {
         set_error(error_message, "measurement-valid delays must be nonnegative");
+        return false;
+    }
+    if (!std::isfinite(config.minimum_tracking_cn0_dbhz) || !std::isfinite(config.acquisition_cn0_threshold_dbhz) ||
+        !(config.acquisition_cn0_threshold_dbhz > config.minimum_tracking_cn0_dbhz) ||
+        config.acquisition_cn0_persistence_ns < 0 || config.tracking_loss_cn0_persistence_ns < 0 ||
+        !std::isfinite(config.dll_root_jump_threshold_chips) || !(config.dll_root_jump_threshold_chips > 0.0) ||
+        !std::isfinite(config.los_multipath_cn0_delta_db) || !(config.los_multipath_cn0_delta_db >= 0.0) ||
+        !std::isfinite(config.los_multipath_code_bias_chips) || !(config.los_multipath_code_bias_chips >= 0.0)) {
+        set_error(error_message, "urban signal-tracking thresholds are invalid");
         return false;
     }
     return true;
@@ -168,6 +206,7 @@ void reset_signal_tracker(SignalTracker* tracker, SignalId signal_id, const SimT
     tracker->doppler_valid_time = reset_time;
     tracker->adr_valid_time = reset_time;
     clear_observation_state(tracker);
+    reset_urban_tracking_overlay(tracker, reset_time);
 }
 
 bool schedule_signal_acquisition(SignalTracker* tracker, AcquisitionContext context, const SimTime& signal_on_time,
@@ -223,6 +262,14 @@ bool schedule_signal_acquisition(SignalTracker* tracker, AcquisitionContext cont
     tracker->doppler_valid = false;
     tracker->adr_valid = false;
     tracker->observation_available = false;
+    tracker->above_acquisition_threshold_active = false;
+    tracker->below_tracking_threshold_active = false;
+    tracker->has_tracking_lock = false;
+    tracker->previous_dll_root_valid = false;
+    tracker->current_dll_root_valid = false;
+    tracker->reacquisition_pending = false;
+    tracker->reacquisition_event = false;
+    tracker->carrier_continuity_valid = false;
     return true;
 }
 
@@ -238,6 +285,7 @@ bool update_signal_tracker(SignalTracker* tracker, const SimTime& current_time, 
         tracker->phase = SignalTrackingPhase::kSignalOff;
         tracker->state_since = current_time;
         tracker->scheduled = false;
+        tracker->has_tracking_lock = false;
         clear_observation_state(tracker);
         return true;
     }
@@ -262,6 +310,7 @@ bool update_signal_tracker(SignalTracker* tracker, const SimTime& current_time, 
         tracker->doppler_valid = false;
         tracker->adr_valid = false;
         tracker->observation_available = false;
+        tracker->carrier_continuity_valid = false;
         return true;
     }
     if (compare_sim_time(current_time, tracker->acquisition_complete_time) < 0) {
@@ -274,11 +323,13 @@ bool update_signal_tracker(SignalTracker* tracker, const SimTime& current_time, 
         tracker->doppler_valid = false;
         tracker->adr_valid = false;
         tracker->observation_available = false;
+        tracker->carrier_continuity_valid = false;
         return true;
     }
 
     tracker->phase = SignalTrackingPhase::kTracking;
     tracker->state_since = tracker->tracking_start_time;
+    tracker->has_tracking_lock = true;
     std::int64_t lock_time_ns = 0;
     if (!difference_time_ns(current_time, tracker->tracking_start_time, &lock_time_ns) || lock_time_ns < 0) {
         set_error(error_message, "cannot compute signal lock time");
@@ -289,6 +340,7 @@ bool update_signal_tracker(SignalTracker* tracker, const SimTime& current_time, 
     tracker->doppler_valid = compare_sim_time(current_time, tracker->doppler_valid_time) >= 0;
     tracker->adr_valid = compare_sim_time(current_time, tracker->adr_valid_time) >= 0;
     tracker->observation_available = tracker->psr_valid;
+    tracker->carrier_continuity_valid = tracker->adr_valid;
     return true;
 }
 

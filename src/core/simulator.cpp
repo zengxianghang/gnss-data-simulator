@@ -12,15 +12,20 @@
 #include "model/atmosphere_model.h"
 #include "model/bestpos_rtk_model.h"
 #include "model/cn0_model.h"
+#include "model/code_tracking_dll.h"
 #include "model/measurement_error_model.h"
 #include "model/measurement_model.h"
 #include "model/receiver_truth.h"
 #include "model/signal_tracking.h"
+#include "model/urban_carrier_temporal.h"
+#include "model/urban_scene_geometry.h"
+#include "model/urban_signal_epoch.h"
 #include "output/device_marker.h"
 #include "output/novatel_nav_writer.h"
 #include "output/novatel_range_writer.h"
 #include "output/novatel_solution_writer.h"
 #include "output/truth_writer.h"
+#include "output/urban_truth_writer.h"
 #include "scenario/scenario_engine.h"
 #include "solution/solution_engine.h"
 
@@ -48,6 +53,7 @@ struct SignalRuntime {
     SignalTracker tracker;
     CarrierAmbiguityState ambiguity;
     MeasurementErrorState measurement_error;
+    UrbanCarrierTemporalState urban_carrier_temporal;
     bool ever_scheduled;
 };
 
@@ -81,6 +87,8 @@ struct RuntimeState {
     DeterministicRng rng;
     Cn0Model cn0_model;
     SignalTrackingModelConfig tracking_config;
+    UrbanSceneGeometryConfig urban_scene_config;
+    CodeTrackingDllConfig urban_dll_config;
     SolutionEngineState solution_state;
     BestposRtkState bestpos_rtk_state;
     StartupMode startup_mode;
@@ -332,6 +340,7 @@ bool build_satellite_runtimes(const std::vector<TruthScheduleEntry>& schedule, c
             SignalRuntime signal{};
             reset_signal_tracker(&signal.tracker, definitions[index].signal_id, reset_time);
             reset_carrier_ambiguity_state(&signal.ambiguity);
+            reset_urban_carrier_temporal_state(&signal.urban_carrier_temporal);
             satellite.signals.push_back(signal);
         }
         for (const TruthScheduleEntry& entry : schedule) {
@@ -499,6 +508,7 @@ bool receiver_power_on(RuntimeState* runtime, const SimConfig& config, const Sim
             reset_signal_tracker(&signal.tracker, signal.tracker.signal_id, power_on_time);
             reset_carrier_ambiguity_state(&signal.ambiguity);
             reset_measurement_error_state(&signal.measurement_error);
+            reset_urban_carrier_temporal_state(&signal.urban_carrier_temporal);
             signal.ever_scheduled = false;
         }
         for (ColdFamilyRuntime& family : satellite.cold_families) {
@@ -523,6 +533,7 @@ void receiver_power_off(RuntimeState* runtime, const SimTime& time) {
             reset_signal_tracker(&signal.tracker, signal.tracker.signal_id, time);
             reset_carrier_ambiguity_state(&signal.ambiguity);
             reset_measurement_error_state(&signal.measurement_error);
+            reset_urban_carrier_temporal_state(&signal.urban_carrier_temporal);
         }
     }
 }
@@ -534,6 +545,7 @@ void receiver_signal_off(RuntimeState* runtime, const SimTime& time) {
             static_cast<void>(update_signal_tracker(&signal.tracker, time, false, 0.0, runtime->cn0_model, nullptr));
             reset_carrier_ambiguity_state(&signal.ambiguity);
             reset_measurement_error_state(&signal.measurement_error);
+            reset_urban_carrier_temporal_state(&signal.urban_carrier_temporal);
         }
     }
 }
@@ -733,10 +745,52 @@ bool process_receiver_nav(RuntimeState* runtime, const SimConfig& config, const 
     return process_normal_nav(runtime, config, current_time, output, summary, error_message);
 }
 
+bool update_unavailable_urban_signal(RuntimeState* runtime, const SignalDefinition& definition, int glonass_fcn,
+                                     const SimTime& current_time, double elevation_deg, SignalRuntime* signal,
+                                     UrbanSignalEpochResult* epoch, UrbanCarrierTemporalResult* temporal,
+                                     std::string* error_message) {
+    if (epoch == nullptr || temporal == nullptr) {
+        set_error(error_message, "unavailable urban signal diagnostics output is null");
+        return false;
+    }
+    double open_cn0_dbhz = 0.0;
+    if (!cn0_model_estimate_dbhz(runtime->cn0_model, definition.signal_id, elevation_deg, current_time,
+                                 &open_cn0_dbhz)) {
+        set_error(error_message, "cannot evaluate open-sky CN0 for unavailable urban signal");
+        return false;
+    }
+    UrbanSignalTrackingInput input{};
+    input.signal_available = false;
+    input.direct_line_of_sight = false;
+    input.open_cn0_dbhz = open_cn0_dbhz;
+    input.effective_cn0_dbhz = open_cn0_dbhz;
+    if (!update_urban_signal_tracker(&signal->tracker, current_time, input, runtime->tracking_config, error_message)) {
+        return false;
+    }
+    UrbanSignalEpochResult output{};
+    output.urban_state = signal->tracker.urban_state;
+    output.tracking_phase = signal->tracker.phase;
+    output.loss_reason = signal->tracker.loss_reason;
+    output.lock_time_ns = signal->tracker.lock_time_ns;
+    output.observation_available = signal->tracker.observation_available;
+    output.psr_valid = signal->tracker.psr_valid;
+    output.doppler_valid = signal->tracker.doppler_valid;
+    output.adr_valid = signal->tracker.adr_valid;
+    output.reacquisition_event = signal->tracker.reacquisition_event;
+    output.carrier_continuity_valid = signal->tracker.carrier_continuity_valid;
+    if (!update_urban_carrier_temporal_state(definition, glonass_fcn, current_time, output,
+                                             &signal->urban_carrier_temporal, temporal, error_message)) {
+        return false;
+    }
+    *epoch = output;
+    return true;
+}
+
 bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& config,
                                       const ScenarioEpochState& scenario,
                                       std::vector<MeasurementObservation>* measurements, int* tracked_satellites,
-                                      TruthWriter* truth_writer, std::string* error_message) {
+                                      TruthWriter* truth_writer, UrbanTruthWriter* urban_truth_writer,
+                                      std::string* error_message) {
     measurements->clear();
     *tracked_satellites = 0;
     const RtklibNavStore* truth_nav = truth_navigation_store(runtime->navigation);
@@ -822,7 +876,7 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                 signal_healthy = signal_health == 0;
             }
 
-            const bool signal_available =
+            const bool legacy_signal_available =
                 scenario.signal_available &&
                 (health_family != RtklibBroadcastMessageFamily::kUnknown ? signal_geometry.above_elevation_mask
                                                                          : signal_geometry.visible);
@@ -830,6 +884,10 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                 signal_geometry.healthy = signal_healthy;
                 signal_geometry.visible = signal_geometry.above_elevation_mask && signal_healthy;
             }
+            const bool signal_available =
+                config.multipath_enabled
+                    ? scenario.signal_available && signal_geometry.above_elevation_mask && signal_healthy
+                    : legacy_signal_available;
             const double elevation_deg = signal_geometry.elevation_rad * kRadiansToDegrees;
             if (signal_available && !signal.tracker.scheduled) {
                 const AcquisitionContext context =
@@ -846,11 +904,36 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                 }
                 signal.ever_scheduled = true;
             }
-            if (!update_signal_tracker(&signal.tracker, scenario.time, signal_available, elevation_deg,
-                                       runtime->cn0_model, error_message)) {
+
+            UrbanSignalEpochResult urban_epoch{};
+            UrbanCarrierTemporalResult urban_temporal{};
+            if (config.multipath_enabled) {
+                if (signal_available) {
+                    if (!compute_urban_signal_epoch(runtime->cn0_model, runtime->urban_scene_config, config.urban_rf,
+                                                    runtime->urban_dll_config, runtime->tracking_config, *definition,
+                                                    glonass_fcn, scenario.time, runtime->receiver, signal_geometry,
+                                                    &signal.tracker, &urban_epoch, error_message) ||
+                        !update_urban_carrier_temporal_state(*definition, glonass_fcn, scenario.time, urban_epoch,
+                                                             &signal.urban_carrier_temporal, &urban_temporal,
+                                                             error_message)) {
+                        return false;
+                    }
+                } else if (!update_unavailable_urban_signal(runtime, *definition, glonass_fcn, scenario.time,
+                                                            elevation_deg, &signal, &urban_epoch, &urban_temporal,
+                                                            error_message)) {
+                    return false;
+                }
+            } else if (!update_signal_tracker(&signal.tracker, scenario.time, signal_available, elevation_deg,
+                                              runtime->cn0_model, error_message)) {
                 return false;
             }
+
             if (signal.tracker.phase != SignalTrackingPhase::kTracking) {
+                if (config.multipath_enabled &&
+                    !urban_truth_writer_write_signal(urban_truth_writer, signal_geometry, *definition, glonass_fcn,
+                                                     urban_epoch, urban_temporal, nullptr, error_message)) {
+                    return false;
+                }
                 reset_carrier_ambiguity_state(&signal.ambiguity);
                 reset_measurement_error_state(&signal.measurement_error);
                 continue;
@@ -872,8 +955,16 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                           &signal.ambiguity, &observation, error_message)
                     : generate_zero_noise_measurement(truth_nav, signal_geometry, runtime->receiver, signal.tracker,
                                                       atmosphere, &signal.ambiguity, &observation, error_message);
-            if (!measurement_ok || !truth_writer_write_observation(truth_writer, runtime->receiver, signal_geometry,
-                                                                   signal.tracker, observation, error_message)) {
+            if (!measurement_ok ||
+                (config.multipath_enabled &&
+                 !apply_urban_measurement_effects(urban_epoch, urban_temporal, &observation, error_message))) {
+                return false;
+            }
+            if ((config.multipath_enabled &&
+                 !urban_truth_writer_write_signal(urban_truth_writer, signal_geometry, *definition, glonass_fcn,
+                                                  urban_epoch, urban_temporal, &observation, error_message)) ||
+                !truth_writer_write_observation(truth_writer, runtime->receiver, signal_geometry, signal.tracker,
+                                                observation, error_message)) {
                 return false;
             }
             MeasurementObservation reported_observation = observation;
@@ -979,12 +1070,19 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
     } else {
         runtime.cn0_model = make_builtin_cn0_model(config.seed);
     }
+    if (!configure_cn0_model_runtime(config, &runtime.cn0_model, error_message)) {
+        destroy_navigation_state(runtime.navigation);
+        return false;
+    }
     result.cn0_model_source = cn0_model_source_name(runtime.cn0_model.source);
+    result.cn0_model_semantic = cn0_model_semantic_name(runtime.cn0_model.semantic);
     result.cn0_model_schema_version = runtime.cn0_model.identity.schema_version;
     result.cn0_model_name = runtime.cn0_model.identity.file_name;
     result.cn0_model_hash = runtime.cn0_model.identity.hash;
     result.cn0_model_size_bytes = runtime.cn0_model.identity.size_bytes;
     runtime.tracking_config = default_signal_tracking_model_config();
+    runtime.urban_scene_config = default_urban_scene_geometry_config();
+    runtime.urban_dll_config = default_code_tracking_dll_config();
 
     ScenarioEngine scenario_engine{};
     if (!initialize_scenario_engine(config, options.start_time, &scenario_engine, error_message)) {
@@ -1006,10 +1104,18 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         destroy_navigation_state(runtime.navigation);
         return false;
     }
+    UrbanTruthWriter* urban_truth_writer = create_urban_truth_writer(options.output_log_path, error_message);
+    if (urban_truth_writer == nullptr) {
+        destroy_truth_writer(truth_writer);
+        output.close();
+        destroy_navigation_state(runtime.navigation);
+        return false;
+    }
 
     std::uint64_t epoch_count = 0;
     if (!epoch_count_for_duration(config.duration_ns, config.sampling_rate_hz, &epoch_count)) {
         set_error(error_message, "cannot compute simulator epoch count");
+        destroy_urban_truth_writer(urban_truth_writer);
         destroy_truth_writer(truth_writer);
         destroy_navigation_state(runtime.navigation);
         return false;
@@ -1072,7 +1178,7 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
 
         int tracked_satellites = 0;
         if (!update_tracking_and_measurements(&runtime, config, scenario, &measurements, &tracked_satellites,
-                                              truth_writer, error_message) ||
+                                              truth_writer, urban_truth_writer, error_message) ||
             !process_receiver_nav(&runtime, config, current_time, &output, &result, error_message)) {
             ok = false;
             break;
@@ -1108,10 +1214,14 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         ok = false;
     }
     output.close();
+    if (ok && !finalize_urban_truth_writer(urban_truth_writer, error_message)) {
+        ok = false;
+    }
     if (ok && !finalize_truth_writer(truth_writer, result, simulator_version(), simulator_commit_sha(),
                                      rtklib_commit_sha(), error_message)) {
         ok = false;
     }
+    destroy_urban_truth_writer(urban_truth_writer);
     destroy_truth_writer(truth_writer);
     destroy_navigation_state(runtime.navigation);
     if (!ok) {

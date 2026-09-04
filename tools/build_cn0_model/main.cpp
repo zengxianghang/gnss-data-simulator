@@ -3,7 +3,6 @@
 #include <cerrno>
 #include <cstdlib>
 #include <iostream>
-#include <limits>
 #include <string>
 #include <vector>
 
@@ -41,7 +40,9 @@ void usage(const char* program) {
     std::cerr << "Usage: " << program
               << " --source <rinex.obs> <rinex.nav> [--source <rinex.obs> <rinex.nav> ...]"
                  " --output <cn0_model.csv> --metadata <cn0_model.meta.json>"
-                 " [--bin-width-deg <deg>] [--min-bin-count <n>] [--min-temporal-pairs <n>]\n";
+                 " [--model-semantic absolute|normalized] [--bin-width-deg <deg>] [--min-bin-count <n>]"
+                 " [--min-temporal-pairs <n>] [--reference-min-deg <deg>] [--reference-max-deg <deg>]"
+                 " [--min-reference-count <n>] [--min-source-count <n>]\n";
 }
 
 } // namespace
@@ -49,6 +50,8 @@ void usage(const char* program) {
 int main(int argc, char** argv) {
     std::vector<gnss_sim::cn0_builder::Cn0InputSource> sources;
     gnss_sim::cn0_builder::Cn0AggregationConfig config{};
+    gnss_sim::cn0_builder::Cn0NormalizationConfig normalization{};
+    bool normalized = false;
     std::string output_path;
     std::string metadata_path;
 
@@ -61,6 +64,16 @@ int main(int argc, char** argv) {
             output_path = argv[++index];
         } else if (argument == "--metadata" && index + 1 < argc) {
             metadata_path = argv[++index];
+        } else if (argument == "--model-semantic" && index + 1 < argc) {
+            const std::string semantic = argv[++index];
+            if (semantic == "absolute") {
+                normalized = false;
+            } else if (semantic == "normalized") {
+                normalized = true;
+            } else {
+                std::cerr << "Invalid --model-semantic value\n";
+                return 2;
+            }
         } else if (argument == "--bin-width-deg" && index + 1 < argc) {
             if (!parse_double(argv[++index], &config.elevation_bin_width_deg)) {
                 std::cerr << "Invalid --bin-width-deg value\n";
@@ -76,6 +89,26 @@ int main(int argc, char** argv) {
                 std::cerr << "Invalid --min-temporal-pairs value\n";
                 return 2;
             }
+        } else if (argument == "--reference-min-deg" && index + 1 < argc) {
+            if (!parse_double(argv[++index], &normalization.reference_elevation_min_deg)) {
+                std::cerr << "Invalid --reference-min-deg value\n";
+                return 2;
+            }
+        } else if (argument == "--reference-max-deg" && index + 1 < argc) {
+            if (!parse_double(argv[++index], &normalization.reference_elevation_max_deg)) {
+                std::cerr << "Invalid --reference-max-deg value\n";
+                return 2;
+            }
+        } else if (argument == "--min-reference-count" && index + 1 < argc) {
+            if (!parse_u64(argv[++index], &normalization.min_reference_samples)) {
+                std::cerr << "Invalid --min-reference-count value\n";
+                return 2;
+            }
+        } else if (argument == "--min-source-count" && index + 1 < argc) {
+            if (!parse_u64(argv[++index], &normalization.min_sources_per_bin)) {
+                std::cerr << "Invalid --min-source-count value\n";
+                return 2;
+            }
         } else {
             usage(argv[0]);
             return 2;
@@ -87,19 +120,33 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    gnss_sim::cn0_builder::Cn0BuildResult result{};
     std::string error;
+    if (normalized) {
+        gnss_sim::cn0_builder::Cn0NormalizedBuildResult result{};
+        if (!gnss_sim::cn0_builder::build_normalized_cn0_model(sources, config, normalization, &result, &error)) {
+            std::cerr << "Normalized CN0 model build failed: " << error << '\n';
+            return 1;
+        }
+        if (!gnss_sim::cn0_builder::write_normalized_cn0_model_csv(output_path, result.bins, &error) ||
+            !gnss_sim::cn0_builder::write_normalized_cn0_metadata_json(metadata_path, config, normalization, result,
+                                                                       &error)) {
+            std::cerr << "Normalized CN0 model write failed: " << error << '\n';
+            return 1;
+        }
+        std::cerr << "Normalized CN0 model built: sources=" << result.sources.size() << ", bins=" << result.bins.size()
+                  << '\n';
+        return 0;
+    }
+
+    gnss_sim::cn0_builder::Cn0BuildResult result{};
     if (!gnss_sim::cn0_builder::build_cn0_model(sources, config, &result, &error)) {
         std::cerr << "CN0 model build failed: " << error << '\n';
         return 1;
     }
     if (!gnss_sim::cn0_builder::write_cn0_model_csv(output_path, config, result.aggregation_summary, result.bins,
-                                                    &error)) {
+                                                    &error) ||
+        !gnss_sim::cn0_builder::write_cn0_metadata_json(metadata_path, config, result, &error)) {
         std::cerr << "CN0 model write failed: " << error << '\n';
-        return 1;
-    }
-    if (!gnss_sim::cn0_builder::write_cn0_metadata_json(metadata_path, config, result, &error)) {
-        std::cerr << "CN0 metadata write failed: " << error << '\n';
         return 1;
     }
 

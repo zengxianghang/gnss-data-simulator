@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace gnss_sim {
 
@@ -72,6 +73,49 @@ struct MeasurementErrorConfig {
     MeasurementFadeErrorConfig rea_fade;
 };
 
+struct UrbanRfMaterialConfig {
+    double relative_permittivity_real;
+    double conductivity_c_s_per_m;
+    double conductivity_exponent;
+    double outer_glass_thickness_m;
+    double cavity_thickness_m;
+    double inner_glass_thickness_m;
+    double coating_sheet_resistance_ohm_sq;
+};
+
+struct UrbanRfPolarizationResponseConfig {
+    double gain_db_horizon;
+    double gain_db_zenith;
+    double phase_deg_horizon;
+    double phase_deg_zenith;
+};
+
+struct UrbanRfAntennaConfig {
+    UrbanRfPolarizationResponseConfig rhcp;
+    UrbanRfPolarizationResponseConfig lhcp;
+};
+
+struct UrbanRfSignalOverrideConfig {
+    std::string signal_name;
+    UrbanRfMaterialConfig material;
+    UrbanRfAntennaConfig antenna;
+};
+
+struct UrbanRfConfig {
+    UrbanRfMaterialConfig default_material;
+    UrbanRfAntennaConfig default_antenna;
+    std::vector<UrbanRfSignalOverrideConfig> signal_overrides;
+};
+
+// Receiver/antenna-specific absolute high-elevation C/N0 calibration.
+// signal_name must match SignalDefinition::name from the central signal table.
+// The list is intentionally empty by default: production values must be
+// calibrated/configured rather than fabricated by the simulator.
+struct Cn0HighBaselineConfig {
+    std::string signal_name;
+    double cn0_dbhz;
+};
+
 struct SimConfig {
     int schema_version;
     ScenarioType scenario;
@@ -91,6 +135,8 @@ struct SimConfig {
     ReaConfig rea;
     BestposRtkConfig bestpos_rtk;
     MeasurementErrorConfig measurement_error;
+    UrbanRfConfig urban_rf;
+    std::vector<Cn0HighBaselineConfig> cn0_high_dbhz;
     std::uint64_t seed;
 };
 

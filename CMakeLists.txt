@@ -106,14 +106,26 @@ add_library(gnss_sim_core STATIC
     src/model/atmosphere_model.cpp
     src/model/bestpos_rtk_model.cpp
     src/model/cn0_model.cpp
+    src/model/code_correlation.cpp
+    src/model/code_tracking_dll.cpp
     src/model/measurement_error_model.cpp
     src/model/measurement_model.cpp
     src/model/receiver_truth.cpp
     src/model/signal_tracking.cpp
+    src/model/urban_carrier_temporal.cpp
+    src/model/urban_measurement_application.cpp
+    src/model/urban_received_power.cpp
+    src/model/urban_reflection_paths.cpp
+    src/model/urban_rooftop_diffraction.cpp
+    src/model/urban_rf_model.cpp
+    src/model/urban_scene_geometry.cpp
+    src/model/urban_signal_epoch.cpp
+    src/model/urban_signal_tracking.cpp
     src/output/novatel_nav_writer.cpp
     src/output/novatel_range_writer.cpp
     src/output/novatel_solution_writer.cpp
     src/output/truth_writer.cpp
+    src/output/urban_truth_writer.cpp
     src/output/unicore_nav_writer.cpp
     src/scenario/scenario_engine.cpp
     src/solution/solution_engine.cpp
@@ -138,6 +150,7 @@ gnss_sim_set_project_warnings(gnss-data-simulator)
 
 add_library(cn0_model_builder_core STATIC
     tools/build_cn0_model/cn0_builder.cpp
+    tools/build_cn0_model/cn0_normalized_builder.cpp
     tools/build_cn0_model/cn0_statistics.cpp
     tools/build_cn0_model/rinex_obs_stream.cpp
 )
@@ -229,7 +242,11 @@ if(BUILD_TESTING)
         tests/unit/test_atmosphere_model.cpp
         tests/unit/test_bestpos_rtk_model.cpp
         tests/unit/test_cn0_model.cpp
+        tests/unit/test_cn0_normalized_builder.cpp
         tests/unit/test_cn0_statistics.cpp
+        tests/unit/test_code_correlation.cpp
+        tests/unit/test_code_tracking_dll.cpp
+        tests/unit/test_code_tracking_dll_boundaries.cpp
         tests/unit/test_deterministic_rng.cpp
         tests/unit/test_galileo_has_adapter.cpp
         tests/unit/test_low_elevation_signal_geometry.cpp
@@ -246,12 +263,22 @@ if(BUILD_TESTING)
         tests/unit/test_rtklib_adapter.cpp
         tests/unit/test_satellite_engine.cpp
         tests/unit/test_scenario_engine.cpp
+        tests/unit/test_signal_correlation_metadata.cpp
         tests/unit/test_signal_definitions.cpp
         tests/unit/test_signal_tracking.cpp
         tests/unit/test_sim_config.cpp
         tests/unit/test_sim_time.cpp
         tests/unit/test_solution_engine.cpp
         tests/unit/test_solution_signal_policy.cpp
+        tests/unit/test_urban_carrier_temporal.cpp
+        tests/unit/test_urban_measurement_application.cpp
+        tests/unit/test_urban_received_power.cpp
+        tests/unit/test_urban_reflection_paths.cpp
+        tests/unit/test_urban_rooftop_diffraction.cpp
+        tests/unit/test_urban_rf_model.cpp
+        tests/unit/test_urban_scene_geometry.cpp
+        tests/unit/test_urban_signal_epoch.cpp
+        tests/unit/test_urban_signal_tracking.cpp
     )
     target_include_directories(gnss_sim_unit_tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -275,6 +302,8 @@ if(BUILD_TESTING)
         tests/integration/test_transient_validator.cpp
         tests/integration/test_residual_validator.cpp
         tests/integration/test_truth_outputs.cpp
+        tests/integration/test_urban_e2e_validation.cpp
+        tests/integration/test_static_urban_doppler_validation.cpp
         tests/integration/test_v1_acceptance.cpp
     )
     target_include_directories(gnss_sim_integration_tests PRIVATE

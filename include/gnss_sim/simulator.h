@@ -37,6 +37,7 @@ struct SimulatorRunSummary {
     std::uint64_t valid_velocity_epochs;
     int max_observations_per_epoch;
     std::string cn0_model_source;
+    std::string cn0_model_semantic;
     std::string cn0_model_schema_version;
     std::string cn0_model_name;
     std::string cn0_model_hash;

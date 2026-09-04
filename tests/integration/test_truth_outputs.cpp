@@ -111,10 +111,9 @@ void expect_stable_urban_path_order(const std::filesystem::path& path) {
     int expected_path_index = 0;
     for (std::size_t row_index = 1; row_index < rows.size(); ++row_index) {
         const std::vector<std::string>& row = rows[row_index];
-        const std::string key = row[static_cast<std::size_t>(week_column)] + ":" +
-                                row[static_cast<std::size_t>(tow_column)] + ":" +
-                                row[static_cast<std::size_t>(satellite_column)] + ":" +
-                                row[static_cast<std::size_t>(signal_column)];
+        const std::string key =
+            row[static_cast<std::size_t>(week_column)] + ":" + row[static_cast<std::size_t>(tow_column)] + ":" +
+            row[static_cast<std::size_t>(satellite_column)] + ":" + row[static_cast<std::size_t>(signal_column)];
         if (key != previous_key) {
             expected_path_index = 0;
             previous_key = key;
@@ -180,16 +179,17 @@ TEST(TruthOutputs, HeadersAreVersionedAndExplicit) {
               "velocity_valid,velocity_status,velocity_type,velocity_x_mps,velocity_y_mps,velocity_z_mps,"
               "horizontal_speed_mps,track_over_ground_deg,vertical_speed_mps,receiver_clock_drift_mps,"
               "velocity_used_satellites,velocity_diagnostic");
-    EXPECT_EQ(first_line(directory / "urban_signal_truth.csv"),
-              "truth_schema_version,gps_week,tow_ns,sow_sec,satellite_number,signal_id,signal_name,glonass_fcn,"
-              "azimuth_deg,elevation_deg,propagation_evaluated,direct_los,blocking_wall,grazing_roof,diffraction_status,"
-              "reflection_count,received_path_count,urban_state,tracking_phase,loss_reason,open_cn0_dbhz,effective_cn0_dbhz,"
-              "effective_cn0_finite,composite_power_ratio,dll_root_count,root_search_status,selection_mode,"
-              "selected_root_valid,dll_code_phase_sec,dll_code_phase_chips,code_bias_m,tracked_correlation_real,"
-              "tracked_correlation_imag,lock_time_ns,observation_available,pseudorange_valid,doppler_valid,adr_valid,"
-              "reacquisition_event,carrier_continuity_valid,wavelength_m,wrapped_phase_rad,unwrapped_phase_rad,"
-              "carrier_range_bias_m,environmental_range_rate_mps,environmental_range_rate_valid,cycle_slip_event,"
-              "receiver_observation_emitted,pseudorange_m,doppler_hz,adr_cycles");
+    EXPECT_EQ(
+        first_line(directory / "urban_signal_truth.csv"),
+        "truth_schema_version,gps_week,tow_ns,sow_sec,satellite_number,signal_id,signal_name,glonass_fcn,"
+        "azimuth_deg,elevation_deg,propagation_evaluated,direct_los,blocking_wall,grazing_roof,diffraction_status,"
+        "reflection_count,received_path_count,urban_state,tracking_phase,loss_reason,open_cn0_dbhz,effective_cn0_dbhz,"
+        "effective_cn0_finite,composite_power_ratio,dll_root_count,root_search_status,selection_mode,"
+        "selected_root_valid,dll_code_phase_sec,dll_code_phase_chips,code_bias_m,tracked_correlation_real,"
+        "tracked_correlation_imag,lock_time_ns,observation_available,pseudorange_valid,doppler_valid,adr_valid,"
+        "reacquisition_event,carrier_continuity_valid,wavelength_m,wrapped_phase_rad,unwrapped_phase_rad,"
+        "carrier_range_bias_m,environmental_range_rate_mps,environmental_range_rate_valid,cycle_slip_event,"
+        "receiver_observation_emitted,pseudorange_m,doppler_hz,adr_cycles");
     EXPECT_EQ(first_line(directory / "urban_path_truth.csv"),
               "truth_schema_version,gps_week,tow_ns,sow_sec,satellite_number,signal_id,path_index,path_kind,wall_id,"
               "point_e_m,point_n_m,point_u_m,model_path_range_m,excess_path_m,code_delay_sec,voltage_real,voltage_imag,"
@@ -326,10 +326,8 @@ TEST(TruthOutputs, UrbanTruthIsDeterministicOrderedAndMatchesSynthesizedObservat
     const std::vector<std::string>* matching_observation = nullptr;
     for (std::size_t row_index = 1; row_index < observation_rows.size(); ++row_index) {
         const std::vector<std::string>& row = observation_rows[row_index];
-        if (row[static_cast<std::size_t>(observation_week)] ==
-                (*emitted_row)[static_cast<std::size_t>(urban_week)] &&
-            row[static_cast<std::size_t>(observation_tow)] ==
-                (*emitted_row)[static_cast<std::size_t>(urban_tow)] &&
+        if (row[static_cast<std::size_t>(observation_week)] == (*emitted_row)[static_cast<std::size_t>(urban_week)] &&
+            row[static_cast<std::size_t>(observation_tow)] == (*emitted_row)[static_cast<std::size_t>(urban_tow)] &&
             row[static_cast<std::size_t>(observation_satellite)] ==
                 (*emitted_row)[static_cast<std::size_t>(urban_satellite)] &&
             row[static_cast<std::size_t>(observation_signal)] ==
@@ -367,15 +365,14 @@ TEST(TruthOutputs, UrbanTruthSerializerCoversAllFourPropagationStates) {
     double wavelength_m = 0.0;
     ASSERT_TRUE(gnss_sim::signal_wavelength_m(*signal, 0, &wavelength_m));
 
-    const gnss_sim::UrbanSignalState states[] = {gnss_sim::UrbanSignalState::kLos,
-                                                 gnss_sim::UrbanSignalState::kLosMultipath,
-                                                 gnss_sim::UrbanSignalState::kNlosTracked,
-                                                 gnss_sim::UrbanSignalState::kBlocked};
+    const gnss_sim::UrbanSignalState states[] = {
+        gnss_sim::UrbanSignalState::kLos, gnss_sim::UrbanSignalState::kLosMultipath,
+        gnss_sim::UrbanSignalState::kNlosTracked, gnss_sim::UrbanSignalState::kBlocked};
     const gnss_sim::SimTime base_time = start_time();
     for (int state_index = 0; state_index < 4; ++state_index) {
         gnss_sim::SatelliteGeometry geometry{};
-        ASSERT_TRUE(gnss_sim::add_time_ns(base_time, state_index * gnss_sim::NANOSECONDS_PER_SECOND,
-                                          &geometry.receive_time));
+        ASSERT_TRUE(
+            gnss_sim::add_time_ns(base_time, state_index * gnss_sim::NANOSECONDS_PER_SECOND, &geometry.receive_time));
         geometry.satellite_number = 1;
         geometry.geometric_range_m = 21000000.0 + state_index;
         geometry.azimuth_rad = 0.4 + 0.1 * state_index;
@@ -383,10 +380,10 @@ TEST(TruthOutputs, UrbanTruthSerializerCoversAllFourPropagationStates) {
 
         gnss_sim::UrbanSignalEpochResult epoch{};
         epoch.urban_state = states[state_index];
-        epoch.tracking_phase = state_index == 3 ? gnss_sim::SignalTrackingPhase::kSearching
-                                                : gnss_sim::SignalTrackingPhase::kTracking;
-        epoch.loss_reason = state_index == 3 ? gnss_sim::SignalTrackingLossReason::kLowCn0
-                                             : gnss_sim::SignalTrackingLossReason::kNone;
+        epoch.tracking_phase =
+            state_index == 3 ? gnss_sim::SignalTrackingPhase::kSearching : gnss_sim::SignalTrackingPhase::kTracking;
+        epoch.loss_reason =
+            state_index == 3 ? gnss_sim::SignalTrackingLossReason::kLowCn0 : gnss_sim::SignalTrackingLossReason::kNone;
         epoch.lock_time_ns = state_index == 3 ? 0 : state_index * gnss_sim::NANOSECONDS_PER_SECOND;
         epoch.observation_available = state_index != 3;
         epoch.psr_valid = state_index != 3;
@@ -438,14 +435,14 @@ TEST(TruthOutputs, UrbanTruthSerializerCoversAllFourPropagationStates) {
             epoch.tracked_composite_correlation = received.paths[0].complex_voltage;
             temporal.wrapped_phase_rad = 0.1 * state_index;
             temporal.unwrapped_phase_rad = 0.1 * state_index;
-            temporal.carrier_range_bias_m = -temporal.unwrapped_phase_rad * wavelength_m /
-                                            (2.0 * 3.141592653589793238462643383279502884);
+            temporal.carrier_range_bias_m =
+                -temporal.unwrapped_phase_rad * wavelength_m / (2.0 * 3.141592653589793238462643383279502884);
             temporal.environmental_range_rate_mps = 0.01 * state_index;
             temporal.environmental_range_rate_valid = state_index > 0;
         }
 
         ASSERT_TRUE(gnss_sim::urban_truth_writer_write_signal(writer, geometry, *signal, 0, epoch, temporal, nullptr,
-                                                               &error_message))
+                                                              &error_message))
             << error_message;
     }
     ASSERT_TRUE(gnss_sim::finalize_urban_truth_writer(writer, &error_message)) << error_message;
@@ -488,9 +485,9 @@ TEST(TruthOutputs, ExternalCn0ModelIsManifestedAndByteRepeatable) {
         << error_message;
     ASSERT_TRUE(run_in_directory(builtin_directory, &builtin_summary, &error_message)) << error_message;
 
-    for (const char* file_name : {"simulated.log", "scenario.json", "event_truth.csv", "observation_truth.csv",
-                                  "solution_truth.csv", "urban_signal_truth.csv", "urban_path_truth.csv",
-                                  "run_manifest.json"}) {
+    for (const char* file_name :
+         {"simulated.log", "scenario.json", "event_truth.csv", "observation_truth.csv", "solution_truth.csv",
+          "urban_signal_truth.csv", "urban_path_truth.csv", "run_manifest.json"}) {
         EXPECT_EQ(read_file(first_directory / file_name), read_file(second_directory / file_name)) << file_name;
     }
     const std::string manifest = read_file(first_directory / "run_manifest.json");

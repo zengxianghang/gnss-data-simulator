@@ -87,6 +87,7 @@ void cleanup(const std::filesystem::path& path) {
 void expect_consistent_columns(const std::vector<std::vector<std::string>>& rows) {
     ASSERT_GT(rows.size(), 1U);
     const std::size_t width = rows.front().size();
+    EXPECT_EQ(width, 61U);
     for (std::size_t row = 1; row < rows.size(); ++row) {
         EXPECT_EQ(rows[row].size(), width) << "row " << row + 1U;
     }

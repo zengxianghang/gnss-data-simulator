@@ -420,8 +420,8 @@ bool parse_velocity_stats(const std::filesystem::path& path, double truth_clock_
         result.error_3d_mps.push_back(error_3d);
         result.horizontal_error_mps.push_back(std::abs(std::stod(row[static_cast<std::size_t>(horizontal)])));
         result.vertical_error_mps.push_back(std::abs(std::stod(row[static_cast<std::size_t>(vertical)])));
-        result.clock_drift_error_mps.push_back(
-            std::stod(row[static_cast<std::size_t>(clock_drift)]) - truth_clock_drift_mps);
+        result.clock_drift_error_mps.push_back(std::stod(row[static_cast<std::size_t>(clock_drift)]) -
+                                               truth_clock_drift_mps);
         if (error_3d >= result.worst_error_mps) {
             result.worst_error_mps = error_3d;
             result.worst_epoch = epoch_key(std::stoi(row[static_cast<std::size_t>(week)]),
@@ -559,7 +559,8 @@ TEST(StaticUrbanDopplerValidation, AuthenticNavQuantifiesDopplerAndStaticVelocit
 
     VelocityStats on_velocity{};
     VelocityStats off_velocity{};
-    ASSERT_TRUE(parse_velocity_stats(on_directory / "solution_truth.csv", on_config.receiver_clock_drift_mps, &on_velocity));
+    ASSERT_TRUE(
+        parse_velocity_stats(on_directory / "solution_truth.csv", on_config.receiver_clock_drift_mps, &on_velocity));
     ASSERT_TRUE(
         parse_velocity_stats(off_directory / "solution_truth.csv", off_config.receiver_clock_drift_mps, &off_velocity));
 
@@ -641,7 +642,7 @@ TEST(StaticUrbanDopplerValidation, OneHertzMatchesTenHertzOneSecondCarrierDiffer
     std::uint64_t matched_intervals = 0;
     double max_rate_mismatch_mps = 0.0;
     double sum_squared_mismatch = 0.0;
-    double max_one_hz_phase_change_rad = 0.0;
+    double max_ten_hz_reconstructed_one_second_phase_change_rad = 0.0;
     UrbanSample worst_sample{};
     for (const auto& item : one_hz) {
         const UrbanSample& one = item.second;
@@ -651,15 +652,16 @@ TEST(StaticUrbanDopplerValidation, OneHertzMatchesTenHertzOneSecondCarrierDiffer
         }
         const auto current_ten = ten_hz.find(item.first);
         if (current_ten == ten_hz.end() || !current_ten->second.environmental_range_rate_valid ||
-            current_ten->second.lock_time_ns < gnss_sim::NANOSECONDS_PER_SECOND || current_ten->second.reacquisition_event ||
-            current_ten->second.cycle_slip_event) {
+            current_ten->second.lock_time_ns < gnss_sim::NANOSECONDS_PER_SECOND ||
+            current_ten->second.reacquisition_event || current_ten->second.cycle_slip_event) {
             continue;
         }
         const std::int64_t previous_tow_ns = one.tow_ns - gnss_sim::NANOSECONDS_PER_SECOND;
         if (previous_tow_ns < 0) {
             continue;
         }
-        const std::string previous_key = observation_key(one.week, previous_tow_ns, one.satellite_number, one.signal_id);
+        const std::string previous_key =
+            observation_key(one.week, previous_tow_ns, one.satellite_number, one.signal_id);
         const auto previous_ten = ten_hz.find(previous_key);
         if (previous_ten == ten_hz.end() || !previous_ten->second.environmental_range_rate_valid) {
             continue;
@@ -673,23 +675,25 @@ TEST(StaticUrbanDopplerValidation, OneHertzMatchesTenHertzOneSecondCarrierDiffer
             max_rate_mismatch_mps = std::abs(mismatch);
             worst_sample = one;
         }
-        const double one_hz_phase_change =
-            std::abs(one.environmental_range_rate_mps) * 2.0 * kPi / one.wavelength_m;
-        max_one_hz_phase_change_rad = std::max(max_one_hz_phase_change_rad, one_hz_phase_change);
+        const double ten_hz_reconstructed_one_second_phase_change =
+            std::abs(ten_hz_one_second_rate) * 2.0 * kPi / one.wavelength_m;
+        max_ten_hz_reconstructed_one_second_phase_change_rad =
+            std::max(max_ten_hz_reconstructed_one_second_phase_change_rad,
+                     ten_hz_reconstructed_one_second_phase_change);
     }
     const double rms_mismatch_mps =
         matched_intervals > 0 ? std::sqrt(sum_squared_mismatch / static_cast<double>(matched_intervals)) : 0.0;
 
     std::cout << "STATIC_DOPPLER_RATE_CHECK matched_intervals=" << matched_intervals
               << " rms_mismatch_mps=" << rms_mismatch_mps << " max_mismatch_mps=" << max_rate_mismatch_mps
-              << " max_1hz_phase_change_rad=" << max_one_hz_phase_change_rad << " pi=" << kPi
-              << " worst_gpst=" << worst_sample.week << ':' << worst_sample.tow_ns
+              << " max_10hz_reconstructed_1s_phase_change_rad=" << max_ten_hz_reconstructed_one_second_phase_change_rad
+              << " pi=" << kPi << " worst_gpst=" << worst_sample.week << ':' << worst_sample.tow_ns
               << " worst_sat=" << worst_sample.satellite_number << " worst_signal=" << worst_sample.signal_name
               << " worst_state=" << worst_sample.state << '\n';
 
     EXPECT_GT(matched_intervals, 100U);
     EXPECT_LT(max_rate_mismatch_mps, 1.0e-6);
-    EXPECT_LT(max_one_hz_phase_change_rad, kPi);
+    EXPECT_LT(max_ten_hz_reconstructed_one_second_phase_change_rad, kPi);
 
     cleanup(one_hz_directory);
     cleanup(ten_hz_directory);

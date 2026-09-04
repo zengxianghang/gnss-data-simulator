@@ -59,7 +59,7 @@ gnss_sim::UrbanSignalEpochResult tracked_epoch(double code_bias_m, double effect
 }
 
 gnss_sim::UrbanCarrierTemporalResult tracked_temporal(double wavelength_m, double carrier_range_bias_m,
-                                                       double environmental_range_rate_mps) {
+                                                      double environmental_range_rate_mps) {
     gnss_sim::UrbanCarrierTemporalResult result{};
     result.wavelength_m = wavelength_m;
     result.carrier_range_bias_m = carrier_range_bias_m;

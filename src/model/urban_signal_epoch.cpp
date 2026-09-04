@@ -64,17 +64,16 @@ bool update_urban_signal_epoch_from_paths(const SignalDefinition& signal, const 
                                 ? CodeTrackingDllSelectionMode::TRACKED
                                 : CodeTrackingDllSelectionMode::ACQUISITION;
 
-    if (!find_code_tracking_dll_roots_with_status(
-            signal, received_paths.paths, received_paths.path_count, dll_config, output.dll_roots,
-            kMaxCodeTrackingDllRoots, &output.dll_root_count, &output.root_search_status, error_message)) {
+    if (!find_code_tracking_dll_roots_with_status(signal, received_paths.paths, received_paths.path_count, dll_config,
+                                                  output.dll_roots, kMaxCodeTrackingDllRoots, &output.dll_root_count,
+                                                  &output.root_search_status, error_message)) {
         return false;
     }
 
     output.stable_root_available = has_stable_root(output.dll_roots, output.dll_root_count);
     if (output.stable_root_available) {
-        const double previous_code_phase_sec = output.selection_mode == CodeTrackingDllSelectionMode::TRACKED
-                                                   ? tracker->previous_dll_code_phase_sec
-                                                   : 0.0;
+        const double previous_code_phase_sec =
+            output.selection_mode == CodeTrackingDllSelectionMode::TRACKED ? tracker->previous_dll_code_phase_sec : 0.0;
         if (!select_code_tracking_dll_root(output.dll_roots, output.dll_root_count, output.selection_mode,
                                            previous_code_phase_sec, &output.preselected_root_index, error_message) ||
             output.preselected_root_index < 0 || output.preselected_root_index >= output.dll_root_count ||
@@ -140,8 +139,8 @@ bool compute_urban_signal_epoch(const Cn0Model& cn0_model, const UrbanSceneGeome
                                 const SatelliteGeometry& satellite_geometry, SignalTracker* tracker,
                                 UrbanSignalEpochResult* result, std::string* error_message) {
     UrbanReceivedPathSet received_paths{};
-    if (!compute_urban_received_path_set(cn0_model, scene_config, rf_config, signal, glonass_fcn, current_time, receiver,
-                                         satellite_geometry, &received_paths, error_message)) {
+    if (!compute_urban_received_path_set(cn0_model, scene_config, rf_config, signal, glonass_fcn, current_time,
+                                         receiver, satellite_geometry, &received_paths, error_message)) {
         return false;
     }
     return update_urban_signal_epoch_from_paths(signal, current_time, received_paths, dll_config, tracking_config,

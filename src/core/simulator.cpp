@@ -21,6 +21,7 @@
 #include "model/urban_carrier_temporal.h"
 #include "model/urban_scene_geometry.h"
 #include "model/urban_signal_epoch.h"
+#include "output/carrier_tracking_truth_writer.h"
 #include "output/device_marker.h"
 #include "output/novatel_nav_writer.h"
 #include "output/novatel_range_writer.h"
@@ -798,7 +799,7 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                                       const ScenarioEpochState& scenario,
                                       std::vector<MeasurementObservation>* measurements, int* tracked_satellites,
                                       TruthWriter* truth_writer, UrbanTruthWriter* urban_truth_writer,
-                                      std::string* error_message) {
+                                      CarrierTrackingTruthWriter* carrier_truth_writer, std::string* error_message) {
     measurements->clear();
     *tracked_satellites = 0;
     const RtklibNavStore* truth_nav = truth_navigation_store(runtime->navigation);
@@ -937,9 +938,20 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
             }
 
             if (signal.tracker.phase != SignalTrackingPhase::kTracking) {
-                if (config.multipath_enabled &&
-                    !urban_truth_writer_write_signal(urban_truth_writer, signal_geometry, *definition, glonass_fcn,
-                                                     urban_epoch, urban_temporal, nullptr, error_message)) {
+                CarrierTrackingTruthSnapshot carrier_truth{};
+                carrier_truth.carrier_tracking_enabled = config.carrier_tracking.enabled;
+                carrier_truth.reset_reason = CarrierTrackingTruthResetReason::kCodeNotTracking;
+                carrier_truth.coherent_integration_sec = config.carrier_tracking.coherent_integration_sec;
+                carrier_truth.environmental_range_rate_applicable = config.multipath_enabled;
+                carrier_truth.environmental_range_rate_valid =
+                    config.multipath_enabled && urban_temporal.environmental_range_rate_valid;
+                carrier_truth.environmental_range_rate_mps = urban_temporal.environmental_range_rate_mps;
+                if (!carrier_tracking_truth_writer_write_signal(carrier_truth_writer, signal_geometry, *definition,
+                                                                glonass_fcn, signal.tracker, carrier_truth,
+                                                                error_message) ||
+                    (config.multipath_enabled &&
+                     !urban_truth_writer_write_signal(urban_truth_writer, signal_geometry, *definition, glonass_fcn,
+                                                      urban_epoch, urban_temporal, nullptr, error_message))) {
                     return false;
                 }
                 reset_carrier_ambiguity_state(&signal.ambiguity);
@@ -948,6 +960,17 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                 continue;
             }
             satellite_tracking = true;
+
+            CarrierTrackingTruthSnapshot carrier_truth{};
+            carrier_truth.carrier_tracking_enabled = config.carrier_tracking.enabled;
+            carrier_truth.reset_reason = config.carrier_tracking.enabled
+                                             ? CarrierTrackingTruthResetReason::kNone
+                                             : CarrierTrackingTruthResetReason::kFeatureDisabled;
+            carrier_truth.coherent_integration_sec = config.carrier_tracking.coherent_integration_sec;
+            carrier_truth.environmental_range_rate_applicable = config.multipath_enabled;
+            carrier_truth.environmental_range_rate_valid =
+                config.multipath_enabled && urban_temporal.environmental_range_rate_valid;
+            carrier_truth.environmental_range_rate_mps = urban_temporal.environmental_range_rate_mps;
 
             CarrierTrackingRuntimeResult carrier_result{};
             if (config.carrier_tracking.enabled) {
@@ -963,6 +986,10 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                                                      error_message)) {
                     return false;
                 }
+                carrier_truth.result_available = true;
+                carrier_truth.effective_cn0_dbhz = carrier_cn0_dbhz;
+                carrier_truth.runtime_result = carrier_result;
+                carrier_truth.runtime_state = signal.carrier_tracking.tracking;
             }
 
             AtmosphereCorrection atmosphere{};
@@ -985,6 +1012,9 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                  !apply_urban_measurement_effects(urban_epoch, urban_temporal, &observation, error_message))) {
                 return false;
             }
+            carrier_truth.physical_snapshot_available = true;
+            carrier_truth.physical_observation = observation;
+            carrier_truth.physical_range_rate_valid = observation.doppler_valid;
             if ((config.multipath_enabled &&
                  !urban_truth_writer_write_signal(urban_truth_writer, signal_geometry, *definition, glonass_fcn,
                                                   urban_epoch, urban_temporal, &observation, error_message)) ||
@@ -995,6 +1025,14 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
             MeasurementObservation reported_observation = observation;
             if (config.carrier_tracking.enabled &&
                 !apply_carrier_tracking_runtime_result(carrier_result, &reported_observation, error_message)) {
+                return false;
+            }
+            carrier_truth.post_carrier_snapshot_available = true;
+            carrier_truth.post_carrier_observation = reported_observation;
+            carrier_truth.post_carrier_range_rate_valid = reported_observation.doppler_valid;
+            if (!carrier_tracking_truth_writer_write_signal(carrier_truth_writer, signal_geometry, *definition,
+                                                            glonass_fcn, signal.tracker, carrier_truth,
+                                                            error_message)) {
                 return false;
             }
             if (config.measurement_noise_enabled) {
@@ -1144,8 +1182,17 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         destroy_navigation_state(runtime.navigation);
         return false;
     }
+    CarrierTrackingTruthWriter* carrier_truth_writer =
+        create_carrier_tracking_truth_writer(options.output_log_path, error_message);
+    if (carrier_truth_writer == nullptr) {
+        destroy_truth_writer(truth_writer);
+        output.close();
+        destroy_navigation_state(runtime.navigation);
+        return false;
+    }
     UrbanTruthWriter* urban_truth_writer = create_urban_truth_writer(options.output_log_path, error_message);
     if (urban_truth_writer == nullptr) {
+        destroy_carrier_tracking_truth_writer(carrier_truth_writer);
         destroy_truth_writer(truth_writer);
         output.close();
         destroy_navigation_state(runtime.navigation);
@@ -1156,6 +1203,7 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
     if (!epoch_count_for_duration(config.duration_ns, config.sampling_rate_hz, &epoch_count)) {
         set_error(error_message, "cannot compute simulator epoch count");
         destroy_urban_truth_writer(urban_truth_writer);
+        destroy_carrier_tracking_truth_writer(carrier_truth_writer);
         destroy_truth_writer(truth_writer);
         destroy_navigation_state(runtime.navigation);
         return false;
@@ -1218,7 +1266,7 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
 
         int tracked_satellites = 0;
         if (!update_tracking_and_measurements(&runtime, config, scenario, &measurements, &tracked_satellites,
-                                              truth_writer, urban_truth_writer, error_message) ||
+                                              truth_writer, urban_truth_writer, carrier_truth_writer, error_message) ||
             !process_receiver_nav(&runtime, config, current_time, &output, &result, error_message)) {
             ok = false;
             break;
@@ -1254,6 +1302,9 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         ok = false;
     }
     output.close();
+    if (ok && !finalize_carrier_tracking_truth_writer(carrier_truth_writer, error_message)) {
+        ok = false;
+    }
     if (ok && !finalize_urban_truth_writer(urban_truth_writer, error_message)) {
         ok = false;
     }
@@ -1262,6 +1313,7 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         ok = false;
     }
     destroy_urban_truth_writer(urban_truth_writer);
+    destroy_carrier_tracking_truth_writer(carrier_truth_writer);
     destroy_truth_writer(truth_writer);
     destroy_navigation_state(runtime.navigation);
     if (!ok) {

@@ -126,6 +126,7 @@ add_library(gnss_sim_core STATIC
     src/output/novatel_nav_writer.cpp
     src/output/novatel_range_writer.cpp
     src/output/novatel_solution_writer.cpp
+    src/output/carrier_tracking_truth_writer.cpp
     src/output/truth_writer.cpp
     src/output/urban_truth_writer.cpp
     src/output/unicore_nav_writer.cpp
@@ -300,6 +301,7 @@ if(BUILD_TESTING)
         tests/integration/test_scenarios.cpp
         tests/integration/test_all_signal_residuals.cpp
         tests/integration/test_carrier_tracking_runtime.cpp
+        tests/integration/test_carrier_tracking_truth.cpp
         tests/integration/test_measurement_noise_integration.cpp
         tests/integration/test_nav_equivalence.cpp
         tests/integration/test_rea_fade.cpp

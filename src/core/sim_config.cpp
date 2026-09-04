@@ -357,22 +357,18 @@ bool parse_carrier_tracking(const cJSON* root, SimConfig* config, std::string* e
            read_optional_number(object, "coherent_integration_sec", &carrier.coherent_integration_sec, error_message) &&
            read_optional_number(object, "pll_noise_bandwidth_hz", &carrier.pll_noise_bandwidth_hz, error_message) &&
            read_optional_number(object, "fll_noise_bandwidth_hz", &carrier.fll_noise_bandwidth_hz, error_message) &&
-           read_optional_number(object, "fll_pull_in_bandwidth_hz", &carrier.fll_pull_in_bandwidth_hz,
-                                error_message) &&
-           read_optional_number(object, "fll_pull_in_duration_sec", &carrier.fll_pull_in_duration_sec,
-                                error_message) &&
+           read_optional_number(object, "fll_pull_in_bandwidth_hz", &carrier.fll_pull_in_bandwidth_hz, error_message) &&
+           read_optional_number(object, "fll_pull_in_duration_sec", &carrier.fll_pull_in_duration_sec, error_message) &&
            read_optional_number(object, "pll_enter_cn0_dbhz", &carrier.pll_enter_cn0_dbhz, error_message) &&
            read_optional_number(object, "pll_exit_cn0_dbhz", &carrier.pll_exit_cn0_dbhz, error_message) &&
            read_optional_number(object, "pll_enter_persistence_sec", &carrier.pll_enter_persistence_sec,
                                 error_message) &&
-           read_optional_number(object, "pll_exit_persistence_sec", &carrier.pll_exit_persistence_sec,
-                                error_message) &&
+           read_optional_number(object, "pll_exit_persistence_sec", &carrier.pll_exit_persistence_sec, error_message) &&
            read_optional_number(object, "fll_enter_cn0_dbhz", &carrier.fll_enter_cn0_dbhz, error_message) &&
            read_optional_number(object, "fll_exit_cn0_dbhz", &carrier.fll_exit_cn0_dbhz, error_message) &&
            read_optional_number(object, "fll_enter_persistence_sec", &carrier.fll_enter_persistence_sec,
                                 error_message) &&
-           read_optional_number(object, "fll_exit_persistence_sec", &carrier.fll_exit_persistence_sec,
-                                error_message) &&
+           read_optional_number(object, "fll_exit_persistence_sec", &carrier.fll_exit_persistence_sec, error_message) &&
            read_optional_number(object, "doppler_valid_delay_sec", &carrier.doppler_valid_delay_sec, error_message) &&
            read_optional_number(object, "adr_valid_after_pll_sec", &carrier.adr_valid_after_pll_sec, error_message);
 }
@@ -867,9 +863,10 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
             parse_atmosphere_mode(atmosphere_name, &parsed.atmosphere_mode, error_message) &&
             parse_receiver(root, &parsed, error_message) && parse_ttff(root, &parsed, error_message) &&
             parse_rea(root, &parsed, error_message) && parse_bestpos_rtk(root, &parsed, error_message) &&
-            parse_measurement_error(root, &parsed, error_message) && parse_carrier_tracking(root, &parsed, error_message) &&
-            parse_urban_rf(root, &parsed, error_message) && parse_cn0_high_dbhz(root, &parsed, error_message) &&
-            parse_seed(root, &parsed, error_message) && validate_sim_config(parsed, error_message);
+            parse_measurement_error(root, &parsed, error_message) &&
+            parse_carrier_tracking(root, &parsed, error_message) && parse_urban_rf(root, &parsed, error_message) &&
+            parse_cn0_high_dbhz(root, &parsed, error_message) && parse_seed(root, &parsed, error_message) &&
+            validate_sim_config(parsed, error_message);
     }
 
     cJSON_Delete(root);

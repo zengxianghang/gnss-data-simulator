@@ -1,0 +1,46 @@
+name: issue163-bootstrap
+
+on:
+  push:
+    branches:
+      - issue-163-carrier-tracking-validation
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: issue-163-carrier-tracking-validation
+          fetch-depth: 0
+      - name: Register validation test
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("CMakeLists.txt")
+          text = path.read_text()
+          anchor = "        tests/integration/test_carrier_tracking_truth.cpp\n"
+          addition = anchor + "        tests/integration/test_carrier_tracking_authentic_validation.cpp\n"
+          if text.count(anchor) != 1:
+              raise SystemExit(f"expected one CMake anchor, found {text.count(anchor)}")
+          if "test_carrier_tracking_authentic_validation.cpp" not in text:
+              text = text.replace(anchor, addition, 1)
+          path.write_text(text)
+          PY
+      - name: Format validation C++
+        shell: bash
+        run: clang-format -i tests/integration/test_carrier_tracking_authentic_validation.cpp
+      - name: Commit wiring and remove bootstrap
+        shell: bash
+        run: |
+          git rm .github/workflows/issue163-bootstrap.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CMakeLists.txt tests/integration/test_carrier_tracking_authentic_validation.cpp
+          git commit -m "Register authentic carrier tracking validation"
+          git push origin HEAD:refs/heads/issue-163-carrier-tracking-validation

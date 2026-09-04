@@ -107,8 +107,7 @@ bool compute_carrier_tracking_jitter(const CarrierTrackingConfig& config, Carrie
 // driven by effective CN0 hysteresis/persistence. The supplied Gaussian sample
 // is filtered with alpha=exp(-dt/tau), tau=1/(2*pi*Bn).
 bool update_carrier_tracking(const CarrierTrackingConfig& config, const CarrierTrackingInput& input,
-                             CarrierTrackingState* state, CarrierTrackingResult* result,
-                             std::string* error_message);
+                             CarrierTrackingState* state, CarrierTrackingResult* result, std::string* error_message);
 
 const char* carrier_tracking_mode_name(CarrierTrackingMode mode);
 const char* carrier_tracking_fll_phase_name(CarrierTrackingFllPhase phase);

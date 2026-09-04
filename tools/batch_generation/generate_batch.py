@@ -112,13 +112,15 @@ def _build_plan(
                 raise BatchError(f"seed collision detected: {seed}")
             seen_seeds.add(seed)
             stem = f"{scenario}_{realization_index:0{width}d}"
+            run_dir = f"runs/{stem}"
             runs.append(
                 {
                     "scenario": scenario,
                     "realization_index": realization_index,
                     "seed": seed,
-                    "output": f"{stem}.log",
-                    "config": f"configs/{stem}.json",
+                    "run_dir": run_dir,
+                    "output": f"{run_dir}/{stem}.log",
+                    "config": f"{run_dir}/config.json",
                     "status": "planned",
                 }
             )
@@ -204,14 +206,13 @@ def _prepare_output_paths(output_dir: Path, manifest_path: Path, manifest: dict[
     if manifest_path.exists() and not overwrite:
         raise BatchError(f"manifest already exists: {manifest_path}; use --overwrite to replace it")
     for run in manifest["runs"]:
-        for relative in (run["output"], run["config"]):
-            path = output_dir / relative
-            if path.exists():
-                if not overwrite:
-                    raise BatchError(f"planned batch path already exists: {path}; use --overwrite to replace it")
-                if path.is_dir():
-                    raise BatchError(f"planned batch path is a directory: {path}")
-                path.unlink()
+        run_dir = output_dir / run["run_dir"]
+        if run_dir.exists():
+            if not overwrite:
+                raise BatchError(f"planned run directory already exists: {run_dir}; use --overwrite to replace it")
+            if not run_dir.is_dir():
+                raise BatchError(f"planned run directory path is not a directory: {run_dir}")
+            shutil.rmtree(run_dir)
 
 
 def _run_one(
@@ -362,8 +363,12 @@ def _self_test() -> int:
     _assert(first["common"]["end_gpst"] == {"week": 2348, "sow_sec": 20.0}, "week rollover is wrong")
 
     names = [run["output"] for run in first["runs"]]
-    _assert(names[0] == "KS_01.log" and names[7] == "KS_08.log", "KS names are wrong")
-    _assert(names[8] == "REA_01.log" and names[16] == "TTFF_01.log", "scenario names are wrong")
+    _assert(names[0] == "runs/KS_01/KS_01.log" and names[7] == "runs/KS_08/KS_08.log", "KS names are wrong")
+    _assert(
+        names[8] == "runs/REA_01/REA_01.log" and names[16] == "runs/TTFF_01/TTFF_01.log",
+        "scenario names are wrong",
+    )
+    _assert(first["runs"][0]["config"] == "runs/KS_01/config.json", "config snapshot path is wrong")
 
     seeds = [run["seed"] for run in first["runs"]]
     _assert(len(seeds) == len(set(seeds)), "batch seeds are not globally unique")

@@ -5,12 +5,12 @@
 #include "rangea_roundtrip.h"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <set>
@@ -25,9 +25,11 @@ constexpr double kTruthLatitudeDeg = 20.0;
 constexpr double kTruthLongitudeDeg = 120.0;
 constexpr double kTruthHeightM = 100.0;
 constexpr std::int64_t kPrimaryDurationSeconds = 180;
-constexpr const char* kFixtureSha256 = "17c6bb00a8a0ef8f732b803925311e7b1ead658ae2e11f62635371eb915e9781";
+constexpr const char* kSourceFixtureSha256 =
+    "17c6bb00a8a0ef8f732b803925311e7b1ead658ae2e11f62635371eb915e9781";
+constexpr const char* kFilteredNavName = "brd400dlr_beidou_verbatim_nav.rnx";
 
-std::string brd4_nav_path() {
+std::string brd4_source_nav_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/brd400dlr_rinex4_acceptance_nav.rnx";
 }
 
@@ -45,7 +47,7 @@ gnss_sim::SimConfig urban_config() {
     config.elevation_mask_deg = 0.0;
     config.solution_elevation_mask_deg = 5.0;
     config.output_eph = true;
-    config.output_ion = true;
+    config.output_ion = false;
     config.measurement_noise_enabled = false;
     config.multipath_enabled = true;
     config.atmosphere_mode = gnss_sim::AtmosphereMode::NONE;
@@ -57,6 +59,73 @@ gnss_sim::SimConfig urban_config() {
 std::string read_file(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     return std::string((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+}
+
+std::string fnv1a64_hex(const std::string& data) {
+    std::uint64_t hash = UINT64_C(14695981039346656037);
+    for (unsigned char byte : data) {
+        hash ^= static_cast<std::uint64_t>(byte);
+        hash *= UINT64_C(1099511628211);
+    }
+    std::ostringstream output;
+    output << std::hex << std::setfill('0') << std::setw(16) << hash;
+    return output.str();
+}
+
+bool materialize_verbatim_beidou_nav(const std::filesystem::path& destination, std::string* error_message) {
+    const std::string source = read_file(brd4_source_nav_path());
+    if (source.empty() || source.find('\r') != std::string::npos) {
+        if (error_message != nullptr) {
+            *error_message = "BRD400DLR source fixture is empty or is not LF-normalized";
+        }
+        return false;
+    }
+
+    std::istringstream input(source);
+    std::ofstream output(destination, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        if (error_message != nullptr) {
+            *error_message = "cannot create verbatim BeiDou NAV subset";
+        }
+        return false;
+    }
+
+    bool header = true;
+    bool keep_record = false;
+    bool saw_header_end = false;
+    int ephemeris_records = 0;
+    std::set<std::string> satellites;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (header) {
+            output << line << '\n';
+            if (line.find("END OF HEADER") != std::string::npos) {
+                header = false;
+                saw_header_end = true;
+            }
+            continue;
+        }
+        if (line.rfind("> ", 0) == 0) {
+            keep_record = line.rfind("> EPH C", 0) == 0;
+            if (keep_record) {
+                ++ephemeris_records;
+                if (line.size() >= 9U) {
+                    satellites.insert(line.substr(6, 3));
+                }
+            }
+        }
+        if (keep_record) {
+            output << line << '\n';
+        }
+    }
+    output.close();
+    if (!saw_header_end || ephemeris_records < 4 || satellites.size() < 4U || !output) {
+        if (error_message != nullptr) {
+            *error_message = "verbatim BeiDou NAV subset does not contain enough authentic ephemerides";
+        }
+        return false;
+    }
+    return true;
 }
 
 std::vector<std::string> parse_csv_line(const std::string& line) {
@@ -314,10 +383,9 @@ bool parse_solution_stats(const std::filesystem::path& path, SolutionStats* stat
             }
         }
         if (row[static_cast<std::size_t>(velocity_valid)] == "1") {
-            const double velocity_error =
-                std::sqrt(std::pow(std::stod(row[static_cast<std::size_t>(vx)]), 2.0) +
-                          std::pow(std::stod(row[static_cast<std::size_t>(vy)]), 2.0) +
-                          std::pow(std::stod(row[static_cast<std::size_t>(vz)]), 2.0));
+            const double velocity_error = std::sqrt(std::pow(std::stod(row[static_cast<std::size_t>(vx)]), 2.0) +
+                                                    std::pow(std::stod(row[static_cast<std::size_t>(vy)]), 2.0) +
+                                                    std::pow(std::stod(row[static_cast<std::size_t>(vz)]), 2.0));
             ++result.valid_velocity_epochs;
             if (velocity_error >= result.max_velocity_error_mps) {
                 result.max_velocity_error_mps = velocity_error;
@@ -340,7 +408,11 @@ bool run_simulator_in_directory(const std::filesystem::path& directory, const gn
         }
         return false;
     }
-    const std::string input_path = brd4_nav_path();
+    const std::filesystem::path filtered_nav_path = directory / kFilteredNavName;
+    if (!materialize_verbatim_beidou_nav(filtered_nav_path, error_message)) {
+        return false;
+    }
+    const std::string input_path = filtered_nav_path.string();
     const std::string output_path = (directory / "simulated.log").string();
     const gnss_sim::SimulatorRunOptions options{input_path.c_str(), output_path.c_str(), brd4_start_time()};
     return gnss_sim::run_simulator(config, options, summary, error_message);
@@ -351,7 +423,7 @@ void cleanup(const std::filesystem::path& path) {
     std::filesystem::remove_all(path, error);
 }
 
-TEST(UrbanE2EValidation, AuthenticBrd4UrbanRunIsDeterministicTraceableAndRtklibConsumable) {
+TEST(UrbanE2EValidation, AuthenticBrd4BeidouUrbanRunIsDeterministicTraceableAndRtklibConsumable) {
     const std::filesystem::path first_directory = "gnss_sim_urban_e2e_a";
     const std::filesystem::path second_directory = "gnss_sim_urban_e2e_b";
     const gnss_sim::SimConfig config = urban_config();
@@ -361,6 +433,7 @@ TEST(UrbanE2EValidation, AuthenticBrd4UrbanRunIsDeterministicTraceableAndRtklibC
     ASSERT_TRUE(run_simulator_in_directory(first_directory, config, &first_summary, &error_message)) << error_message;
     ASSERT_TRUE(run_simulator_in_directory(second_directory, config, &second_summary, &error_message)) << error_message;
 
+    EXPECT_EQ(read_file(first_directory / kFilteredNavName), read_file(second_directory / kFilteredNavName));
     for (const char* file_name : {"simulated.log", "scenario.json", "observation_truth.csv", "solution_truth.csv",
                                   "urban_signal_truth.csv", "urban_path_truth.csv", "run_manifest.json"}) {
         EXPECT_EQ(read_file(first_directory / file_name), read_file(second_directory / file_name)) << file_name;
@@ -372,9 +445,10 @@ TEST(UrbanE2EValidation, AuthenticBrd4UrbanRunIsDeterministicTraceableAndRtklibC
     SolutionStats solution{};
     ASSERT_TRUE(parse_solution_stats(first_directory / "solution_truth.csv", &solution));
 
+    const std::string filtered_nav_path = (first_directory / kFilteredNavName).string();
     gnss_sim::RangeaRoundtripSummary original_nav_roundtrip{};
     ASSERT_TRUE(gnss_sim::validate_rangea_roundtrip_file(
-        (first_directory / "simulated.log").string().c_str(), brd4_nav_path().c_str(), kTruthLatitudeDeg,
+        (first_directory / "simulated.log").string().c_str(), filtered_nav_path.c_str(), kTruthLatitudeDeg,
         kTruthLongitudeDeg, kTruthHeightM, config.solution_elevation_mask_deg, false, &original_nav_roundtrip,
         &error_message))
         << error_message;
@@ -386,9 +460,12 @@ TEST(UrbanE2EValidation, AuthenticBrd4UrbanRunIsDeterministicTraceableAndRtklibC
 
     const auto max_position_epoch = urban.epoch_states.find(solution.max_position_epoch);
     ASSERT_NE(max_position_epoch, urban.epoch_states.end());
+    const std::string filtered_nav_hash = fnv1a64_hex(read_file(first_directory / kFilteredNavName));
 
     std::cout << "URBAN_E2E_NAV_SOURCE=BRD400DLR_S_20250030000_01D_MN.rnx\n"
-              << "URBAN_E2E_NAV_FIXTURE_SHA256=" << kFixtureSha256 << '\n'
+              << "URBAN_E2E_NAV_SOURCE_FIXTURE_SHA256=" << kSourceFixtureSha256 << '\n'
+              << "URBAN_E2E_NAV_FILTER=verbatim_all_BeiDou_EPH_records\n"
+              << "URBAN_E2E_NAV_FILTERED_FNV1A64=" << filtered_nav_hash << '\n'
               << "URBAN_E2E_CONFIG=start_gpst_2347_436500,duration_s=" << kPrimaryDurationSeconds
               << ",rate_hz=1,receiver=20_120_100,seed=0x124,noise=off,multipath=on\n"
               << "URBAN_E2E_STATE_COUNTS LOS=" << urban.los << " LOS_MULTIPATH=" << urban.los_multipath
@@ -401,8 +478,7 @@ TEST(UrbanE2EValidation, AuthenticBrd4UrbanRunIsDeterministicTraceableAndRtklibC
               << " cycle_slip=" << urban.cycle_slips << '\n'
               << "URBAN_E2E_INTERNAL_RTKLIB valid_position_epochs=" << solution.valid_position_epochs
               << " max_horizontal_m=" << solution.max_horizontal_error_m
-              << " max_vertical_m=" << solution.max_vertical_error_m
-              << " max_3d_m=" << solution.max_position_3d_error_m
+              << " max_vertical_m=" << solution.max_vertical_error_m << " max_3d_m=" << solution.max_position_3d_error_m
               << " valid_velocity_epochs=" << solution.valid_velocity_epochs
               << " max_velocity_mps=" << solution.max_velocity_error_mps << '\n'
               << "URBAN_E2E_RANGEA_ORIGINAL_NAV valid_position_epochs=" << original_nav_roundtrip.valid_position_epochs
@@ -443,7 +519,7 @@ TEST(UrbanE2EValidation, AuthenticBrd4UrbanRunIsDeterministicTraceableAndRtklibC
     cleanup(second_directory);
 }
 
-TEST(UrbanE2EValidation, AuthenticBrd4ReaExercisesReacquisitionAndLockReset) {
+TEST(UrbanE2EValidation, AuthenticBrd4BeidouReaExercisesReacquisitionAndLockReset) {
     const std::filesystem::path directory = "gnss_sim_urban_e2e_rea";
     gnss_sim::SimConfig config = urban_config();
     config.scenario = gnss_sim::ScenarioType::REA;

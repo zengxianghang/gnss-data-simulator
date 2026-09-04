@@ -904,8 +904,8 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                                                     glonass_fcn, scenario.time, runtime->receiver, signal_geometry,
                                                     &signal.tracker, &urban_epoch, error_message) ||
                         !update_urban_carrier_temporal_state(*definition, glonass_fcn, scenario.time, urban_epoch,
-                                                            &signal.urban_carrier_temporal, &urban_temporal,
-                                                            error_message)) {
+                                                             &signal.urban_carrier_temporal, &urban_temporal,
+                                                             error_message)) {
                         return false;
                     }
                 } else if (!update_unavailable_urban_signal(runtime, *definition, glonass_fcn, scenario.time,

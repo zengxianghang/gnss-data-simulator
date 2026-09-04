@@ -73,10 +73,9 @@ void reset_urban_carrier_temporal_state(UrbanCarrierTemporalState* state) {
     }
 }
 
-bool update_urban_carrier_temporal_state(const SignalDefinition& signal, int glonass_fcn,
-                                         const SimTime& current_time, const UrbanSignalEpochResult& epoch,
-                                         UrbanCarrierTemporalState* state, UrbanCarrierTemporalResult* result,
-                                         std::string* error_message) {
+bool update_urban_carrier_temporal_state(const SignalDefinition& signal, int glonass_fcn, const SimTime& current_time,
+                                         const UrbanSignalEpochResult& epoch, UrbanCarrierTemporalState* state,
+                                         UrbanCarrierTemporalResult* result, std::string* error_message) {
     if (state == nullptr || result == nullptr || current_time.gps_week < 0 || current_time.tow_ns < 0 ||
         current_time.tow_ns >= GPS_WEEK_NANOSECONDS) {
         set_error(error_message, "urban carrier temporal update has invalid arguments");

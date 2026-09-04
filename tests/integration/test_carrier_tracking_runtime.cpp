@@ -152,7 +152,8 @@ TEST(CarrierTrackingRuntime, MeasurementApplicationPreservesDopplerRangeRateSign
     carrier.tracking.adr_valid = false;
 
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::apply_carrier_tracking_runtime_result(carrier, &observation, &error_message)) << error_message;
+    ASSERT_TRUE(gnss_sim::apply_carrier_tracking_runtime_result(carrier, &observation, &error_message))
+        << error_message;
     EXPECT_DOUBLE_EQ(observation.doppler_hz, -47.0);
     EXPECT_DOUBLE_EQ(observation.range_rate_mps, 11.4);
     EXPECT_TRUE(observation.pseudorange_valid);
@@ -177,7 +178,8 @@ TEST(CarrierTrackingRuntime, CarrierUnlockedKeepsCodeButInvalidatesDopplerAndAdr
     carrier.tracking.adr_valid = false;
 
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::apply_carrier_tracking_runtime_result(carrier, &observation, &error_message)) << error_message;
+    ASSERT_TRUE(gnss_sim::apply_carrier_tracking_runtime_result(carrier, &observation, &error_message))
+        << error_message;
     EXPECT_DOUBLE_EQ(observation.doppler_hz, -50.0);
     EXPECT_DOUBLE_EQ(observation.range_rate_mps, 12.0);
     EXPECT_TRUE(observation.pseudorange_valid);
@@ -205,7 +207,8 @@ TEST(CarrierTrackingRuntime, NewPllSegmentUsesDifferentIntegerAmbiguityOffset) {
     carrier.phase_segment_id = 1U;
 
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::apply_carrier_tracking_runtime_result(carrier, &observation, &error_message)) << error_message;
+    ASSERT_TRUE(gnss_sim::apply_carrier_tracking_runtime_result(carrier, &observation, &error_message))
+        << error_message;
     EXPECT_EQ(observation.ambiguity_cycles, 537);
     EXPECT_DOUBLE_EQ(observation.adr_cycles, 1037.25);
 }

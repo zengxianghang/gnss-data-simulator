@@ -25,8 +25,7 @@ constexpr double kTruthLatitudeDeg = 20.0;
 constexpr double kTruthLongitudeDeg = 120.0;
 constexpr double kTruthHeightM = 100.0;
 constexpr std::int64_t kPrimaryDurationSeconds = 180;
-constexpr const char* kSourceFixtureSha256 =
-    "17c6bb00a8a0ef8f732b803925311e7b1ead658ae2e11f62635371eb915e9781";
+constexpr const char* kSourceFixtureSha256 = "17c6bb00a8a0ef8f732b803925311e7b1ead658ae2e11f62635371eb915e9781";
 constexpr const char* kFilteredNavName = "brd400dlr_beidou_verbatim_nav.rnx";
 
 std::string brd4_source_nav_path() {

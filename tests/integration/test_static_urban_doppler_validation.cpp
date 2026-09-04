@@ -677,9 +677,8 @@ TEST(StaticUrbanDopplerValidation, OneHertzMatchesTenHertzOneSecondCarrierDiffer
         }
         const double ten_hz_reconstructed_one_second_phase_change =
             std::abs(ten_hz_one_second_rate) * 2.0 * kPi / one.wavelength_m;
-        max_ten_hz_reconstructed_one_second_phase_change_rad =
-            std::max(max_ten_hz_reconstructed_one_second_phase_change_rad,
-                     ten_hz_reconstructed_one_second_phase_change);
+        max_ten_hz_reconstructed_one_second_phase_change_rad = std::max(
+            max_ten_hz_reconstructed_one_second_phase_change_rad, ten_hz_reconstructed_one_second_phase_change);
     }
     const double rms_mismatch_mps =
         matched_intervals > 0 ? std::sqrt(sum_squared_mismatch / static_cast<double>(matched_intervals)) : 0.0;

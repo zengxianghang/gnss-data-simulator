@@ -126,6 +126,7 @@ def _make_short_config(source_dir: Path, output_path: Path) -> dict[str, Any]:
     config = _read_json(source_dir / "config" / "default_v1.json")
     config["duration_sec"] = DURATION_SEC
     config["sampling_rate_hz"] = 1
+    config["atmosphere_mode"] = "broadcast"
     config["output_eph"] = False
     config["output_ion"] = False
     config["multipath_enabled"] = False

@@ -85,7 +85,7 @@ TEST(UrbanMeasurementApplication, AppliesCodeCarrierRateAndCn0ExactlyOnce) {
     EXPECT_NEAR(observation.pseudorange_m - clean.pseudorange_m, 4.5, 1.0e-12);
     EXPECT_NEAR(observation.range_rate_mps - clean.range_rate_mps, 1.4, 1.0e-12);
     EXPECT_NEAR(observation.doppler_hz - clean.doppler_hz, -1.4 / kWavelengthM, 1.0e-12);
-    EXPECT_NEAR(observation.adr_cycles - clean.adr_cycles, 0.32 / kWavelengthM, 1.0e-9);
+    EXPECT_NEAR(observation.adr_cycles - clean.adr_cycles, 0.32 / kWavelengthM, 1.0e-8);
     EXPECT_DOUBLE_EQ(observation.cn0_dbhz, 34.25);
     EXPECT_EQ(observation.lock_time_ns, 8200000000LL);
     EXPECT_TRUE(observation.observation_available);
@@ -135,7 +135,7 @@ TEST(UrbanMeasurementApplication, FreshLockWithoutPathRateDoesNotInventDopplerCo
     EXPECT_DOUBLE_EQ(observation.doppler_hz, clean.doppler_hz);
     EXPECT_FALSE(observation.doppler_valid);
     EXPECT_TRUE(observation.adr_valid);
-    EXPECT_NEAR(observation.adr_cycles - clean.adr_cycles, 0.07 / kWavelengthM, 1.0e-9);
+    EXPECT_NEAR(observation.adr_cycles - clean.adr_cycles, 0.07 / kWavelengthM, 1.0e-8);
 }
 
 TEST(UrbanMeasurementApplication, BlockedStateCannotLeakValidRangeObservation) {

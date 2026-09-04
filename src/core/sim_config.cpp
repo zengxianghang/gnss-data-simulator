@@ -661,10 +661,6 @@ bool validate_sim_config(const SimConfig& config, std::string* error_message) {
         set_error(error_message, "cn0_high_dbhz configuration is invalid");
         return false;
     }
-    if (config.multipath_enabled) {
-        set_error(error_message, "multipath is not supported in V1");
-        return false;
-    }
     if (config.receiver_clock_bias_m != 0.0 || config.receiver_clock_drift_mps != 0.0) {
         set_error(error_message, "receiver clock bias and drift must be zero in V1");
         return false;

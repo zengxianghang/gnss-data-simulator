@@ -105,6 +105,8 @@ add_library(gnss_sim_core STATIC
     src/gnss/signal_definitions.cpp
     src/model/atmosphere_model.cpp
     src/model/bestpos_rtk_model.cpp
+    src/model/carrier_tracking.cpp
+    src/model/carrier_tracking_runtime.cpp
     src/model/cn0_model.cpp
     src/model/code_correlation.cpp
     src/model/code_tracking_dll.cpp
@@ -124,6 +126,7 @@ add_library(gnss_sim_core STATIC
     src/output/novatel_nav_writer.cpp
     src/output/novatel_range_writer.cpp
     src/output/novatel_solution_writer.cpp
+    src/output/carrier_tracking_truth_writer.cpp
     src/output/truth_writer.cpp
     src/output/urban_truth_writer.cpp
     src/output/unicore_nav_writer.cpp
@@ -241,6 +244,8 @@ if(BUILD_TESTING)
     add_executable(gnss_sim_unit_tests
         tests/unit/test_atmosphere_model.cpp
         tests/unit/test_bestpos_rtk_model.cpp
+        tests/unit/test_carrier_tracking.cpp
+        tests/unit/test_carrier_tracking_config.cpp
         tests/unit/test_cn0_model.cpp
         tests/unit/test_cn0_normalized_builder.cpp
         tests/unit/test_cn0_statistics.cpp
@@ -295,6 +300,9 @@ if(BUILD_TESTING)
     add_executable(gnss_sim_integration_tests
         tests/integration/test_scenarios.cpp
         tests/integration/test_all_signal_residuals.cpp
+        tests/integration/test_carrier_tracking_runtime.cpp
+        tests/integration/test_carrier_tracking_truth.cpp
+        tests/integration/test_carrier_tracking_authentic_validation.cpp
         tests/integration/test_measurement_noise_integration.cpp
         tests/integration/test_nav_equivalence.cpp
         tests/integration/test_rea_fade.cpp

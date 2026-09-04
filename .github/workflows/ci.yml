@@ -84,3 +84,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: ./build/gnss_sim_integration_tests --gtest_filter=StaticUrbanDopplerValidation.*
+      - name: Report authentic carrier tracking validation metrics
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./build/gnss_sim_integration_tests --gtest_filter=CarrierTrackingAuthenticValidation.*

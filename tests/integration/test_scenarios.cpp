@@ -266,6 +266,39 @@ TEST(StreamingSimulator, FutureOnlyEphemerisDoesNotAbortEarlierEpochs) {
     std::remove(output_path.c_str());
 }
 
+TEST(StreamingSimulator, UrbanMultipathRuntimeIsDeterministicAndChangesReceiverObservations) {
+    gnss_sim::SimConfig urban_config = base_config(gnss_sim::ScenarioType::KS);
+    urban_config.sampling_rate_hz = 10;
+    urban_config.duration_ns = 10LL * gnss_sim::NANOSECONDS_PER_SECOND;
+    urban_config.measurement_noise_enabled = false;
+    urban_config.multipath_enabled = true;
+
+    gnss_sim::SimulatorRunSummary first_summary{};
+    gnss_sim::SimulatorRunSummary second_summary{};
+    std::string error_message;
+    ASSERT_TRUE(run(urban_config, "urban_runtime_first", &first_summary, &error_message)) << error_message;
+    ASSERT_TRUE(run(urban_config, "urban_runtime_second", &second_summary, &error_message)) << error_message;
+    EXPECT_EQ(first_summary.scheduled_epochs, 100U);
+    EXPECT_EQ(first_summary.range_messages, 100U);
+    EXPECT_EQ(second_summary.range_messages, first_summary.range_messages);
+
+    const std::string first_log = read_file(test_output_path("urban_runtime_first"));
+    const std::string second_log = read_file(test_output_path("urban_runtime_second"));
+    EXPECT_EQ(first_log, second_log);
+    EXPECT_EQ(occurrence_count(first_log, "#RANGEA,"), 100U);
+
+    gnss_sim::SimConfig legacy_config = urban_config;
+    legacy_config.multipath_enabled = false;
+    gnss_sim::SimulatorRunSummary legacy_summary{};
+    ASSERT_TRUE(run(legacy_config, "urban_runtime_legacy", &legacy_summary, &error_message)) << error_message;
+    EXPECT_EQ(legacy_summary.range_messages, first_summary.range_messages);
+    EXPECT_NE(read_file(test_output_path("urban_runtime_legacy")), first_log);
+
+    std::remove(test_output_path("urban_runtime_first").c_str());
+    std::remove(test_output_path("urban_runtime_second").c_str());
+    std::remove(test_output_path("urban_runtime_legacy").c_str());
+}
+
 TEST(StreamingSimulator, OneSecondDurationHasExactEpochCountAtEveryFrozenRate) {
     for (const int rate : {1, 5, 10, 20, 50}) {
         std::uint64_t count = 0;

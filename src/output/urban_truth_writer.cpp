@@ -10,6 +10,7 @@
 #include <iomanip>
 #include <locale>
 #include <new>
+#include <string>
 
 namespace gnss_sim {
 
@@ -106,7 +107,7 @@ bool write_path_rows(UrbanTruthWriter* writer, const SatelliteGeometry& geometry
         output << ',' << std::scientific << std::setprecision(17) << received.diffraction.model_path_range_m << ','
                << received.diffraction.excess_path_length_m << ',' << received.paths[0].code_delay_sec << ',';
     } else {
-        output << ",,,," << std::scientific << std::setprecision(17) << geometry.geometric_range_m << ",0,"
+        output << ",,," << std::scientific << std::setprecision(17) << geometry.geometric_range_m << ",0,"
                << received.paths[0].code_delay_sec << ',';
     }
     write_complex(output, received.paths[0].complex_voltage);
@@ -116,7 +117,7 @@ bool write_path_rows(UrbanTruthWriter* writer, const SatelliteGeometry& geometry
         output << received.diffraction.fresnel_v << ',';
         write_complex(output, received.diffraction.fresnel_coefficient);
     } else {
-        output << ",,,";
+        output << ",,";
     }
     output << ",,,,,,,,,\n";
     if (!stream_ok(output, "urban_path_truth.csv", error_message)) {

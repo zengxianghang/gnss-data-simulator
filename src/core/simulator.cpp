@@ -452,7 +452,7 @@ AcquisitionContext startup_context(StartupMode mode) {
 }
 
 MeasurementErrorContext measurement_error_context(const SimConfig& config, const ScenarioEpochState& scenario,
-                                                   const SignalTracker& tracker) {
+                                                  const SignalTracker& tracker) {
     MeasurementErrorContext context{};
     context.phase = MeasurementErrorPhase::kStable;
     context.rea_fade_progress = 0.0;

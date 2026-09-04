@@ -1,5 +1,6 @@
 #include "output/urban_truth_writer.h"
 
+#include "gnss_sim/sim_time.h"
 #include "model/urban_scene_geometry.h"
 #include "model/urban_rooftop_diffraction.h"
 
@@ -93,6 +94,7 @@ bool write_path_rows(UrbanTruthWriter* writer, const SatelliteGeometry& geometry
     }
 
     std::ofstream& output = writer->path_stream;
+    output << URBAN_TRUTH_SCHEMA_VERSION << ',';
     write_time(output, geometry.receive_time);
     output << ',' << geometry.satellite_number << ',' << static_cast<int>(signal.signal_id) << ",0,DIRECT_ROOF,"
            << urban_wall_id_name(received.diffraction_status == UrbanRooftopDiffractionStatus::VALID
@@ -104,7 +106,8 @@ bool write_path_rows(UrbanTruthWriter* writer, const SatelliteGeometry& geometry
         output << ',' << std::scientific << std::setprecision(17) << received.diffraction.model_path_range_m << ','
                << received.diffraction.excess_path_length_m << ',' << received.paths[0].code_delay_sec << ',';
     } else {
-        output << ",,," << ',' << geometry.geometric_range_m << ",0," << received.paths[0].code_delay_sec << ',';
+        output << ",,,," << std::scientific << std::setprecision(17) << geometry.geometric_range_m << ",0,"
+               << received.paths[0].code_delay_sec << ',';
     }
     write_complex(output, received.paths[0].complex_voltage);
     output << ',' << std::abs(received.paths[0].complex_voltage) << ',' << std::arg(received.paths[0].complex_voltage)
@@ -127,6 +130,7 @@ bool write_path_rows(UrbanTruthWriter* writer, const SatelliteGeometry& geometry
             set_error(error_message, "urban truth reflection/path ordering is inconsistent");
             return false;
         }
+        output << URBAN_TRUTH_SCHEMA_VERSION << ',';
         write_time(output, geometry.receive_time);
         output << ',' << geometry.satellite_number << ',' << static_cast<int>(signal.signal_id) << ',' << received_index
                << ",REFLECTION," << urban_wall_id_name(reflection.wall_id) << ',';
@@ -170,8 +174,8 @@ UrbanTruthWriter* create_urban_truth_writer(const char* receiver_log_path, std::
     }
     const char* signal_header =
         "truth_schema_version,gps_week,tow_ns,sow_sec,satellite_number,signal_id,signal_name,glonass_fcn,"
-        "azimuth_deg,elevation_deg,direct_los,blocking_wall,grazing_roof,diffraction_status,reflection_count,"
-        "received_path_count,urban_state,tracking_phase,loss_reason,open_cn0_dbhz,effective_cn0_dbhz,"
+        "azimuth_deg,elevation_deg,propagation_evaluated,direct_los,blocking_wall,grazing_roof,diffraction_status,"
+        "reflection_count,received_path_count,urban_state,tracking_phase,loss_reason,open_cn0_dbhz,effective_cn0_dbhz,"
         "effective_cn0_finite,composite_power_ratio,dll_root_count,root_search_status,selection_mode,"
         "selected_root_valid,dll_code_phase_sec,dll_code_phase_chips,code_bias_m,tracked_correlation_real,"
         "tracked_correlation_imag,lock_time_ns,observation_available,pseudorange_valid,doppler_valid,adr_valid,"
@@ -207,22 +211,35 @@ bool urban_truth_writer_write_signal(UrbanTruthWriter* writer, const SatelliteGe
         return false;
     }
     const UrbanReceivedPathSet& received = epoch.received_paths;
+    const bool propagation_evaluated = received.path_count > 0;
     std::ofstream& output = writer->signal_stream;
     output << URBAN_TRUTH_SCHEMA_VERSION << ',';
     write_time(output, geometry.receive_time);
     output << ',' << geometry.satellite_number << ',' << static_cast<int>(signal.signal_id) << ',' << signal.name << ','
            << glonass_fcn << ',' << std::scientific << std::setprecision(17)
            << geometry.azimuth_rad * kRadiansToDegrees << ',' << geometry.elevation_rad * kRadiansToDegrees << ','
-           << (received.direct_geometry.line_of_sight ? 1 : 0) << ','
-           << urban_wall_id_name(received.direct_geometry.primary_wall) << ','
-           << (received.direct_geometry.grazing_roof ? 1 : 0) << ','
-           << urban_rooftop_diffraction_status_name(received.diffraction_status) << ',' << received.reflections.path_count
-           << ',' << received.path_count << ',' << urban_signal_state_name(epoch.urban_state) << ','
-           << signal_tracking_phase_name(epoch.tracking_phase) << ',' << signal_tracking_loss_reason_name(epoch.loss_reason)
-           << ',' << received.open_cn0_dbhz << ',' << epoch.effective_cn0_dbhz << ','
-           << (epoch.effective_cn0.finite_effective_cn0 ? 1 : 0) << ',' << epoch.effective_cn0.composite_power_ratio << ','
-           << epoch.dll_root_count << ',' << root_search_status_name(epoch.root_search_status) << ','
-           << selection_mode_name(epoch.selection_mode) << ',' << (epoch.selected_root_valid ? 1 : 0) << ',';
+           << (propagation_evaluated ? 1 : 0) << ',';
+    if (propagation_evaluated) {
+        output << (received.direct_geometry.line_of_sight ? 1 : 0) << ','
+               << urban_wall_id_name(received.direct_geometry.primary_wall) << ','
+               << (received.direct_geometry.grazing_roof ? 1 : 0) << ','
+               << urban_rooftop_diffraction_status_name(received.diffraction_status);
+    } else {
+        output << ",NONE,,NOT_EVALUATED";
+    }
+    output << ',' << received.reflections.path_count << ',' << received.path_count << ','
+           << urban_signal_state_name(epoch.urban_state) << ',' << signal_tracking_phase_name(epoch.tracking_phase) << ','
+           << signal_tracking_loss_reason_name(epoch.loss_reason) << ',';
+    if (propagation_evaluated) {
+        output << received.open_cn0_dbhz << ',' << epoch.effective_cn0_dbhz << ','
+               << (epoch.effective_cn0.finite_effective_cn0 ? 1 : 0) << ','
+               << epoch.effective_cn0.composite_power_ratio << ',' << epoch.dll_root_count << ','
+               << root_search_status_name(epoch.root_search_status) << ',' << selection_mode_name(epoch.selection_mode)
+               << ',';
+    } else {
+        output << ",,,,0,NOT_EVALUATED,NOT_EVALUATED,";
+    }
+    output << (epoch.selected_root_valid ? 1 : 0) << ',';
     if (epoch.selected_root_valid) {
         output << epoch.preselected_root.code_phase_sec << ',' << epoch.preselected_root.code_phase_chips;
     } else {

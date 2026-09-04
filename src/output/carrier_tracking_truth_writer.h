@@ -50,8 +50,7 @@ CarrierTrackingTruthWriter* create_carrier_tracking_truth_writer(const char* rec
                                                                  std::string* error_message);
 void destroy_carrier_tracking_truth_writer(CarrierTrackingTruthWriter* writer);
 
-bool carrier_tracking_truth_writer_write_signal(CarrierTrackingTruthWriter* writer,
-                                                const SatelliteGeometry& geometry,
+bool carrier_tracking_truth_writer_write_signal(CarrierTrackingTruthWriter* writer, const SatelliteGeometry& geometry,
                                                 const SignalDefinition& signal, int glonass_fcn,
                                                 const SignalTracker& tracker,
                                                 const CarrierTrackingTruthSnapshot& snapshot,

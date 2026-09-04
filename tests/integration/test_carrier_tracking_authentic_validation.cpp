@@ -626,8 +626,7 @@ TEST(CarrierTrackingAuthenticValidation, AuthenticNavObservationStatisticsCompat
         }
         if (sample.post_snapshot_available) {
             const std::string validity = std::string(sample.post_code_valid ? "1" : "0") +
-                                         (sample.post_doppler_valid ? "1" : "0") +
-                                         (sample.post_adr_valid ? "1" : "0");
+                                         (sample.post_doppler_valid ? "1" : "0") + (sample.post_adr_valid ? "1" : "0");
             ++validity_combinations[validity];
             if (sample.mode == "FLL_TRACK" && sample.post_code_valid && sample.post_doppler_valid &&
                 !sample.post_adr_valid) {
@@ -642,10 +641,9 @@ TEST(CarrierTrackingAuthenticValidation, AuthenticNavObservationStatisticsCompat
             max_doppler_mapping_mismatch_hz =
                 std::max(max_doppler_mapping_mismatch_hz,
                          std::abs((sample.post_doppler_hz - sample.physical_doppler_hz) - sample.tracking_error_hz));
-            max_range_rate_mapping_mismatch_mps =
-                std::max(max_range_rate_mapping_mismatch_mps,
-                         std::abs((sample.post_range_rate_mps - sample.physical_range_rate_mps) +
-                                  sample.tracking_error_mps));
+            max_range_rate_mapping_mismatch_mps = std::max(
+                max_range_rate_mapping_mismatch_mps,
+                std::abs((sample.post_range_rate_mps - sample.physical_range_rate_mps) + sample.tracking_error_mps));
         }
         if (!sample.post_doppler_valid) {
             continue;
@@ -675,9 +673,9 @@ TEST(CarrierTrackingAuthenticValidation, AuthenticNavObservationStatisticsCompat
 
     const DistributionMetrics environmental = metrics(environmental_rates);
     std::cout << "CARRIER_AUTH_SUMMARY result_rows=" << result_rows << " valid_doppler_rows=" << valid_doppler_rows
-              << " fll_code_doppler_no_adr=" << fll_code_doppler_no_adr
-              << " unlocked_code_only=" << unlocked_code_only << " pull_in_rows=" << pull_in_rows
-              << " mode_changes=" << mode_changes << " new_segments=" << new_segments << " cycle_slips=" << cycle_slips
+              << " fll_code_doppler_no_adr=" << fll_code_doppler_no_adr << " unlocked_code_only=" << unlocked_code_only
+              << " pull_in_rows=" << pull_in_rows << " mode_changes=" << mode_changes
+              << " new_segments=" << new_segments << " cycle_slips=" << cycle_slips
               << " env_rate_rms_mps=" << environmental.rms << " env_rate_p95_mps=" << environmental.p95
               << " env_rate_max_mps=" << environmental.maximum << '\n'
               << "CARRIER_AUTH_MAPPING max_doppler_mismatch_hz=" << max_doppler_mapping_mismatch_hz
@@ -750,28 +748,28 @@ TEST(CarrierTrackingAuthenticValidation, FrozenThermalJitterRespondsToCn0Bandwid
     std::string error_message;
 
     ASSERT_TRUE(gnss_sim::compute_carrier_tracking_jitter(base, gnss_sim::CarrierTrackingMode::kFllTrack, false, 20.0,
-                                                         0.19, 0.02, &cn0_low, &error_message))
+                                                          0.19, 0.02, &cn0_low, &error_message))
         << error_message;
     ASSERT_TRUE(gnss_sim::compute_carrier_tracking_jitter(base, gnss_sim::CarrierTrackingMode::kFllTrack, false, 40.0,
-                                                         0.19, 0.02, &cn0_high, &error_message))
+                                                          0.19, 0.02, &cn0_high, &error_message))
         << error_message;
     ASSERT_TRUE(gnss_sim::compute_carrier_tracking_jitter(base, gnss_sim::CarrierTrackingMode::kFllTrack, false, 35.0,
-                                                         0.19, 0.02, &base_35, &error_message))
+                                                          0.19, 0.02, &base_35, &error_message))
         << error_message;
 
     gnss_sim::CarrierTrackingConfig wider = base;
     wider.fll_noise_bandwidth_hz = 8.0;
     ASSERT_TRUE(gnss_sim::compute_carrier_tracking_jitter(wider, gnss_sim::CarrierTrackingMode::kFllTrack, false, 35.0,
-                                                         0.19, 0.02, &wide_band, &error_message))
+                                                          0.19, 0.02, &wide_band, &error_message))
         << error_message;
 
     gnss_sim::CarrierTrackingConfig longer = base;
     longer.coherent_integration_sec = 0.04;
-    ASSERT_TRUE(gnss_sim::compute_carrier_tracking_jitter(longer, gnss_sim::CarrierTrackingMode::kFllTrack, false,
-                                                         35.0, 0.19, 0.02, &long_integration, &error_message))
+    ASSERT_TRUE(gnss_sim::compute_carrier_tracking_jitter(longer, gnss_sim::CarrierTrackingMode::kFllTrack, false, 35.0,
+                                                          0.19, 0.02, &long_integration, &error_message))
         << error_message;
     ASSERT_TRUE(gnss_sim::compute_carrier_tracking_jitter(base, gnss_sim::CarrierTrackingMode::kFllTrack, false, 35.0,
-                                                         0.38, 0.02, &long_wavelength, &error_message))
+                                                          0.38, 0.02, &long_wavelength, &error_message))
         << error_message;
 
     std::cout << "CARRIER_JITTER_RESPONSE cn0_20_sigma_hz=" << cn0_low.sigma_hz
@@ -960,8 +958,7 @@ TEST(CarrierTrackingAuthenticValidation, AuthenticNavReacquisitionExercisesPersi
         }
     }
 
-    std::cout << "CARRIER_REACQUISITION reset_rows=" << reset_rows
-              << " result_rows=" << reacquisition_result_rows
+    std::cout << "CARRIER_REACQUISITION reset_rows=" << reset_rows << " result_rows=" << reacquisition_result_rows
               << " unlocked_code_only=" << reacquisition_unlocked_code_only
               << " fll_valid_no_adr=" << reacquisition_fll_valid_no_adr
               << " new_segments=" << reacquisition_new_segments << " selected=" << selected_key

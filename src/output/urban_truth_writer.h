@@ -23,10 +23,8 @@ void destroy_urban_truth_writer(UrbanTruthWriter* writer);
 // tracking, carrier phase, or path rate.
 bool urban_truth_writer_write_signal(UrbanTruthWriter* writer, const SatelliteGeometry& geometry,
                                      const SignalDefinition& signal, int glonass_fcn,
-                                     const UrbanSignalEpochResult& epoch,
-                                     const UrbanCarrierTemporalResult& temporal,
-                                     const MeasurementObservation* observation,
-                                     std::string* error_message);
+                                     const UrbanSignalEpochResult& epoch, const UrbanCarrierTemporalResult& temporal,
+                                     const MeasurementObservation* observation, std::string* error_message);
 
 bool finalize_urban_truth_writer(UrbanTruthWriter* writer, std::string* error_message);
 

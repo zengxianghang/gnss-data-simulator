@@ -106,6 +106,7 @@ add_library(gnss_sim_core STATIC
     src/model/atmosphere_model.cpp
     src/model/bestpos_rtk_model.cpp
     src/model/carrier_tracking.cpp
+    src/model/carrier_tracking_runtime.cpp
     src/model/cn0_model.cpp
     src/model/code_correlation.cpp
     src/model/code_tracking_dll.cpp
@@ -243,6 +244,7 @@ if(BUILD_TESTING)
         tests/unit/test_atmosphere_model.cpp
         tests/unit/test_bestpos_rtk_model.cpp
         tests/unit/test_carrier_tracking.cpp
+        tests/unit/test_carrier_tracking_config.cpp
         tests/unit/test_cn0_model.cpp
         tests/unit/test_cn0_normalized_builder.cpp
         tests/unit/test_cn0_statistics.cpp
@@ -297,6 +299,7 @@ if(BUILD_TESTING)
     add_executable(gnss_sim_integration_tests
         tests/integration/test_scenarios.cpp
         tests/integration/test_all_signal_residuals.cpp
+        tests/integration/test_carrier_tracking_runtime.cpp
         tests/integration/test_measurement_noise_integration.cpp
         tests/integration/test_nav_equivalence.cpp
         tests/integration/test_rea_fade.cpp

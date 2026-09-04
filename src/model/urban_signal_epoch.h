@@ -6,6 +6,7 @@
 #include "model/urban_received_power.h"
 
 #include <complex>
+#include <cstdint>
 #include <string>
 
 namespace gnss_sim {

@@ -40,10 +40,9 @@ void reset_urban_carrier_temporal_state(UrbanCarrierTemporalState* state);
 // exp(+jwt)/exp(-jkL) convention, equivalent environmental carrier range is
 // -phase_unwrapped*lambda/(2*pi). Range rate is only formed between consecutive
 // samples in one uninterrupted tracking segment.
-bool update_urban_carrier_temporal_state(const SignalDefinition& signal, int glonass_fcn,
-                                         const SimTime& current_time, const UrbanSignalEpochResult& epoch,
-                                         UrbanCarrierTemporalState* state, UrbanCarrierTemporalResult* result,
-                                         std::string* error_message);
+bool update_urban_carrier_temporal_state(const SignalDefinition& signal, int glonass_fcn, const SimTime& current_time,
+                                         const UrbanSignalEpochResult& epoch, UrbanCarrierTemporalState* state,
+                                         UrbanCarrierTemporalResult* result, std::string* error_message);
 
 } // namespace gnss_sim
 

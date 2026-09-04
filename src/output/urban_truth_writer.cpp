@@ -1,8 +1,8 @@
 #include "output/urban_truth_writer.h"
 
 #include "gnss_sim/sim_time.h"
-#include "model/urban_scene_geometry.h"
 #include "model/urban_rooftop_diffraction.h"
+#include "model/urban_scene_geometry.h"
 
 #include <cmath>
 #include <filesystem>
@@ -203,10 +203,8 @@ void destroy_urban_truth_writer(UrbanTruthWriter* writer) {
 
 bool urban_truth_writer_write_signal(UrbanTruthWriter* writer, const SatelliteGeometry& geometry,
                                      const SignalDefinition& signal, int glonass_fcn,
-                                     const UrbanSignalEpochResult& epoch,
-                                     const UrbanCarrierTemporalResult& temporal,
-                                     const MeasurementObservation* observation,
-                                     std::string* error_message) {
+                                     const UrbanSignalEpochResult& epoch, const UrbanCarrierTemporalResult& temporal,
+                                     const MeasurementObservation* observation, std::string* error_message) {
     if (writer == nullptr || writer->finalized || geometry.satellite_number <= 0) {
         set_error(error_message, "urban truth signal writer request is invalid");
         return false;
@@ -217,9 +215,8 @@ bool urban_truth_writer_write_signal(UrbanTruthWriter* writer, const SatelliteGe
     output << URBAN_TRUTH_SCHEMA_VERSION << ',';
     write_time(output, geometry.receive_time);
     output << ',' << geometry.satellite_number << ',' << static_cast<int>(signal.signal_id) << ',' << signal.name << ','
-           << glonass_fcn << ',' << std::scientific << std::setprecision(17)
-           << geometry.azimuth_rad * kRadiansToDegrees << ',' << geometry.elevation_rad * kRadiansToDegrees << ','
-           << (propagation_evaluated ? 1 : 0) << ',';
+           << glonass_fcn << ',' << std::scientific << std::setprecision(17) << geometry.azimuth_rad * kRadiansToDegrees
+           << ',' << geometry.elevation_rad * kRadiansToDegrees << ',' << (propagation_evaluated ? 1 : 0) << ',';
     if (propagation_evaluated) {
         output << (received.direct_geometry.line_of_sight ? 1 : 0) << ','
                << urban_wall_id_name(received.direct_geometry.primary_wall) << ','
@@ -229,14 +226,13 @@ bool urban_truth_writer_write_signal(UrbanTruthWriter* writer, const SatelliteGe
         output << ",NONE,,NOT_EVALUATED";
     }
     output << ',' << received.reflections.path_count << ',' << received.path_count << ','
-           << urban_signal_state_name(epoch.urban_state) << ',' << signal_tracking_phase_name(epoch.tracking_phase) << ','
-           << signal_tracking_loss_reason_name(epoch.loss_reason) << ',';
+           << urban_signal_state_name(epoch.urban_state) << ',' << signal_tracking_phase_name(epoch.tracking_phase)
+           << ',' << signal_tracking_loss_reason_name(epoch.loss_reason) << ',';
     if (propagation_evaluated) {
         output << received.open_cn0_dbhz << ',' << epoch.effective_cn0_dbhz << ','
-               << (epoch.effective_cn0.finite_effective_cn0 ? 1 : 0) << ','
-               << epoch.effective_cn0.composite_power_ratio << ',' << epoch.dll_root_count << ','
-               << root_search_status_name(epoch.root_search_status) << ',' << selection_mode_name(epoch.selection_mode)
-               << ',';
+               << (epoch.effective_cn0.finite_effective_cn0 ? 1 : 0) << ',' << epoch.effective_cn0.composite_power_ratio
+               << ',' << epoch.dll_root_count << ',' << root_search_status_name(epoch.root_search_status) << ','
+               << selection_mode_name(epoch.selection_mode) << ',';
     } else {
         output << ",,,,0,NOT_EVALUATED,NOT_EVALUATED,";
     }
@@ -249,8 +245,8 @@ bool urban_truth_writer_write_signal(UrbanTruthWriter* writer, const SatelliteGe
     output << ',' << epoch.code_bias_m << ',';
     write_complex(output, epoch.tracked_composite_correlation);
     output << ',' << epoch.lock_time_ns << ',' << (epoch.observation_available ? 1 : 0) << ','
-           << (epoch.psr_valid ? 1 : 0) << ',' << (epoch.doppler_valid ? 1 : 0) << ',' << (epoch.adr_valid ? 1 : 0) << ','
-           << (epoch.reacquisition_event ? 1 : 0) << ',' << (epoch.carrier_continuity_valid ? 1 : 0) << ','
+           << (epoch.psr_valid ? 1 : 0) << ',' << (epoch.doppler_valid ? 1 : 0) << ',' << (epoch.adr_valid ? 1 : 0)
+           << ',' << (epoch.reacquisition_event ? 1 : 0) << ',' << (epoch.carrier_continuity_valid ? 1 : 0) << ','
            << temporal.wavelength_m << ',' << temporal.wrapped_phase_rad << ',' << temporal.unwrapped_phase_rad << ','
            << temporal.carrier_range_bias_m << ',' << temporal.environmental_range_rate_mps << ','
            << (temporal.environmental_range_rate_valid ? 1 : 0) << ',' << (temporal.cycle_slip_event ? 1 : 0) << ','

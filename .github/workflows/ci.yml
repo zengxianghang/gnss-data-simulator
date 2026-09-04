@@ -68,3 +68,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: ./build/gnss_sim_integration_tests --gtest_filter=RangeaRoundtripIntegration.SerializedRangeAndEphemerisPositionWithoutOriginalRinexNavAndParsesIon
+      - name: Report authentic-NAV urban E2E metrics
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./build/gnss_sim_integration_tests --gtest_filter=UrbanE2EValidation.*

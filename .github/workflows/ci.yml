@@ -72,3 +72,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: ./build/gnss_sim_integration_tests --gtest_filter=UrbanE2EValidation.*
+      - name: Report static urban Doppler validation metrics
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./build/gnss_sim_integration_tests --gtest_filter=StaticUrbanDopplerValidation.*

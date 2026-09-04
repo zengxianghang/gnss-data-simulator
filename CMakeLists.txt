@@ -125,6 +125,7 @@ add_library(gnss_sim_core STATIC
     src/output/novatel_range_writer.cpp
     src/output/novatel_solution_writer.cpp
     src/output/truth_writer.cpp
+    src/output/urban_truth_writer.cpp
     src/output/unicore_nav_writer.cpp
     src/scenario/scenario_engine.cpp
     src/solution/solution_engine.cpp

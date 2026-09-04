@@ -25,6 +25,7 @@
 #include "output/novatel_range_writer.h"
 #include "output/novatel_solution_writer.h"
 #include "output/truth_writer.h"
+#include "output/urban_truth_writer.h"
 #include "scenario/scenario_engine.h"
 #include "solution/solution_engine.h"
 
@@ -746,7 +747,12 @@ bool process_receiver_nav(RuntimeState* runtime, const SimConfig& config, const 
 
 bool update_unavailable_urban_signal(RuntimeState* runtime, const SignalDefinition& definition, int glonass_fcn,
                                      const SimTime& current_time, double elevation_deg, SignalRuntime* signal,
+                                     UrbanSignalEpochResult* epoch, UrbanCarrierTemporalResult* temporal,
                                      std::string* error_message) {
+    if (epoch == nullptr || temporal == nullptr) {
+        set_error(error_message, "unavailable urban signal diagnostics output is null");
+        return false;
+    }
     double open_cn0_dbhz = 0.0;
     if (!cn0_model_estimate_dbhz(runtime->cn0_model, definition.signal_id, elevation_deg, current_time,
                                  &open_cn0_dbhz)) {
@@ -761,26 +767,30 @@ bool update_unavailable_urban_signal(RuntimeState* runtime, const SignalDefiniti
     if (!update_urban_signal_tracker(&signal->tracker, current_time, input, runtime->tracking_config, error_message)) {
         return false;
     }
-    UrbanSignalEpochResult epoch{};
-    epoch.urban_state = signal->tracker.urban_state;
-    epoch.tracking_phase = signal->tracker.phase;
-    epoch.loss_reason = signal->tracker.loss_reason;
-    epoch.lock_time_ns = signal->tracker.lock_time_ns;
-    epoch.observation_available = signal->tracker.observation_available;
-    epoch.psr_valid = signal->tracker.psr_valid;
-    epoch.doppler_valid = signal->tracker.doppler_valid;
-    epoch.adr_valid = signal->tracker.adr_valid;
-    epoch.reacquisition_event = signal->tracker.reacquisition_event;
-    epoch.carrier_continuity_valid = signal->tracker.carrier_continuity_valid;
-    UrbanCarrierTemporalResult temporal{};
-    return update_urban_carrier_temporal_state(definition, glonass_fcn, current_time, epoch,
-                                               &signal->urban_carrier_temporal, &temporal, error_message);
+    UrbanSignalEpochResult output{};
+    output.urban_state = signal->tracker.urban_state;
+    output.tracking_phase = signal->tracker.phase;
+    output.loss_reason = signal->tracker.loss_reason;
+    output.lock_time_ns = signal->tracker.lock_time_ns;
+    output.observation_available = signal->tracker.observation_available;
+    output.psr_valid = signal->tracker.psr_valid;
+    output.doppler_valid = signal->tracker.doppler_valid;
+    output.adr_valid = signal->tracker.adr_valid;
+    output.reacquisition_event = signal->tracker.reacquisition_event;
+    output.carrier_continuity_valid = signal->tracker.carrier_continuity_valid;
+    if (!update_urban_carrier_temporal_state(definition, glonass_fcn, current_time, output,
+                                             &signal->urban_carrier_temporal, temporal, error_message)) {
+        return false;
+    }
+    *epoch = output;
+    return true;
 }
 
 bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& config,
                                       const ScenarioEpochState& scenario,
                                       std::vector<MeasurementObservation>* measurements, int* tracked_satellites,
-                                      TruthWriter* truth_writer, std::string* error_message) {
+                                      TruthWriter* truth_writer, UrbanTruthWriter* urban_truth_writer,
+                                      std::string* error_message) {
     measurements->clear();
     *tracked_satellites = 0;
     const RtklibNavStore* truth_nav = truth_navigation_store(runtime->navigation);
@@ -909,7 +919,8 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                         return false;
                     }
                 } else if (!update_unavailable_urban_signal(runtime, *definition, glonass_fcn, scenario.time,
-                                                            elevation_deg, &signal, error_message)) {
+                                                            elevation_deg, &signal, &urban_epoch, &urban_temporal,
+                                                            error_message)) {
                     return false;
                 }
             } else if (!update_signal_tracker(&signal.tracker, scenario.time, signal_available, elevation_deg,
@@ -918,6 +929,11 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
             }
 
             if (signal.tracker.phase != SignalTrackingPhase::kTracking) {
+                if (config.multipath_enabled &&
+                    !urban_truth_writer_write_signal(urban_truth_writer, signal_geometry, *definition, glonass_fcn,
+                                                     urban_epoch, urban_temporal, nullptr, error_message)) {
+                    return false;
+                }
                 reset_carrier_ambiguity_state(&signal.ambiguity);
                 reset_measurement_error_state(&signal.measurement_error);
                 continue;
@@ -941,7 +957,12 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                                                       atmosphere, &signal.ambiguity, &observation, error_message);
             if (!measurement_ok ||
                 (config.multipath_enabled &&
-                 !apply_urban_measurement_effects(urban_epoch, urban_temporal, &observation, error_message)) ||
+                 !apply_urban_measurement_effects(urban_epoch, urban_temporal, &observation, error_message))) {
+                return false;
+            }
+            if ((config.multipath_enabled &&
+                 !urban_truth_writer_write_signal(urban_truth_writer, signal_geometry, *definition, glonass_fcn,
+                                                  urban_epoch, urban_temporal, &observation, error_message)) ||
                 !truth_writer_write_observation(truth_writer, runtime->receiver, signal_geometry, signal.tracker,
                                                 observation, error_message)) {
                 return false;
@@ -1083,10 +1104,18 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         destroy_navigation_state(runtime.navigation);
         return false;
     }
+    UrbanTruthWriter* urban_truth_writer = create_urban_truth_writer(options.output_log_path, error_message);
+    if (urban_truth_writer == nullptr) {
+        destroy_truth_writer(truth_writer);
+        output.close();
+        destroy_navigation_state(runtime.navigation);
+        return false;
+    }
 
     std::uint64_t epoch_count = 0;
     if (!epoch_count_for_duration(config.duration_ns, config.sampling_rate_hz, &epoch_count)) {
         set_error(error_message, "cannot compute simulator epoch count");
+        destroy_urban_truth_writer(urban_truth_writer);
         destroy_truth_writer(truth_writer);
         destroy_navigation_state(runtime.navigation);
         return false;
@@ -1149,7 +1178,7 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
 
         int tracked_satellites = 0;
         if (!update_tracking_and_measurements(&runtime, config, scenario, &measurements, &tracked_satellites,
-                                              truth_writer, error_message) ||
+                                              truth_writer, urban_truth_writer, error_message) ||
             !process_receiver_nav(&runtime, config, current_time, &output, &result, error_message)) {
             ok = false;
             break;
@@ -1185,10 +1214,14 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         ok = false;
     }
     output.close();
+    if (ok && !finalize_urban_truth_writer(urban_truth_writer, error_message)) {
+        ok = false;
+    }
     if (ok && !finalize_truth_writer(truth_writer, result, simulator_version(), simulator_commit_sha(),
                                      rtklib_commit_sha(), error_message)) {
         ok = false;
     }
+    destroy_urban_truth_writer(urban_truth_writer);
     destroy_truth_writer(truth_writer);
     destroy_navigation_state(runtime.navigation);
     if (!ok) {

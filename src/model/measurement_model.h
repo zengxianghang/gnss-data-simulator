@@ -77,8 +77,7 @@ bool generate_zero_noise_measurement_with_explicit_code_bias(
 // zero-noise measurement. Broadcast/explicit code bias, satellite clock,
 // atmosphere, and carrier ambiguity have already been applied exactly once by
 // the clean generator and are not recomputed here.
-bool apply_urban_measurement_effects(const UrbanSignalEpochResult& epoch,
-                                     const UrbanCarrierTemporalResult& temporal,
+bool apply_urban_measurement_effects(const UrbanSignalEpochResult& epoch, const UrbanCarrierTemporalResult& temporal,
                                      MeasurementObservation* observation, std::string* error_message);
 
 const char* broadcast_code_bias_status_name(BroadcastCodeBiasStatus status);

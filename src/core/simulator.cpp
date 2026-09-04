@@ -11,6 +11,7 @@
 #include "gnss_sim/sim_time.h"
 #include "model/atmosphere_model.h"
 #include "model/bestpos_rtk_model.h"
+#include "model/carrier_tracking_runtime.h"
 #include "model/cn0_model.h"
 #include "model/code_tracking_dll.h"
 #include "model/measurement_error_model.h"
@@ -54,6 +55,7 @@ struct SignalRuntime {
     CarrierAmbiguityState ambiguity;
     MeasurementErrorState measurement_error;
     UrbanCarrierTemporalState urban_carrier_temporal;
+    CarrierTrackingRuntimeState carrier_tracking;
     bool ever_scheduled;
 };
 
@@ -310,7 +312,8 @@ ColdFamilyRuntime* cold_family_state(SatelliteRuntime* satellite, NavMessageFami
 }
 
 bool build_satellite_runtimes(const std::vector<TruthScheduleEntry>& schedule, const SimTime& reset_time,
-                              std::vector<SatelliteRuntime>* satellites, std::string* error_message) {
+                              std::uint64_t simulator_seed, std::vector<SatelliteRuntime>* satellites,
+                              std::string* error_message) {
     if (satellites == nullptr) {
         set_error(error_message, "satellite runtime output is null");
         return false;
@@ -341,6 +344,8 @@ bool build_satellite_runtimes(const std::vector<TruthScheduleEntry>& schedule, c
             reset_signal_tracker(&signal.tracker, definitions[index].signal_id, reset_time);
             reset_carrier_ambiguity_state(&signal.ambiguity);
             reset_urban_carrier_temporal_state(&signal.urban_carrier_temporal);
+            initialize_carrier_tracking_runtime_state(simulator_seed, satellite_number, definitions[index].signal_id,
+                                                      &signal.carrier_tracking);
             satellite.signals.push_back(signal);
         }
         for (const TruthScheduleEntry& entry : schedule) {
@@ -509,6 +514,7 @@ bool receiver_power_on(RuntimeState* runtime, const SimConfig& config, const Sim
             reset_carrier_ambiguity_state(&signal.ambiguity);
             reset_measurement_error_state(&signal.measurement_error);
             reset_urban_carrier_temporal_state(&signal.urban_carrier_temporal);
+            reset_carrier_tracking_runtime_state(&signal.carrier_tracking);
             signal.ever_scheduled = false;
         }
         for (ColdFamilyRuntime& family : satellite.cold_families) {
@@ -534,6 +540,7 @@ void receiver_power_off(RuntimeState* runtime, const SimTime& time) {
             reset_carrier_ambiguity_state(&signal.ambiguity);
             reset_measurement_error_state(&signal.measurement_error);
             reset_urban_carrier_temporal_state(&signal.urban_carrier_temporal);
+            reset_carrier_tracking_runtime_state(&signal.carrier_tracking);
         }
     }
 }
@@ -546,6 +553,7 @@ void receiver_signal_off(RuntimeState* runtime, const SimTime& time) {
             reset_carrier_ambiguity_state(&signal.ambiguity);
             reset_measurement_error_state(&signal.measurement_error);
             reset_urban_carrier_temporal_state(&signal.urban_carrier_temporal);
+            reset_carrier_tracking_runtime_state(&signal.carrier_tracking);
         }
     }
 }
@@ -936,9 +944,26 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                 }
                 reset_carrier_ambiguity_state(&signal.ambiguity);
                 reset_measurement_error_state(&signal.measurement_error);
+                reset_carrier_tracking_runtime_state(&signal.carrier_tracking);
                 continue;
             }
             satellite_tracking = true;
+
+            CarrierTrackingRuntimeResult carrier_result{};
+            if (config.carrier_tracking.enabled) {
+                double wavelength_m = 0.0;
+                if (!signal_wavelength_m(*definition, glonass_fcn, &wavelength_m)) {
+                    set_error(error_message, "cannot determine carrier tracking signal wavelength");
+                    return false;
+                }
+                const double carrier_cn0_dbhz =
+                    config.multipath_enabled ? urban_epoch.effective_cn0_dbhz : signal.tracker.cn0_dbhz;
+                if (!update_carrier_tracking_runtime(config.carrier_tracking, scenario.time, true, carrier_cn0_dbhz,
+                                                     wavelength_m, &signal.carrier_tracking, &carrier_result,
+                                                     error_message)) {
+                    return false;
+                }
+            }
 
             AtmosphereCorrection atmosphere{};
             if (!compute_atmosphere_correction(config.atmosphere_mode, truth_nav, scenario.time,
@@ -968,11 +993,25 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                 return false;
             }
             MeasurementObservation reported_observation = observation;
-            if (config.measurement_noise_enabled &&
-                !apply_measurement_error(
-                    config.measurement_error, config.seed, measurement_error_context(config, scenario, signal.tracker),
-                    signal.tracker, observation, &signal.measurement_error, &reported_observation, error_message)) {
+            if (config.carrier_tracking.enabled &&
+                !apply_carrier_tracking_runtime_result(carrier_result, &reported_observation, error_message)) {
                 return false;
+            }
+            if (config.measurement_noise_enabled) {
+                if (config.carrier_tracking.enabled) {
+                    const MeasurementObservation measurement_error_input = reported_observation;
+                    if (!apply_measurement_error(config.measurement_error, config.seed,
+                                                 measurement_error_context(config, scenario, signal.tracker),
+                                                 signal.tracker, measurement_error_input, &signal.measurement_error,
+                                                 &reported_observation, error_message)) {
+                        return false;
+                    }
+                } else if (!apply_measurement_error(
+                               config.measurement_error, config.seed,
+                               measurement_error_context(config, scenario, signal.tracker), signal.tracker, observation,
+                               &signal.measurement_error, &reported_observation, error_message)) {
+                    return false;
+                }
             }
             measurements->push_back(reported_observation);
         }
@@ -1055,7 +1094,8 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         load_truth_navigation(runtime.navigation, options.rinex_nav_path, error_message) &&
         make_static_receiver_truth(config.receiver, &runtime.receiver, error_message) &&
         build_truth_schedule(truth_navigation_store(runtime.navigation), &runtime.truth_schedule, error_message) &&
-        build_satellite_runtimes(runtime.truth_schedule, options.start_time, &runtime.satellites, error_message);
+        build_satellite_runtimes(runtime.truth_schedule, options.start_time, config.seed, &runtime.satellites,
+                                 error_message);
     if (!ok) {
         destroy_navigation_state(runtime.navigation);
         return false;

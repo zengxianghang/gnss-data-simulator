@@ -1,8 +1,7 @@
 #include "model/carrier_tracking.h"
 
-#include <gtest/gtest.h>
-
 #include <cmath>
+#include <gtest/gtest.h>
 #include <limits>
 #include <string>
 #include <vector>
@@ -241,8 +240,8 @@ TEST(CarrierTracking, JitterFallsWithCn0AndScalesWithBandwidthIntegrationAndWave
     wide.fll_noise_bandwidth_hz = 8.0;
     wide.fll_pull_in_bandwidth_hz = 8.0;
     CarrierTrackingJitter wider{};
-    ASSERT_TRUE(compute_carrier_tracking_jitter(wide, CarrierTrackingMode::kFllTrack, false, 35.0, kL1WavelengthM,
-                                                0.1, &wider, &error))
+    ASSERT_TRUE(compute_carrier_tracking_jitter(wide, CarrierTrackingMode::kFllTrack, false, 35.0, kL1WavelengthM, 0.1,
+                                                &wider, &error))
         << error;
     EXPECT_GT(wider.sigma_hz, fll_mid.sigma_hz);
 
@@ -275,8 +274,8 @@ TEST(CarrierTracking, IdenticalInputsAndGaussianSequenceProduceIdenticalState) {
 
     const std::vector<double> cn0 = {25.0, 25.0, 25.0, 31.0, 31.0, 31.0, 31.0, 31.0,
                                      31.0, 31.0, 31.0, 31.0, 31.0, 26.0, 26.0, 26.0};
-    const std::vector<double> gaussian = {0.1,  -0.3, 1.2,  0.4,  -0.7, 0.0, 0.9,  -1.1,
-                                          0.2, 0.5,  -0.4, 0.8,  0.3,  -0.2, 1.0,  -0.6};
+    const std::vector<double> gaussian = {0.1, -0.3, 1.2,  0.4, -0.7, 0.0,  0.9, -1.1,
+                                          0.2, 0.5,  -0.4, 0.8, 0.3,  -0.2, 1.0, -0.6};
 
     for (std::size_t index = 0; index < cn0.size(); ++index) {
         const CarrierTrackingResult first_result = step_tracker(config, &first, cn0[index], 0.1, gaussian[index]);
@@ -297,11 +296,11 @@ TEST(CarrierTracking, SupportedExtremeCn0ValuesRemainFinite) {
     CarrierTrackingJitter high{};
     std::string error;
 
-    ASSERT_TRUE(compute_carrier_tracking_jitter(config, CarrierTrackingMode::kFllTrack, false, -100.0,
-                                                kL1WavelengthM, 0.1, &low, &error))
+    ASSERT_TRUE(compute_carrier_tracking_jitter(config, CarrierTrackingMode::kFllTrack, false, -100.0, kL1WavelengthM,
+                                                0.1, &low, &error))
         << error;
-    ASSERT_TRUE(compute_carrier_tracking_jitter(config, CarrierTrackingMode::kPllTrack, false, 100.0,
-                                                kL1WavelengthM, 0.1, &high, &error))
+    ASSERT_TRUE(compute_carrier_tracking_jitter(config, CarrierTrackingMode::kPllTrack, false, 100.0, kL1WavelengthM,
+                                                0.1, &high, &error))
         << error;
 
     EXPECT_TRUE(std::isfinite(low.sigma_hz));

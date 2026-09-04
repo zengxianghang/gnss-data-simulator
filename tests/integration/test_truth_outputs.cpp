@@ -1,6 +1,8 @@
+#include "gnss/signal_definitions.h"
 #include "gnss_sim/sim_config.h"
 #include "gnss_sim/sim_time.h"
 #include "gnss_sim/simulator.h"
+#include "output/urban_truth_writer.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -346,6 +348,130 @@ TEST(TruthOutputs, UrbanTruthIsDeterministicOrderedAndMatchesSynthesizedObservat
 
     cleanup(first_directory);
     cleanup(second_directory);
+}
+
+TEST(TruthOutputs, UrbanTruthSerializerCoversAllFourPropagationStates) {
+    const std::filesystem::path directory = "gnss_sim_truth_urban_states";
+    cleanup(directory);
+    std::error_code filesystem_error;
+    ASSERT_TRUE(std::filesystem::create_directories(directory, filesystem_error));
+    ASSERT_FALSE(filesystem_error);
+
+    const std::filesystem::path receiver_log_path = directory / "simulated.log";
+    std::string error_message;
+    gnss_sim::UrbanTruthWriter* writer =
+        gnss_sim::create_urban_truth_writer(receiver_log_path.string().c_str(), &error_message);
+    ASSERT_NE(writer, nullptr) << error_message;
+    const gnss_sim::SignalDefinition* signal = gnss_sim::find_signal_definition(gnss_sim::SignalId::kGpsL1Ca);
+    ASSERT_NE(signal, nullptr);
+    double wavelength_m = 0.0;
+    ASSERT_TRUE(gnss_sim::signal_wavelength_m(*signal, 0, &wavelength_m));
+
+    const gnss_sim::UrbanSignalState states[] = {gnss_sim::UrbanSignalState::kLos,
+                                                 gnss_sim::UrbanSignalState::kLosMultipath,
+                                                 gnss_sim::UrbanSignalState::kNlosTracked,
+                                                 gnss_sim::UrbanSignalState::kBlocked};
+    const gnss_sim::SimTime base_time = start_time();
+    for (int state_index = 0; state_index < 4; ++state_index) {
+        gnss_sim::SatelliteGeometry geometry{};
+        ASSERT_TRUE(gnss_sim::add_time_ns(base_time, state_index * gnss_sim::NANOSECONDS_PER_SECOND,
+                                          &geometry.receive_time));
+        geometry.satellite_number = 1;
+        geometry.geometric_range_m = 21000000.0 + state_index;
+        geometry.azimuth_rad = 0.4 + 0.1 * state_index;
+        geometry.elevation_rad = 0.6;
+
+        gnss_sim::UrbanSignalEpochResult epoch{};
+        epoch.urban_state = states[state_index];
+        epoch.tracking_phase = state_index == 3 ? gnss_sim::SignalTrackingPhase::kSearching
+                                                : gnss_sim::SignalTrackingPhase::kTracking;
+        epoch.loss_reason = state_index == 3 ? gnss_sim::SignalTrackingLossReason::kLowCn0
+                                             : gnss_sim::SignalTrackingLossReason::kNone;
+        epoch.lock_time_ns = state_index == 3 ? 0 : state_index * gnss_sim::NANOSECONDS_PER_SECOND;
+        epoch.observation_available = state_index != 3;
+        epoch.psr_valid = state_index != 3;
+        epoch.doppler_valid = state_index != 3;
+        epoch.adr_valid = state_index != 3;
+        epoch.reacquisition_event = state_index == 2;
+        epoch.carrier_continuity_valid = state_index != 3;
+
+        gnss_sim::UrbanCarrierTemporalResult temporal{};
+        temporal.wavelength_m = wavelength_m;
+        temporal.tracking_lock_valid = state_index != 3;
+        temporal.carrier_adr_valid = state_index != 3;
+        temporal.phase_continuity_valid = state_index != 3;
+        temporal.cycle_slip_event = state_index == 2;
+
+        if (state_index != 3) {
+            gnss_sim::UrbanReceivedPathSet& received = epoch.received_paths;
+            received.path_count = 1;
+            received.open_cn0_dbhz = 45.0;
+            received.direct_geometry.line_of_sight = state_index < 2;
+            received.direct_geometry.primary_wall = gnss_sim::UrbanWallId::NORTH;
+            received.direct_geometry.grazing_roof = state_index == 1;
+            received.paths[0].code_delay_sec = state_index == 0 ? 0.0 : 1.0e-8 * state_index;
+            received.paths[0].complex_voltage = {1.0 - 0.1 * state_index, 0.05 * state_index};
+            if (state_index == 0) {
+                received.diffraction_status = gnss_sim::UrbanRooftopDiffractionStatus::NO_BLOCKING_ROOF_EDGE;
+            } else {
+                received.diffraction_status = gnss_sim::UrbanRooftopDiffractionStatus::VALID;
+                received.diffraction.wall_id = gnss_sim::UrbanWallId::NORTH;
+                received.diffraction.diffraction_point_enu_m = {0.0, 10.0, 10.0};
+                received.diffraction.model_path_range_m = geometry.geometric_range_m + 1.0 + state_index;
+                received.diffraction.excess_path_length_m = 1.0 + state_index;
+                received.diffraction.fresnel_v = state_index == 1 ? -0.1 : 0.8;
+                received.diffraction.fresnel_coefficient = received.paths[0].complex_voltage;
+            }
+            epoch.effective_cn0.open_cn0_dbhz = received.open_cn0_dbhz;
+            epoch.effective_cn0.composite_correlation = received.paths[0].complex_voltage;
+            epoch.effective_cn0.composite_power_ratio = std::norm(received.paths[0].complex_voltage);
+            epoch.effective_cn0.effective_cn0_dbhz = 44.0 - state_index;
+            epoch.effective_cn0.finite_effective_cn0 = true;
+            epoch.effective_cn0_dbhz = epoch.effective_cn0.effective_cn0_dbhz;
+            epoch.dll_root_count = 1;
+            epoch.root_search_status = gnss_sim::CodeTrackingDllRootSearchStatus::kRootsFound;
+            epoch.selection_mode = gnss_sim::CodeTrackingDllSelectionMode::TRACKED;
+            epoch.selected_root_valid = true;
+            epoch.preselected_root.code_phase_sec = received.paths[0].code_delay_sec;
+            epoch.preselected_root.code_phase_chips = 0.01 * state_index;
+            epoch.code_bias_m = 299792458.0 * epoch.preselected_root.code_phase_sec;
+            epoch.tracked_composite_correlation = received.paths[0].complex_voltage;
+            temporal.wrapped_phase_rad = 0.1 * state_index;
+            temporal.unwrapped_phase_rad = 0.1 * state_index;
+            temporal.carrier_range_bias_m = -temporal.unwrapped_phase_rad * wavelength_m /
+                                            (2.0 * 3.141592653589793238462643383279502884);
+            temporal.environmental_range_rate_mps = 0.01 * state_index;
+            temporal.environmental_range_rate_valid = state_index > 0;
+        }
+
+        ASSERT_TRUE(gnss_sim::urban_truth_writer_write_signal(writer, geometry, *signal, 0, epoch, temporal, nullptr,
+                                                               &error_message))
+            << error_message;
+    }
+    ASSERT_TRUE(gnss_sim::finalize_urban_truth_writer(writer, &error_message)) << error_message;
+    gnss_sim::destroy_urban_truth_writer(writer);
+
+    expect_consistent_simple_csv_columns(directory / "urban_signal_truth.csv");
+    expect_consistent_simple_csv_columns(directory / "urban_path_truth.csv");
+    const std::vector<std::vector<std::string>> rows = read_simple_csv(directory / "urban_signal_truth.csv");
+    ASSERT_EQ(rows.size(), 5U);
+    const int state_column = column_index(rows.front(), "urban_state");
+    const int loss_column = column_index(rows.front(), "loss_reason");
+    const int reacquisition_column = column_index(rows.front(), "reacquisition_event");
+    const int slip_column = column_index(rows.front(), "cycle_slip_event");
+    ASSERT_GE(state_column, 0);
+    ASSERT_GE(loss_column, 0);
+    ASSERT_GE(reacquisition_column, 0);
+    ASSERT_GE(slip_column, 0);
+    EXPECT_EQ(rows[1][static_cast<std::size_t>(state_column)], "LOS");
+    EXPECT_EQ(rows[2][static_cast<std::size_t>(state_column)], "LOS_MULTIPATH");
+    EXPECT_EQ(rows[3][static_cast<std::size_t>(state_column)], "NLOS_TRACKED");
+    EXPECT_EQ(rows[4][static_cast<std::size_t>(state_column)], "BLOCKED");
+    EXPECT_EQ(rows[3][static_cast<std::size_t>(reacquisition_column)], "1");
+    EXPECT_EQ(rows[3][static_cast<std::size_t>(slip_column)], "1");
+    EXPECT_EQ(rows[4][static_cast<std::size_t>(loss_column)], "LOW_CN0");
+    EXPECT_EQ(read_simple_csv(directory / "urban_path_truth.csv").size(), 4U);
+    cleanup(directory);
 }
 
 TEST(TruthOutputs, ExternalCn0ModelIsManifestedAndByteRepeatable) {

@@ -1,5 +1,4 @@
 #include "model/measurement_model.h"
-
 #include "model/urban_carrier_temporal.h"
 #include "model/urban_signal_epoch.h"
 
@@ -19,8 +18,8 @@ bool valid_effective_cn0(double cn0_dbhz) {
 }
 
 bool wavelength_matches(double clean_wavelength_m, double temporal_wavelength_m) {
-    if (!std::isfinite(clean_wavelength_m) || !std::isfinite(temporal_wavelength_m) ||
-        !(clean_wavelength_m > 0.0) || !(temporal_wavelength_m > 0.0)) {
+    if (!std::isfinite(clean_wavelength_m) || !std::isfinite(temporal_wavelength_m) || !(clean_wavelength_m > 0.0) ||
+        !(temporal_wavelength_m > 0.0)) {
         return false;
     }
     const double tolerance_m = 1.0e-12 * clean_wavelength_m + 1.0e-15;
@@ -29,15 +28,13 @@ bool wavelength_matches(double clean_wavelength_m, double temporal_wavelength_m)
 
 } // namespace
 
-bool apply_urban_measurement_effects(const UrbanSignalEpochResult& epoch,
-                                     const UrbanCarrierTemporalResult& temporal,
+bool apply_urban_measurement_effects(const UrbanSignalEpochResult& epoch, const UrbanCarrierTemporalResult& temporal,
                                      MeasurementObservation* observation, std::string* error_message) {
     if (observation == nullptr || !wavelength_matches(observation->wavelength_m, temporal.wavelength_m) ||
         !std::isfinite(observation->pseudorange_m) || !std::isfinite(observation->range_rate_mps) ||
         !std::isfinite(observation->doppler_hz) || !std::isfinite(observation->adr_cycles) ||
-        !std::isfinite(epoch.code_bias_m) || !valid_effective_cn0(epoch.effective_cn0_dbhz) ||
-        epoch.lock_time_ns < 0 || !std::isfinite(temporal.carrier_range_bias_m) ||
-        !std::isfinite(temporal.environmental_range_rate_mps)) {
+        !std::isfinite(epoch.code_bias_m) || !valid_effective_cn0(epoch.effective_cn0_dbhz) || epoch.lock_time_ns < 0 ||
+        !std::isfinite(temporal.carrier_range_bias_m) || !std::isfinite(temporal.environmental_range_rate_mps)) {
         set_error(error_message, "urban measurement application has invalid arguments");
         return false;
     }

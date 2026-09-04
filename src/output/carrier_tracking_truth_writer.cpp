@@ -127,8 +127,7 @@ void destroy_carrier_tracking_truth_writer(CarrierTrackingTruthWriter* writer) {
     delete writer;
 }
 
-bool carrier_tracking_truth_writer_write_signal(CarrierTrackingTruthWriter* writer,
-                                                const SatelliteGeometry& geometry,
+bool carrier_tracking_truth_writer_write_signal(CarrierTrackingTruthWriter* writer, const SatelliteGeometry& geometry,
                                                 const SignalDefinition& signal, int glonass_fcn,
                                                 const SignalTracker& tracker,
                                                 const CarrierTrackingTruthSnapshot& snapshot,
@@ -158,8 +157,8 @@ bool carrier_tracking_truth_writer_write_signal(CarrierTrackingTruthWriter* writ
                << ',' << jitter.active_bandwidth_hz << ',' << jitter.phase_sigma_rad << ',' << jitter.sigma_hz << ','
                << jitter.sigma_mps << ',' << jitter.correlation_tau_sec << ',' << jitter.correlation_alpha << ','
                << result.tracking_error_hz << ',' << result.tracking_error_mps << ',' << state.mode_age_sec << ','
-               << state.carrier_lock_age_sec << ',' << state.pll_age_sec << ',' << state.fll_enter_persistence_sec << ','
-               << state.fll_exit_persistence_sec << ',' << state.pll_enter_persistence_sec << ','
+               << state.carrier_lock_age_sec << ',' << state.pll_age_sec << ',' << state.fll_enter_persistence_sec
+               << ',' << state.fll_exit_persistence_sec << ',' << state.pll_enter_persistence_sec << ','
                << state.pll_exit_persistence_sec << ',' << result.carrier_segment_id << ','
                << snapshot.runtime_result.phase_segment_id << ',' << snapshot.runtime_result.adr_cycle_offset_cycles
                << ',' << (result.mode_changed ? 1 : 0) << ',' << (result.new_carrier_segment ? 1 : 0) << ','

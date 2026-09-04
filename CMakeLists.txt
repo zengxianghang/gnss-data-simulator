@@ -303,6 +303,7 @@ if(BUILD_TESTING)
         tests/integration/test_residual_validator.cpp
         tests/integration/test_truth_outputs.cpp
         tests/integration/test_urban_e2e_validation.cpp
+        tests/integration/test_static_urban_doppler_validation.cpp
         tests/integration/test_v1_acceptance.cpp
     )
     target_include_directories(gnss_sim_integration_tests PRIVATE

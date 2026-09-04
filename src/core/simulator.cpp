@@ -452,7 +452,7 @@ AcquisitionContext startup_context(StartupMode mode) {
 }
 
 MeasurementErrorContext measurement_error_context(const SimConfig& config, const ScenarioEpochState& scenario,
-                                                  const SignalTracker& tracker) {
+                                                   const SignalTracker& tracker) {
     MeasurementErrorContext context{};
     context.phase = MeasurementErrorPhase::kStable;
     context.rea_fade_progress = 0.0;
@@ -1006,10 +1006,10 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                                                  &reported_observation, error_message)) {
                         return false;
                     }
-                } else if (!apply_measurement_error(
-                               config.measurement_error, config.seed,
-                               measurement_error_context(config, scenario, signal.tracker), signal.tracker, observation,
-                               &signal.measurement_error, &reported_observation, error_message)) {
+                } else if (!apply_measurement_error(config.measurement_error, config.seed,
+                                                    measurement_error_context(config, scenario, signal.tracker),
+                                                    signal.tracker, observation, &signal.measurement_error,
+                                                    &reported_observation, error_message)) {
                     return false;
                 }
             }

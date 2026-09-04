@@ -118,9 +118,9 @@ TEST(UrbanSignalEpoch, SingleDirectPathUnifiesRootCn0AndLosTracking) {
 
     gnss_sim::UrbanSignalEpochResult result{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::update_urban_signal_epoch_from_paths(
-        gps_l1, time, received, gnss_sim::default_code_tracking_dll_config(), tracking, &tracker, &result,
-        &error_message))
+    ASSERT_TRUE(gnss_sim::update_urban_signal_epoch_from_paths(gps_l1, time, received,
+                                                               gnss_sim::default_code_tracking_dll_config(), tracking,
+                                                               &tracker, &result, &error_message))
         << error_message;
     EXPECT_EQ(result.root_search_status, gnss_sim::CodeTrackingDllRootSearchStatus::kRootsFound);
     EXPECT_TRUE(result.stable_root_available);
@@ -151,9 +151,9 @@ TEST(UrbanSignalEpoch, DllCodeBiasComesOnlyFromSelectedCompositeRoot) {
 
     gnss_sim::UrbanSignalEpochResult result{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::update_urban_signal_epoch_from_paths(
-        gps_l1, time, received, gnss_sim::default_code_tracking_dll_config(), tracking, &tracker, &result,
-        &error_message))
+    ASSERT_TRUE(gnss_sim::update_urban_signal_epoch_from_paths(gps_l1, time, received,
+                                                               gnss_sim::default_code_tracking_dll_config(), tracking,
+                                                               &tracker, &result, &error_message))
         << error_message;
     EXPECT_NEAR(result.preselected_root.code_phase_chips, 0.05, 1.0e-6);
     EXPECT_NEAR(result.code_bias_m, kSpeedOfLightMps * result.preselected_root.code_phase_sec, 1.0e-9);
@@ -172,9 +172,9 @@ TEST(UrbanSignalEpoch, ExactCoherentNullBecomesBlockedWithoutFabricatedRootOrCn0
     const gnss_sim::UrbanReceivedPathSet initial = path_set(55.0, false, initial_path, 1);
     gnss_sim::UrbanSignalEpochResult acquired{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::update_urban_signal_epoch_from_paths(
-        gps_l1, first_time, initial, gnss_sim::default_code_tracking_dll_config(), tracking, &tracker, &acquired,
-        &error_message))
+    ASSERT_TRUE(gnss_sim::update_urban_signal_epoch_from_paths(gps_l1, first_time, initial,
+                                                               gnss_sim::default_code_tracking_dll_config(), tracking,
+                                                               &tracker, &acquired, &error_message))
         << error_message;
     ASSERT_EQ(acquired.tracking_phase, gnss_sim::SignalTrackingPhase::kTracking);
     ASSERT_EQ(acquired.urban_state, gnss_sim::UrbanSignalState::kNlosTracked);
@@ -186,9 +186,9 @@ TEST(UrbanSignalEpoch, ExactCoherentNullBecomesBlockedWithoutFabricatedRootOrCn0
     const gnss_sim::UrbanReceivedPathSet cancelled = path_set(55.0, false, cancelled_paths, 2);
     const gnss_sim::SimTime second_time = time_at(120000.1);
     gnss_sim::UrbanSignalEpochResult lost{};
-    ASSERT_TRUE(gnss_sim::update_urban_signal_epoch_from_paths(
-        gps_l1, second_time, cancelled, gnss_sim::default_code_tracking_dll_config(), tracking, &tracker, &lost,
-        &error_message))
+    ASSERT_TRUE(gnss_sim::update_urban_signal_epoch_from_paths(gps_l1, second_time, cancelled,
+                                                               gnss_sim::default_code_tracking_dll_config(), tracking,
+                                                               &tracker, &lost, &error_message))
         << error_message;
     EXPECT_EQ(lost.root_search_status, gnss_sim::CodeTrackingDllRootSearchStatus::kNoRoots);
     EXPECT_EQ(lost.dll_root_count, 0);
@@ -217,9 +217,9 @@ TEST(UrbanSignalEpoch, DifferentCodeRateUsesSignalSpecificChipMetadata) {
 
     gnss_sim::UrbanSignalEpochResult result{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::update_urban_signal_epoch_from_paths(
-        gps_l5, time, received, gnss_sim::default_code_tracking_dll_config(), tracking, &tracker, &result,
-        &error_message))
+    ASSERT_TRUE(gnss_sim::update_urban_signal_epoch_from_paths(gps_l5, time, received,
+                                                               gnss_sim::default_code_tracking_dll_config(), tracking,
+                                                               &tracker, &result, &error_message))
         << error_message;
     EXPECT_NEAR(result.preselected_root.code_phase_chips, 0.05, 1.0e-6);
     EXPECT_NEAR(result.preselected_root.code_phase_sec, 0.05 / gps_l5.code_correlation.chip_rate_hz, 1.0e-15);
@@ -246,9 +246,9 @@ TEST(UrbanSignalEpoch, ProductionRoofTransitionCanReachLosMultipath) {
     schedule_tracker(&tracker, gps_l1, time, elevation_deg, cn0, tracking);
 
     gnss_sim::UrbanSignalEpochResult result{};
-    ASSERT_TRUE(gnss_sim::compute_urban_signal_epoch(
-        cn0, scene, sim_config.urban_rf, gnss_sim::default_code_tracking_dll_config(), tracking, gps_l1, 0, time,
-        receiver, geometry, &tracker, &result, &error_message))
+    ASSERT_TRUE(gnss_sim::compute_urban_signal_epoch(cn0, scene, sim_config.urban_rf,
+                                                     gnss_sim::default_code_tracking_dll_config(), tracking, gps_l1, 0,
+                                                     time, receiver, geometry, &tracker, &result, &error_message))
         << error_message;
     EXPECT_TRUE(result.received_paths.direct_geometry.line_of_sight);
     EXPECT_EQ(result.tracking_phase, gnss_sim::SignalTrackingPhase::kTracking);
@@ -272,12 +272,12 @@ TEST(UrbanSignalEpoch, IdenticalInputsProduceIdenticalUnifiedResults) {
     gnss_sim::UrbanSignalEpochResult second{};
     std::string first_error;
     std::string second_error;
-    ASSERT_TRUE(gnss_sim::update_urban_signal_epoch_from_paths(
-        gal_e1, time, received, gnss_sim::default_code_tracking_dll_config(), tracking, &first_tracker, &first,
-        &first_error));
-    ASSERT_TRUE(gnss_sim::update_urban_signal_epoch_from_paths(
-        gal_e1, time, received, gnss_sim::default_code_tracking_dll_config(), tracking, &second_tracker, &second,
-        &second_error));
+    ASSERT_TRUE(gnss_sim::update_urban_signal_epoch_from_paths(gal_e1, time, received,
+                                                               gnss_sim::default_code_tracking_dll_config(), tracking,
+                                                               &first_tracker, &first, &first_error));
+    ASSERT_TRUE(gnss_sim::update_urban_signal_epoch_from_paths(gal_e1, time, received,
+                                                               gnss_sim::default_code_tracking_dll_config(), tracking,
+                                                               &second_tracker, &second, &second_error));
     EXPECT_EQ(first.dll_root_count, second.dll_root_count);
     EXPECT_EQ(first.root_search_status, second.root_search_status);
     EXPECT_EQ(first.preselected_root_index, second.preselected_root_index);

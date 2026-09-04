@@ -136,8 +136,9 @@ TEST(UrbanCarrierTemporal, SingleMovingPathRateMatchesAnalyticRangeChange) {
     gnss_sim::UrbanCarrierTemporalResult second{};
     std::string error_message;
     ASSERT_TRUE(gnss_sim::update_urban_carrier_temporal_state(
-        gps_l1, 0, time_at(100000.0), tracked_epoch(phasor_for_range_bias(first_bias_m, wavelength_m), 1000 * kMilliseconds),
-        &state, &first, &error_message))
+        gps_l1, 0, time_at(100000.0),
+        tracked_epoch(phasor_for_range_bias(first_bias_m, wavelength_m), 1000 * kMilliseconds), &state, &first,
+        &error_message))
         << error_message;
     EXPECT_TRUE(first.phase_continuity_valid);
     EXPECT_FALSE(first.environmental_range_rate_valid);
@@ -165,8 +166,9 @@ TEST(UrbanCarrierTemporal, WrappedPhaseCrossingPiRemainsContinuous) {
     gnss_sim::UrbanCarrierTemporalResult second{};
     std::string error_message;
     ASSERT_TRUE(gnss_sim::update_urban_carrier_temporal_state(
-        gps_l1, 0, time_at(110000.0), tracked_epoch(phasor_for_range_bias(first_bias_m, wavelength_m), 1000 * kMilliseconds),
-        &state, &first, &error_message));
+        gps_l1, 0, time_at(110000.0),
+        tracked_epoch(phasor_for_range_bias(first_bias_m, wavelength_m), 1000 * kMilliseconds), &state, &first,
+        &error_message));
     ASSERT_TRUE(gnss_sim::update_urban_carrier_temporal_state(
         gps_l1, 0, time_at(110000.1),
         tracked_epoch(phasor_for_range_bias(second_bias_m, wavelength_m), 1100 * kMilliseconds), &state, &second,
@@ -187,12 +189,12 @@ TEST(UrbanCarrierTemporal, StableCodeBiasDoesNotCreateDopplerBias) {
     gnss_sim::UrbanCarrierTemporalState state{};
     gnss_sim::UrbanCarrierTemporalResult result{};
     std::string error_message;
-    ASSERT_TRUE(gnss_sim::update_urban_carrier_temporal_state(
-        gps_l1, 0, time_at(120000.0), tracked_epoch(phasor, 1000 * kMilliseconds, false, 20.0), &state, &result,
-        &error_message));
-    ASSERT_TRUE(gnss_sim::update_urban_carrier_temporal_state(
-        gps_l1, 0, time_at(120000.2), tracked_epoch(phasor, 1200 * kMilliseconds, false, 45.0), &state, &result,
-        &error_message));
+    ASSERT_TRUE(gnss_sim::update_urban_carrier_temporal_state(gps_l1, 0, time_at(120000.0),
+                                                              tracked_epoch(phasor, 1000 * kMilliseconds, false, 20.0),
+                                                              &state, &result, &error_message));
+    ASSERT_TRUE(gnss_sim::update_urban_carrier_temporal_state(gps_l1, 0, time_at(120000.2),
+                                                              tracked_epoch(phasor, 1200 * kMilliseconds, false, 45.0),
+                                                              &state, &result, &error_message));
     EXPECT_TRUE(result.environmental_range_rate_valid);
     EXPECT_NEAR(result.environmental_range_rate_mps, 0.0, 1.0e-14);
 }
@@ -217,9 +219,8 @@ TEST(UrbanCarrierTemporal, LossAndReacquisitionStartNewContinuitySegment) {
     EXPECT_FALSE(result.environmental_range_rate_valid);
 
     ASSERT_TRUE(gnss_sim::update_urban_carrier_temporal_state(
-        gps_l1, 0, time_at(130000.2),
-        tracked_epoch(phasor_for_range_bias(0.4 * wavelength_m, wavelength_m), 0, true), &state, &result,
-        &error_message));
+        gps_l1, 0, time_at(130000.2), tracked_epoch(phasor_for_range_bias(0.4 * wavelength_m, wavelength_m), 0, true),
+        &state, &result, &error_message));
     EXPECT_TRUE(result.cycle_slip_event);
     EXPECT_TRUE(result.phase_continuity_valid);
     EXPECT_FALSE(result.environmental_range_rate_valid);
@@ -256,8 +257,9 @@ TEST(UrbanCarrierTemporal, DifferentCarrierWavelengthUsesCentralSignalMetadata) 
     gnss_sim::UrbanCarrierTemporalResult result{};
     std::string error_message;
     ASSERT_TRUE(gnss_sim::update_urban_carrier_temporal_state(
-        gal_e5a, 0, time_at(150000.0), tracked_epoch(phasor_for_range_bias(first_bias_m, wavelength_m), 1000 * kMilliseconds),
-        &state, &result, &error_message));
+        gal_e5a, 0, time_at(150000.0),
+        tracked_epoch(phasor_for_range_bias(first_bias_m, wavelength_m), 1000 * kMilliseconds), &state, &result,
+        &error_message));
     ASSERT_TRUE(gnss_sim::update_urban_carrier_temporal_state(
         gal_e5a, 0, time_at(150000.1),
         tracked_epoch(phasor_for_range_bias(second_bias_m, wavelength_m), 1100 * kMilliseconds), &state, &result,
@@ -335,8 +337,8 @@ TEST(UrbanCarrierTemporal, IdenticalSequencesAreDeterministic) {
         gnss_sim::UrbanCarrierTemporalResult second{};
         ASSERT_TRUE(gnss_sim::update_urban_carrier_temporal_state(gps_l1, 0, time_at(times[index]), epoch, &first_state,
                                                                   &first, &first_error));
-        ASSERT_TRUE(gnss_sim::update_urban_carrier_temporal_state(gps_l1, 0, time_at(times[index]), epoch, &second_state,
-                                                                  &second, &second_error));
+        ASSERT_TRUE(gnss_sim::update_urban_carrier_temporal_state(gps_l1, 0, time_at(times[index]), epoch,
+                                                                  &second_state, &second, &second_error));
         EXPECT_DOUBLE_EQ(first.wrapped_phase_rad, second.wrapped_phase_rad);
         EXPECT_DOUBLE_EQ(first.unwrapped_phase_rad, second.unwrapped_phase_rad);
         EXPECT_DOUBLE_EQ(first.carrier_range_bias_m, second.carrier_range_bias_m);

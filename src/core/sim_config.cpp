@@ -2,6 +2,7 @@
 
 #include "gnss/signal_definitions.h"
 #include "gnss_sim/sim_time.h"
+#include "model/carrier_tracking.h"
 
 #include <cJSON.h>
 #include <cmath>
@@ -327,6 +328,51 @@ bool parse_measurement_error(const cJSON* root, SimConfig* config, std::string* 
            parse_measurement_fade(object, &config->measurement_error.rea_fade, error_message);
 }
 
+bool parse_carrier_tracking(const cJSON* root, SimConfig* config, std::string* error_message) {
+    const cJSON* object = cJSON_GetObjectItemCaseSensitive(root, "carrier_tracking");
+    if (object == nullptr) {
+        return true;
+    }
+    const char* const allowed_keys[] = {"enabled",
+                                        "coherent_integration_sec",
+                                        "pll_noise_bandwidth_hz",
+                                        "fll_noise_bandwidth_hz",
+                                        "fll_pull_in_bandwidth_hz",
+                                        "fll_pull_in_duration_sec",
+                                        "pll_enter_cn0_dbhz",
+                                        "pll_exit_cn0_dbhz",
+                                        "pll_enter_persistence_sec",
+                                        "pll_exit_persistence_sec",
+                                        "fll_enter_cn0_dbhz",
+                                        "fll_exit_cn0_dbhz",
+                                        "fll_enter_persistence_sec",
+                                        "fll_exit_persistence_sec",
+                                        "doppler_valid_delay_sec",
+                                        "adr_valid_after_pll_sec"};
+    if (!validate_object_keys(object, "carrier_tracking", allowed_keys, 16U, error_message)) {
+        return false;
+    }
+    CarrierTrackingReceiverConfig& carrier = config->carrier_tracking;
+    return read_optional_bool(object, "enabled", &carrier.enabled, error_message) &&
+           read_optional_number(object, "coherent_integration_sec", &carrier.coherent_integration_sec, error_message) &&
+           read_optional_number(object, "pll_noise_bandwidth_hz", &carrier.pll_noise_bandwidth_hz, error_message) &&
+           read_optional_number(object, "fll_noise_bandwidth_hz", &carrier.fll_noise_bandwidth_hz, error_message) &&
+           read_optional_number(object, "fll_pull_in_bandwidth_hz", &carrier.fll_pull_in_bandwidth_hz, error_message) &&
+           read_optional_number(object, "fll_pull_in_duration_sec", &carrier.fll_pull_in_duration_sec, error_message) &&
+           read_optional_number(object, "pll_enter_cn0_dbhz", &carrier.pll_enter_cn0_dbhz, error_message) &&
+           read_optional_number(object, "pll_exit_cn0_dbhz", &carrier.pll_exit_cn0_dbhz, error_message) &&
+           read_optional_number(object, "pll_enter_persistence_sec", &carrier.pll_enter_persistence_sec,
+                                error_message) &&
+           read_optional_number(object, "pll_exit_persistence_sec", &carrier.pll_exit_persistence_sec, error_message) &&
+           read_optional_number(object, "fll_enter_cn0_dbhz", &carrier.fll_enter_cn0_dbhz, error_message) &&
+           read_optional_number(object, "fll_exit_cn0_dbhz", &carrier.fll_exit_cn0_dbhz, error_message) &&
+           read_optional_number(object, "fll_enter_persistence_sec", &carrier.fll_enter_persistence_sec,
+                                error_message) &&
+           read_optional_number(object, "fll_exit_persistence_sec", &carrier.fll_exit_persistence_sec, error_message) &&
+           read_optional_number(object, "doppler_valid_delay_sec", &carrier.doppler_valid_delay_sec, error_message) &&
+           read_optional_number(object, "adr_valid_after_pll_sec", &carrier.adr_valid_after_pll_sec, error_message);
+}
+
 bool parse_urban_rf_material(const cJSON* object, const char* section_name, UrbanRfMaterialConfig* config,
                              std::string* error_message) {
     if (object == nullptr) {
@@ -492,6 +538,26 @@ bool parse_seed(const cJSON* root, SimConfig* config, std::string* error_message
     return true;
 }
 
+CarrierTrackingConfig to_carrier_tracking_config(const CarrierTrackingReceiverConfig& config) {
+    CarrierTrackingConfig output{};
+    output.coherent_integration_sec = config.coherent_integration_sec;
+    output.pll_noise_bandwidth_hz = config.pll_noise_bandwidth_hz;
+    output.fll_noise_bandwidth_hz = config.fll_noise_bandwidth_hz;
+    output.fll_pull_in_bandwidth_hz = config.fll_pull_in_bandwidth_hz;
+    output.fll_pull_in_duration_sec = config.fll_pull_in_duration_sec;
+    output.pll_enter_cn0_dbhz = config.pll_enter_cn0_dbhz;
+    output.pll_exit_cn0_dbhz = config.pll_exit_cn0_dbhz;
+    output.pll_enter_persistence_sec = config.pll_enter_persistence_sec;
+    output.pll_exit_persistence_sec = config.pll_exit_persistence_sec;
+    output.fll_enter_cn0_dbhz = config.fll_enter_cn0_dbhz;
+    output.fll_exit_cn0_dbhz = config.fll_exit_cn0_dbhz;
+    output.fll_enter_persistence_sec = config.fll_enter_persistence_sec;
+    output.fll_exit_persistence_sec = config.fll_exit_persistence_sec;
+    output.doppler_valid_delay_sec = config.doppler_valid_delay_sec;
+    output.adr_valid_after_pll_sec = config.adr_valid_after_pll_sec;
+    return output;
+}
+
 bool finite_nonnegative(double value) {
     return std::isfinite(value) && value >= 0.0;
 }
@@ -615,6 +681,23 @@ SimConfig default_sim_config() {
                                 {0.70, 0.15, 2.5, 2.0},
                                 {0.40, 0.10, 1.5, 0.8},
                                 {0.25, 0.80, 0.20, 4.5}};
+    const CarrierTrackingConfig carrier = default_carrier_tracking_config();
+    config.carrier_tracking = {false,
+                               carrier.coherent_integration_sec,
+                               carrier.pll_noise_bandwidth_hz,
+                               carrier.fll_noise_bandwidth_hz,
+                               carrier.fll_pull_in_bandwidth_hz,
+                               carrier.fll_pull_in_duration_sec,
+                               carrier.pll_enter_cn0_dbhz,
+                               carrier.pll_exit_cn0_dbhz,
+                               carrier.pll_enter_persistence_sec,
+                               carrier.pll_exit_persistence_sec,
+                               carrier.fll_enter_cn0_dbhz,
+                               carrier.fll_exit_cn0_dbhz,
+                               carrier.fll_enter_persistence_sec,
+                               carrier.fll_exit_persistence_sec,
+                               carrier.doppler_valid_delay_sec,
+                               carrier.adr_valid_after_pll_sec};
     config.urban_rf.default_material = {6.27, 0.0043, 1.1925, 0.006, 0.012, 0.006, 5.0};
     config.urban_rf.default_antenna = {{0.0, 0.0, 0.0, 0.0}, {0.0, 0.0, 0.0, 0.0}};
     config.seed = 1U;
@@ -651,6 +734,11 @@ bool validate_sim_config(const SimConfig& config, std::string* error_message) {
     }
     if (!valid_measurement_error_config(config.measurement_error)) {
         set_error(error_message, "measurement_error configuration is invalid");
+        return false;
+    }
+    std::string carrier_error;
+    if (!validate_carrier_tracking_config(to_carrier_tracking_config(config.carrier_tracking), &carrier_error)) {
+        set_error(error_message, std::string("carrier_tracking configuration is invalid: ") + carrier_error);
         return false;
     }
     if (!valid_urban_rf_config(config.urban_rf)) {
@@ -730,6 +818,7 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                                         "measurement_noise_enabled",
                                         "bestpos_rtk",
                                         "measurement_error",
+                                        "carrier_tracking",
                                         "urban_rf",
                                         "cn0_high_dbhz",
                                         "multipath_enabled",
@@ -742,7 +831,7 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                                         "seed"};
 
     SimConfig parsed = default_sim_config();
-    bool success = validate_object_keys(root, "root", allowed_keys, 21U, error_message);
+    bool success = validate_object_keys(root, "root", allowed_keys, 22U, error_message);
 
     double duration_sec = static_cast<double>(parsed.duration_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
     const char* scenario_name = scenario_type_name(parsed.scenario);
@@ -774,7 +863,8 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
             parse_atmosphere_mode(atmosphere_name, &parsed.atmosphere_mode, error_message) &&
             parse_receiver(root, &parsed, error_message) && parse_ttff(root, &parsed, error_message) &&
             parse_rea(root, &parsed, error_message) && parse_bestpos_rtk(root, &parsed, error_message) &&
-            parse_measurement_error(root, &parsed, error_message) && parse_urban_rf(root, &parsed, error_message) &&
+            parse_measurement_error(root, &parsed, error_message) &&
+            parse_carrier_tracking(root, &parsed, error_message) && parse_urban_rf(root, &parsed, error_message) &&
             parse_cn0_high_dbhz(root, &parsed, error_message) && parse_seed(root, &parsed, error_message) &&
             validate_sim_config(parsed, error_message);
     }

@@ -46,9 +46,24 @@ The BeiDou-only scope is selected because the five frozen BeiDou V1 signal corre
 
 Reference filtered-NAV FNV-1a-64 from CI: `2552251af489a9ec`.
 
-## Frozen acceptance configuration
+## Validation identity and commands
 
-Reference metric run: GitHub Actions CI #727.
+Validated PR head: `f87e8e18769d720208f3f2fd2d5e7728ccb0f51a`.
+
+Authoritative metric and cross-platform validation run: GitHub Actions CI #729 (`33832212284`). The run completed successfully on Linux and Windows; both platforms passed all 337 tests. The Linux focused E2E step reproduced the metrics recorded below.
+
+Commands represented by the CI validation are:
+
+```text
+cmake -S . -B build -DBUILD_TESTING=ON
+cmake --build build --config Release --parallel
+ctest --test-dir build -C Release --output-on-failure
+./build/gnss_sim_integration_tests --gtest_filter=UrbanE2EValidation.*
+```
+
+The commit that adds this evidence paragraph is documentation-only; the validated implementation/test head above is the exact code revision exercised by CI #729.
+
+## Frozen acceptance configuration
 
 - start: GPST week 2347, SOW 436500 s;
 - duration: 180 s;
@@ -67,7 +82,7 @@ The test runs the same NAV/config/seed twice and requires byte-identical receive
 
 ## Urban-state and path coverage
 
-CI #727 produced these signal-state counts:
+CI #729 produced these signal-state counts:
 
 | State | Count |
 | --- | ---: |
@@ -91,7 +106,7 @@ The run also checks that evaluated `BLOCKED` rows do not leak receiver observati
 
 ## Position and velocity results
 
-Production solution path, CI #727:
+Production solution path, CI #729:
 
 | Metric | Result |
 | --- | ---: |
@@ -132,7 +147,7 @@ The repository's existing non-urban RANGEA round-trip regressions also remain gr
 
 A separate authentic-NAV REA run is used to exercise signal loss and reacquisition deterministically instead of waiting for incidental satellite motion.
 
-CI #727 produced:
+CI #729 produced:
 
 - reacquisition events: 55
 - cycle-slip/reset events: 55
@@ -164,7 +179,8 @@ The state/path assertions are derived from the same truth outputs written by the
 2. The acceptance case uses BeiDou because its frozen V1 correlation coverage is complete for this code path, not because the navigation was modified to create a desired geometry.
 3. Atmosphere is disabled in this urban acceptance run so that the test isolates the urban observation effects. Existing broadcast-atmosphere tests remain responsible for atmosphere-model validation.
 4. The scene remains the frozen deterministic four-wall V1 model. No finite-width street-canyon extension was introduced for #124.
-5. The approximately 39.6 m worst 3D error is evidence from this one frozen case, not a promise about error distribution in arbitrary real urban environments.
+5. No suitable representative measured-urban observation/log data set is frozen in this issue's validation inputs, so measured-urban statistical comparison remains an explicit future validation limitation rather than a claimed result.
+6. The approximately 39.6 m worst 3D error is evidence from this one frozen case, not a promise about error distribution in arbitrary real urban environments.
 
 ## Acceptance conclusion
 

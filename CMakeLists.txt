@@ -113,6 +113,7 @@ add_library(gnss_sim_core STATIC
     src/model/receiver_truth.cpp
     src/model/signal_tracking.cpp
     src/model/urban_carrier_temporal.cpp
+    src/model/urban_measurement_application.cpp
     src/model/urban_received_power.cpp
     src/model/urban_reflection_paths.cpp
     src/model/urban_rooftop_diffraction.cpp
@@ -269,6 +270,7 @@ if(BUILD_TESTING)
         tests/unit/test_solution_engine.cpp
         tests/unit/test_solution_signal_policy.cpp
         tests/unit/test_urban_carrier_temporal.cpp
+        tests/unit/test_urban_measurement_application.cpp
         tests/unit/test_urban_received_power.cpp
         tests/unit/test_urban_reflection_paths.cpp
         tests/unit/test_urban_rooftop_diffraction.cpp

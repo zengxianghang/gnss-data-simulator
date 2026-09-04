@@ -117,6 +117,7 @@ add_library(gnss_sim_core STATIC
     src/model/urban_rooftop_diffraction.cpp
     src/model/urban_rf_model.cpp
     src/model/urban_scene_geometry.cpp
+    src/model/urban_signal_epoch.cpp
     src/model/urban_signal_tracking.cpp
     src/output/novatel_nav_writer.cpp
     src/output/novatel_range_writer.cpp
@@ -271,6 +272,7 @@ if(BUILD_TESTING)
         tests/unit/test_urban_rooftop_diffraction.cpp
         tests/unit/test_urban_rf_model.cpp
         tests/unit/test_urban_scene_geometry.cpp
+        tests/unit/test_urban_signal_epoch.cpp
         tests/unit/test_urban_signal_tracking.cpp
     )
     target_include_directories(gnss_sim_unit_tests PRIVATE

@@ -799,8 +799,7 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
                                       const ScenarioEpochState& scenario,
                                       std::vector<MeasurementObservation>* measurements, int* tracked_satellites,
                                       TruthWriter* truth_writer, UrbanTruthWriter* urban_truth_writer,
-                                      CarrierTrackingTruthWriter* carrier_truth_writer,
-                                      std::string* error_message) {
+                                      CarrierTrackingTruthWriter* carrier_truth_writer, std::string* error_message) {
     measurements->clear();
     *tracked_satellites = 0;
     const RtklibNavStore* truth_nav = truth_navigation_store(runtime->navigation);
@@ -964,8 +963,9 @@ bool update_tracking_and_measurements(RuntimeState* runtime, const SimConfig& co
 
             CarrierTrackingTruthSnapshot carrier_truth{};
             carrier_truth.carrier_tracking_enabled = config.carrier_tracking.enabled;
-            carrier_truth.reset_reason = config.carrier_tracking.enabled ? CarrierTrackingTruthResetReason::kNone
-                                                                         : CarrierTrackingTruthResetReason::kFeatureDisabled;
+            carrier_truth.reset_reason = config.carrier_tracking.enabled
+                                             ? CarrierTrackingTruthResetReason::kNone
+                                             : CarrierTrackingTruthResetReason::kFeatureDisabled;
             carrier_truth.coherent_integration_sec = config.carrier_tracking.coherent_integration_sec;
             carrier_truth.environmental_range_rate_applicable = config.multipath_enabled;
             carrier_truth.environmental_range_rate_valid =

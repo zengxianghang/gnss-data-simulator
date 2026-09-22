@@ -476,8 +476,8 @@ bool truth_writer_write_observation(TruthWriter* writer, const ReceiverTruth& re
            << ',' << geometry.satellite_state.velocity_ecef_mps[2] << ',' << geometry.azimuth_rad * kRadiansToDegrees
            << ',' << geometry.elevation_rad * kRadiansToDegrees << ',' << observation.geometric_range_m << ','
            << observation.range_rate_mps << ',' << observation.satellite_clock_bias_m << ','
-           << observation.satellite_clock_drift_mps << ',' << writer->config.receiver_clock_bias_m << ','
-           << writer->config.receiver_clock_drift_mps << ',' << observation.ionosphere_code_delay_m << ','
+           << observation.satellite_clock_drift_mps << ',' << receiver.clock_bias_m << ','
+           << receiver.clock_drift_mps << ',' << observation.ionosphere_code_delay_m << ','
            << observation.troposphere_delay_m << ','
            << broadcast_message_family_name(observation.broadcast_message_family) << ',' << observation.tgd_sec[0]
            << ',' << observation.tgd_sec[1] << ',' << observation.tgd_sec[2] << ',' << observation.tgd_sec[3] << ','

@@ -227,6 +227,60 @@ TEST(TruthOutputs, HeadersAreVersionedAndExplicit) {
     cleanup(directory);
 }
 
+TEST(TruthOutputs, NonzeroReceiverClockDriftIsMeasuredAndTraceableByEpoch) {
+    const std::filesystem::path baseline_directory = "gnss_sim_clock_baseline";
+    const std::filesystem::path drift_directory = "gnss_sim_clock_drift";
+    gnss_sim::SimConfig baseline_config = truth_config();
+    gnss_sim::SimConfig drift_config = baseline_config;
+    drift_config.receiver_clock_drift_mps = 3.0;
+    gnss_sim::SimulatorRunSummary summary{};
+    std::string error_message;
+    ASSERT_TRUE(run_config_in_directory(baseline_directory, baseline_config, &summary, &error_message))
+        << error_message;
+    ASSERT_TRUE(run_config_in_directory(drift_directory, drift_config, &summary, &error_message))
+        << error_message;
+    const auto baseline = read_simple_csv(baseline_directory / "observation_truth.csv");
+    const auto drift = read_simple_csv(drift_directory / "observation_truth.csv");
+    ASSERT_GT(baseline.size(), 2U);
+    ASSERT_EQ(baseline.size(), drift.size());
+    const auto& header = baseline.front();
+    const int tow = column_index(header, "tow_ns");
+    const int bias = column_index(header, "receiver_clock_bias_m");
+    const int rate = column_index(header, "receiver_clock_drift_mps");
+    const int wavelength = column_index(header, "wavelength_m");
+    const int pseudorange = column_index(header, "pseudorange_m");
+    const int doppler = column_index(header, "doppler_hz");
+    const int adr = column_index(header, "adr_cycles");
+    ASSERT_GE(tow, 0);
+    ASSERT_GE(bias, 0);
+    ASSERT_GE(rate, 0);
+    ASSERT_GE(wavelength, 0);
+    ASSERT_GE(pseudorange, 0);
+    ASSERT_GE(doppler, 0);
+    ASSERT_GE(adr, 0);
+    bool saw_positive_elapsed_time = false;
+    for (std::size_t row = 1; row < drift.size(); ++row) {
+        ASSERT_EQ(baseline[row].size(), drift[row].size());
+        const double elapsed_sec = static_cast<double>(std::stoll(drift[row][tow]) - start_time().tow_ns) /
+                                   static_cast<double>(gnss_sim::NANOSECONDS_PER_SECOND);
+        const double expected_bias_m = 3.0 * elapsed_sec;
+        const double lambda_m = std::stod(drift[row][wavelength]);
+        EXPECT_NEAR(std::stod(drift[row][bias]), expected_bias_m, 1.0e-12);
+        EXPECT_DOUBLE_EQ(std::stod(drift[row][rate]), 3.0);
+        EXPECT_NEAR(std::stod(drift[row][pseudorange]) - std::stod(baseline[row][pseudorange]),
+                    expected_bias_m, 1.0e-6);
+        EXPECT_NEAR(std::stod(drift[row][doppler]) - std::stod(baseline[row][doppler]),
+                    -3.0 / lambda_m, 1.0e-9);
+        EXPECT_NEAR(std::stod(drift[row][adr]) - std::stod(baseline[row][adr]),
+                    expected_bias_m / lambda_m, 1.0e-6);
+        saw_positive_elapsed_time |= elapsed_sec > 0.0;
+    }
+    EXPECT_TRUE(saw_positive_elapsed_time);
+    EXPECT_NE(read_file(baseline_directory / "simulated.log"), read_file(drift_directory / "simulated.log"));
+    cleanup(baseline_directory);
+    cleanup(drift_directory);
+}
+
 TEST(TruthOutputs, SameInputConfigAndSeedAreByteIdenticalAcrossOutputDirectories) {
     const std::filesystem::path first_directory = "gnss_sim_truth_repeat_a";
     const std::filesystem::path second_directory = "gnss_sim_truth_repeat_b";

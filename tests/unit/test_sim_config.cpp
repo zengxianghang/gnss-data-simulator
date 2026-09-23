@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <limits>
 #include <string>
 
 namespace {
@@ -51,6 +52,23 @@ TEST_F(SimConfigTest, FrozenDefaultsAreCentralized) {
     EXPECT_EQ(config.atmosphere_mode, gnss_sim::AtmosphereMode::UNSPECIFIED);
     EXPECT_EQ(config.ttff.startup_mode, gnss_sim::StartupMode::HOT);
     EXPECT_TRUE(config.cn0_high_dbhz.empty());
+}
+
+TEST_F(SimConfigTest, AllowsFiniteReceiverClockDriftWithZeroInitialBias) {
+    write_test_config(R"json({"receiver_clock_drift_mps":3.0})json");
+    gnss_sim::SimConfig config{};
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message)) << error_message;
+    EXPECT_DOUBLE_EQ(config.receiver_clock_bias_m, 0.0);
+    EXPECT_DOUBLE_EQ(config.receiver_clock_drift_mps, 3.0);
+
+    config.receiver_clock_bias_m = 1.0;
+    EXPECT_FALSE(gnss_sim::validate_sim_config(config, &error_message));
+    EXPECT_NE(error_message.find("initial receiver clock bias"), std::string::npos);
+    config.receiver_clock_bias_m = 0.0;
+    config.receiver_clock_drift_mps = std::numeric_limits<double>::infinity();
+    EXPECT_FALSE(gnss_sim::validate_sim_config(config, &error_message));
+    EXPECT_NE(error_message.find("receiver_clock_drift_mps"), std::string::npos);
 }
 
 TEST_F(SimConfigTest, LoadsValidOverridesWithoutLeakingJsonTypes) {

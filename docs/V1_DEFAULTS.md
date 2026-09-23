@@ -32,20 +32,13 @@ Navigation output must reflect the simulated Receiver NAV state:
 
 ## Receiver clock
 
-- **V1 receiver clock bias is fixed to zero.**
-- **V1 receiver clock drift is fixed to zero.**
-- V1 does not implement receiver clock random walk, oscillator noise, drift instability, or power-cycle-dependent clock offsets.
-- The observation equations must still keep receiver clock bias/drift as explicit model terms so a realistic oscillator model can be added later without changing the measurement-model interfaces.
-- Satellite clock bias and satellite clock drift remain active and must come from the selected navigation truth model; this section only disables simulated **receiver** clock error.
+- The configured initial receiver clock bias remains fixed to zero.
+- The default receiver clock drift remains zero. An explicitly configured finite constant `receiver_clock_drift_mps` is supported for deterministic test scenarios.
+- At elapsed time `t` seconds from the run start, effective receiver clock bias is `receiver_clock_drift_mps * t` metres. It continues across REA outages and TTFF power cycles; no random walk, oscillator noise, drift instability, or power-cycle offset is synthesized.
+- The same effective bias enters pseudorange and carrier phase, while the configured rate enters Doppler once. Observation truth records the effective per-epoch bias and rate; the scenario manifest records the initial configuration.
+- Satellite clock bias and drift remain independent, sourced from the selected navigation truth model.
 
-Therefore the V1 receiver-side clock contribution is:
-
-```text
-receiver_clock_bias_m   = 0.0
-receiver_clock_drift_mps = 0.0
-```
-
-For REA, the receiver remains powered, but the zero-valued V1 receiver clock state simply remains zero through the signal outage. For TTFF power cycles it is reinitialized to the same zero-valued V1 state.
+With the default configuration, both receiver-side clock terms remain exactly zero, preserving the existing deterministic baseline.
 
 ## Multipath
 

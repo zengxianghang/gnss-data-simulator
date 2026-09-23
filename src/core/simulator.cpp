@@ -1257,6 +1257,21 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
         if (!scenario.receiver_powered) {
             continue;
         }
+        std::int64_t elapsed_ns = 0;
+        if (!difference_time_ns(current_time, options.start_time, &elapsed_ns) || elapsed_ns < 0) {
+            set_error(error_message, "cannot compute receiver clock elapsed time");
+            ok = false;
+            break;
+        }
+        runtime.receiver.clock_drift_mps = config.receiver_clock_drift_mps;
+        runtime.receiver.clock_bias_m = config.receiver_clock_bias_m +
+                                        config.receiver_clock_drift_mps * (static_cast<double>(elapsed_ns) /
+                                                                           static_cast<double>(NANOSECONDS_PER_SECOND));
+        if (!std::isfinite(runtime.receiver.clock_bias_m)) {
+            set_error(error_message, "receiver clock bias is not finite at the current epoch");
+            ok = false;
+            break;
+        }
         ++result.powered_epochs;
         if (scenario.signal_available) {
             ++result.signal_on_epochs;

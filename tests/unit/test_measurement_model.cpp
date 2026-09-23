@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <gtest/gtest.h>
+#include <limits>
 #include <string>
 
 namespace {
@@ -200,6 +201,44 @@ TEST(RtklibBroadcastBiasAdapter, SelectsLegacyTgdGalileoFamilyAndGlonassFcn) {
     ASSERT_TRUE(gnss_sim::rtklib_broadcast_bias_data(nav.store, 2041, 258300.0, glo_sat, &glo, &error_message));
     EXPECT_EQ(glo.message_family, gnss_sim::RtklibBroadcastMessageFamily::kGlonassFdma);
     EXPECT_EQ(glo.glonass_fcn, -5);
+}
+
+TEST(ZeroNoiseMeasurement, ReceiverClockDriftChangesCodeCarrierAndDopplerConsistently) {
+    NavGuard nav{gnss_sim::create_rtklib_nav_store()};
+    ASSERT_NE(nav.store, nullptr);
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(nav.store, mixed_nav_path().c_str(), &error_message));
+    gnss_sim::ReceiverTruth receiver{};
+    ASSERT_TRUE(make_test_receiver(&receiver, &error_message));
+    gnss_sim::SimTime receive_time{};
+    ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2041, 180100.0, &receive_time));
+    int satellite_number = 0;
+    ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number("G01", &satellite_number));
+    gnss_sim::SatelliteGeometry geometry{};
+    ASSERT_TRUE(gnss_sim::compute_satellite_geometry(nav.store, receiver, receive_time, satellite_number, -90.0,
+                                                     &geometry, &error_message))
+        << error_message;
+    gnss_sim::SignalTracker tracker = tracking_tracker(gnss_sim::SignalId::kGpsL1Ca, receive_time);
+    gnss_sim::AtmosphereCorrection atmosphere{};
+    atmosphere.mode = gnss_sim::AtmosphereMode::NONE;
+    gnss_sim::CarrierAmbiguityState baseline_ambiguity{};
+    gnss_sim::CarrierAmbiguityState drift_ambiguity{};
+    gnss_sim::MeasurementObservation baseline{};
+    gnss_sim::MeasurementObservation drift{};
+    ASSERT_TRUE(gnss_sim::generate_zero_noise_measurement(nav.store, geometry, receiver, tracker, atmosphere,
+                                                          &baseline_ambiguity, &baseline, &error_message));
+    receiver.clock_bias_m = 6.0;
+    receiver.clock_drift_mps = 3.0;
+    ASSERT_TRUE(gnss_sim::generate_zero_noise_measurement(nav.store, geometry, receiver, tracker, atmosphere,
+                                                          &drift_ambiguity, &drift, &error_message));
+    EXPECT_NEAR(drift.pseudorange_m - baseline.pseudorange_m, 6.0, 1.0e-6);
+    EXPECT_NEAR(drift.doppler_hz - baseline.doppler_hz, -3.0 / baseline.wavelength_m, 1.0e-9);
+    EXPECT_NEAR(drift.adr_cycles - baseline.adr_cycles, 6.0 / baseline.wavelength_m, 1.0e-6);
+    EXPECT_EQ(drift.ambiguity_cycles, baseline.ambiguity_cycles);
+
+    receiver.clock_drift_mps = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_FALSE(gnss_sim::generate_zero_noise_measurement(nav.store, geometry, receiver, tracker, atmosphere,
+                                                           &drift_ambiguity, &drift, &error_message));
 }
 
 TEST(ZeroNoiseMeasurement, ComponentsMatchReferenceEquationsAndAtmosphereSigns) {

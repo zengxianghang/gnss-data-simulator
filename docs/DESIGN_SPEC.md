@@ -235,6 +235,8 @@ Doppler must be generated from satellite velocity, receiver velocity, LOS range 
 
 The generation formula should be designed as closely as practical as the inverse of the RTKLIB Doppler residual/velocity model. This enables near-zero residual deterministic loopback tests.
 
+For an explicitly configured constant receiver clock drift `d` in m/s, the effective receiver clock bias at elapsed run time `t` is `d*t` metres. With range rate and satellite clock drift in m/s and wavelength in metres, the clean observation uses `D = -(range_rate - satellite_clock_drift + d)/wavelength` Hz. The same effective bias is added to pseudorange and carrier range before division by wavelength for ADR. The default `d=0` preserves existing output.
+
 ### 9.3 Carrier phase / ADR
 
 Carrier phase must be temporally continuous while a signal remains locked.

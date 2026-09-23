@@ -62,6 +62,8 @@ it. Normal pull-request CI runs deterministic short acceptance tests; long
 `.github/workflows/extended.yml` and documented in
 [`docs/EXTENDED_VALIDATION.md`](docs/EXTENDED_VALIDATION.md).
 
+An optional finite `receiver_clock_drift_mps` in the JSON config generates a deterministic constant receiver clock rate. The default remains zero; `receiver_clock_bias_m` is still required to be zero at the run start. Per-epoch truth records the accumulated bias and rate. See [`docs/V1_DEFAULTS.md`](docs/V1_DEFAULTS.md#receiver-clock) for the measurement semantics.
+
 ## Synchronized multi-seed batches
 
 For simultaneous cross-board KS/REA/TTFF comparison, use the batch wrapper so

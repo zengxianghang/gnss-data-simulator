@@ -295,10 +295,12 @@ bool finish_zero_noise_measurement(const SignalDefinition& signal, const Satelli
     result.cn0_dbhz = tracker.cn0_dbhz;
     result.lock_time_ns = tracker.lock_time_ns;
 
-    const double clock_corrected_range_m = result.geometric_range_m - result.satellite_clock_bias_m;
+    const double clock_corrected_range_m =
+        result.geometric_range_m - result.satellite_clock_bias_m + receiver.clock_bias_m;
     result.pseudorange_m =
         clock_corrected_range_m + result.code_bias_m + result.ionosphere_code_delay_m + result.troposphere_delay_m;
-    result.doppler_hz = -(result.range_rate_mps - result.satellite_clock_drift_mps) / wavelength_m;
+    result.doppler_hz =
+        -(result.range_rate_mps - result.satellite_clock_drift_mps + receiver.clock_drift_mps) / wavelength_m;
 
     if (tracker.phase == SignalTrackingPhase::kTracking) {
         if (!ambiguity_matches_tracker(*ambiguity_state, tracker, geometry.satellite_number)) {
@@ -326,7 +328,6 @@ bool finish_zero_noise_measurement(const SignalDefinition& signal, const Satelli
     result.doppler_valid = measurement_geometry_usable && tracker.doppler_valid;
     result.adr_valid = measurement_geometry_usable && tracker.adr_valid && ambiguity_state->initialized;
 
-    static_cast<void>(receiver);
     *observation = result;
     return true;
 }
@@ -339,7 +340,8 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
                                      MeasurementObservation* observation, std::string* error_message) {
     const SignalDefinition* signal = find_signal_definition(tracker.signal_id);
     if (nav_store == nullptr || ambiguity_state == nullptr || observation == nullptr || signal == nullptr ||
-        !finite_measurement_input(geometry, atmosphere) || atmosphere.mode == AtmosphereMode::UNSPECIFIED) {
+        !finite_measurement_input(geometry, atmosphere) || !std::isfinite(receiver.clock_bias_m) ||
+        !std::isfinite(receiver.clock_drift_mps) || atmosphere.mode == AtmosphereMode::UNSPECIFIED) {
         set_error(error_message, "zero-noise measurement request has invalid arguments");
         return false;
     }
@@ -401,7 +403,8 @@ bool generate_zero_noise_measurement_with_explicit_code_bias(
     MeasurementObservation* observation, std::string* error_message) {
     const SignalDefinition* signal = find_signal_definition(tracker.signal_id);
     if (ambiguity_state == nullptr || observation == nullptr || signal == nullptr || !std::isfinite(code_bias_m) ||
-        !finite_measurement_input(geometry, atmosphere) || atmosphere.mode == AtmosphereMode::UNSPECIFIED) {
+        !finite_measurement_input(geometry, atmosphere) || !std::isfinite(receiver.clock_bias_m) ||
+        !std::isfinite(receiver.clock_drift_mps) || atmosphere.mode == AtmosphereMode::UNSPECIFIED) {
         set_error(error_message, "explicit-code zero-noise measurement request has invalid arguments");
         return false;
     }

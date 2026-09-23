@@ -13,6 +13,8 @@ struct ReceiverTruth {
     double height_m;
     double position_ecef_m[3];
     double velocity_ecef_mps[3];
+    double clock_bias_m;
+    double clock_drift_mps;
 };
 
 bool make_static_receiver_truth(const ReceiverConfig& receiver_config, ReceiverTruth* truth,

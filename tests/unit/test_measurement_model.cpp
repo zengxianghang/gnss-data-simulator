@@ -216,7 +216,8 @@ TEST(ZeroNoiseMeasurement, ReceiverClockDriftChangesCodeCarrierAndDopplerConsist
     ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number("G01", &satellite_number));
     gnss_sim::SatelliteGeometry geometry{};
     ASSERT_TRUE(gnss_sim::compute_satellite_geometry(nav.store, receiver, receive_time, satellite_number, -90.0,
-                                                     &geometry, &error_message)) << error_message;
+                                                     &geometry, &error_message))
+        << error_message;
     gnss_sim::SignalTracker tracker = tracking_tracker(gnss_sim::SignalId::kGpsL1Ca, receive_time);
     gnss_sim::AtmosphereCorrection atmosphere{};
     atmosphere.mode = gnss_sim::AtmosphereMode::NONE;

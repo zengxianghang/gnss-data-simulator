@@ -237,8 +237,7 @@ TEST(TruthOutputs, NonzeroReceiverClockDriftIsMeasuredAndTraceableByEpoch) {
     std::string error_message;
     ASSERT_TRUE(run_config_in_directory(baseline_directory, baseline_config, &summary, &error_message))
         << error_message;
-    ASSERT_TRUE(run_config_in_directory(drift_directory, drift_config, &summary, &error_message))
-        << error_message;
+    ASSERT_TRUE(run_config_in_directory(drift_directory, drift_config, &summary, &error_message)) << error_message;
     const auto baseline = read_simple_csv(baseline_directory / "observation_truth.csv");
     const auto drift = read_simple_csv(drift_directory / "observation_truth.csv");
     ASSERT_GT(baseline.size(), 2U);
@@ -267,12 +266,10 @@ TEST(TruthOutputs, NonzeroReceiverClockDriftIsMeasuredAndTraceableByEpoch) {
         const double lambda_m = std::stod(drift[row][wavelength]);
         EXPECT_NEAR(std::stod(drift[row][bias]), expected_bias_m, 1.0e-12);
         EXPECT_DOUBLE_EQ(std::stod(drift[row][rate]), 3.0);
-        EXPECT_NEAR(std::stod(drift[row][pseudorange]) - std::stod(baseline[row][pseudorange]),
-                    expected_bias_m, 1.0e-6);
-        EXPECT_NEAR(std::stod(drift[row][doppler]) - std::stod(baseline[row][doppler]),
-                    -3.0 / lambda_m, 1.0e-9);
-        EXPECT_NEAR(std::stod(drift[row][adr]) - std::stod(baseline[row][adr]),
-                    expected_bias_m / lambda_m, 1.0e-6);
+        EXPECT_NEAR(std::stod(drift[row][pseudorange]) - std::stod(baseline[row][pseudorange]), expected_bias_m,
+                    1.0e-6);
+        EXPECT_NEAR(std::stod(drift[row][doppler]) - std::stod(baseline[row][doppler]), -3.0 / lambda_m, 1.0e-9);
+        EXPECT_NEAR(std::stod(drift[row][adr]) - std::stod(baseline[row][adr]), expected_bias_m / lambda_m, 1.0e-6);
         saw_positive_elapsed_time |= elapsed_sec > 0.0;
     }
     EXPECT_TRUE(saw_positive_elapsed_time);

@@ -1264,8 +1264,9 @@ bool run_simulator(const SimConfig& config, const SimulatorRunOptions& options, 
             break;
         }
         runtime.receiver.clock_drift_mps = config.receiver_clock_drift_mps;
-        runtime.receiver.clock_bias_m = config.receiver_clock_bias_m + config.receiver_clock_drift_mps *
-            (static_cast<double>(elapsed_ns) / static_cast<double>(NANOSECONDS_PER_SECOND));
+        runtime.receiver.clock_bias_m = config.receiver_clock_bias_m +
+                                        config.receiver_clock_drift_mps * (static_cast<double>(elapsed_ns) /
+                                                                           static_cast<double>(NANOSECONDS_PER_SECOND));
         if (!std::isfinite(runtime.receiver.clock_bias_m)) {
             set_error(error_message, "receiver clock bias is not finite at the current epoch");
             ok = false;

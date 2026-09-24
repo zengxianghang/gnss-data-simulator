@@ -56,6 +56,7 @@ add_library(rtklib_pinned STATIC
     third_party/RTKLIB/src/rtklib_pntvel_ext.c
     third_party/RTKLIB/src/rtklib_residual_ext.c
     third_party/RTKLIB/src/rtklib_signal_state_ext.c
+    third_party/RTKLIB/src/rtklib_shared_api.c
     third_party/RTKLIB/src/sbas.c
 )
 add_library(gnss_sim::rtklib ALIAS rtklib_pinned)
@@ -305,6 +306,7 @@ if(BUILD_TESTING)
         tests/integration/test_carrier_tracking_authentic_validation.cpp
         tests/integration/test_measurement_noise_integration.cpp
         tests/integration/test_nav_equivalence.cpp
+        tests/integration/test_shared_api_parity.cpp
         tests/integration/test_rea_fade.cpp
         tests/integration/test_rangea_roundtrip.cpp
         tests/integration/test_transient_validator.cpp

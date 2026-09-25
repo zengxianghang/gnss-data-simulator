@@ -157,9 +157,13 @@ TEST(V1Acceptance, EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks) 
     // BRD400DLR_S_20222780000_01D_MN.rnx and supplies real L1C ISC/code-bias
     // coverage. Its broadcast health is intentionally handled by the shared
     // validator diagnostic path without changing the generated measurement.
+    // The receiver sits at G04's sub-satellite point at the record epoch.
+    // CNAV-2 t_oe equals t_oc (RTKLIB #27); the previous site (7.04, 106.84)
+    // was the sub-satellite point of the pre-fix orbit that used t_op as t_oe
+    // (a 142.9 deg RAAN error).
     {
         gnss_sim::SimConfig config{};
-        configure_zero_noise_ks(&config, gnss_sim::AtmosphereMode::NONE, 7.04, 106.84, 60);
+        configure_zero_noise_ks(&config, gnss_sim::AtmosphereMode::NONE, 7.04, -36.05, 60);
         gnss_sim::SimTime start{};
         ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2230, 275400.0, &start));
 

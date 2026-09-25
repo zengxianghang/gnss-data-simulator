@@ -11,15 +11,35 @@ The RTKLIB submodule was advanced to the revision that carries the shared
 GNSS adapter API (fork PR #17 / #25):
 
 ```text
-RTKLIB commit SHA      767337d1668afe761e3e2f1042c0d2442b3d805b
-shared adapter ABI     1.0 (numeric 0x00010000)
+RTKLIB commit SHA      353155f (fork PRs #28 and #29 on top of 767337d)
+shared adapter ABI     1.1 (numeric 0x00010001; 1.0 layouts unchanged)
 ```
 
 The full simulator suite passes on the new pin (375/375 including the new
 parity tests), so the pin update is backward-compatible with every existing
 adapter call.
 
-### 1.1 Windows path-separator correction on the pin
+### 1.1 Modern-family orbit and accuracy corrections (RTKLIB #27, #20)
+
+The pin was advanced from `767337d` to `353155f`:
+
+- `eph2pos()` now applies the CNAV/B-CNAV semi-major-axis rate and
+  mean-motion-difference rate (RTKLIB #27). Previously the simulator's
+  modern-family satellite states (GPS/QZSS CNAV/CNAV-2, BDS B-CNAV) drifted
+  by up to tens to hundreds of metres from the same-satellite legacy
+  broadcast.
+- The RINEX 4 GPS/QZSS CNAV/CNV2 decoder no longer takes t_op for t_oe.
+- The decoder no longer takes URAI_NED0 for the week.
+- BDS-3 GEO C59-C63 D1/D2 now use the GEO frame.
+- ABI 1.1 adds a separate variance status and a CNAV URA helper (RTKLIB #20); the 1.0 layouts are unchanged.
+
+`V1Acceptance.EveryFrozenSignalRunsTruthStateCodeAndDopplerResidualChecks`
+had placed its real G04 CNAV-2 companion receiver at (7.04, 106.84). That is
+the sub-satellite point of the pre-fix orbit, which carried a 142.9 deg RAAN
+error from t_op. The receiver now sits at the corrected sub-satellite point
+(7.04, -36.05). The full suite passes on the new pin (375/375).
+
+### 1.2 Windows path-separator correction on the pin
 
 The Phase-1 baseline exposed a Windows-only defect in the shared RINEX loader:
 `expath()` recognizes only `\` as a directory separator, so an absolute path
@@ -41,7 +61,7 @@ BRDM: GPS/GLONASS/Galileo/BeiDou/QZSS) through both paths and compares:
 
 | Comparison | Result |
 | --- | --- |
-| Linked shared ABI | 1.0 (0x00010000) verified |
+| Linked shared ABI | 1.x verified (linked 1.1 = compiled header) |
 | Record sets (kind/system/prn/iode/iodc/toe) | identical on every record |
 | Satellite state on unique-record satellites (GPS, GLO, GAL, BDS) | max position/velocity/clock/drift delta = 0.0 (bit-exact) |
 | Coverage | ≥1 comparison per system, all four systems green |

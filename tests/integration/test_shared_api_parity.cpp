@@ -189,7 +189,10 @@ const char* rinex_code_for_family(uint32_t family) {
 } // namespace
 
 TEST(SharedApiParityBaseline, LinkedAbiIsVersionOne) {
-    EXPECT_EQ(RTKLIB_SHARED_ABI_VERSION, 0x00010000u);
+    // ABI 1.x keeps the 1.0 POD layouts; the linked library must match the
+    // header it was compiled against.
+    EXPECT_EQ(RTKLIB_SHARED_ABI_VERSION >> 16, 1u);
+    EXPECT_EQ(rtklib_shared_abi_version(), static_cast<int>(RTKLIB_SHARED_ABI_VERSION));
 }
 
 TEST(SharedApiParityBaseline, RecordSetsAgreeOnRealMultiGnssFixture) {

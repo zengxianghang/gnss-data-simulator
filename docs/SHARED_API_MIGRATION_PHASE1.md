@@ -11,13 +11,26 @@ The RTKLIB submodule was advanced to the revision that carries the shared
 GNSS adapter API (fork PR #17 / #25):
 
 ```text
-RTKLIB commit SHA      2e710ad05e05af73b4fadc1940c99f1db283a3d8
+RTKLIB commit SHA      767337d1668afe761e3e2f1042c0d2442b3d805b
 shared adapter ABI     1.0 (numeric 0x00010000)
 ```
 
 The full simulator suite passes on the new pin (375/375 including the new
 parity tests), so the pin update is backward-compatible with every existing
-adapter call. `rtklib_shared_api.c` is compiled into the existing
+adapter call.
+
+### 1.1 Windows path-separator correction on the pin
+
+The Phase-1 baseline exposed a Windows-only defect in the shared RINEX loader:
+`expath()` recognizes only `\` as a directory separator, so an absolute path
+supplied with `/` was reduced to a bare basename and the load failed with
+`RTKLIB_SHARED_IO_ERROR`. The simulator's own adapter had always normalized
+separators through `rtklib_file_path()`, which is why only the shared path
+failed. The correction normalizes separators at the shared API boundary
+(`zengxianghang/RTKLIB` PR #26, commit
+`767337d1668afe761e3e2f1042c0d2442b3d805b`), so supported RINEX NAV input
+loads identically on Windows, Linux and macOS; the public ABI, source
+identity and fail-closed statuses are unchanged. `rtklib_shared_api.c` is compiled into the existing
 `rtklib_pinned` target; no second RTKLIB build exists.
 
 ## 2. Old-vs-shared parity baseline (established, green)

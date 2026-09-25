@@ -21,18 +21,17 @@
 // This test is the Phase-1 baseline for the incremental migration planned by
 // issue #102; it does not remove or replace any simulator adapter code.
 
-#include <gtest/gtest.h>
+#include "gnss/rtklib_adapter.h"
+#include "rtklib_shared_api.h"
 
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
 #include <cstdint>
+#include <cstdio>
+#include <gtest/gtest.h>
 #include <map>
 #include <string>
 #include <vector>
-
-#include "gnss/rtklib_adapter.h"
-#include "rtklib_shared_api.h"
 
 using namespace gnss_sim;
 
@@ -45,7 +44,7 @@ std::string data_file(const char* name) {
 constexpr double kWeekSeconds = 604800.0;
 
 struct ProbeRecord {
-    int kind;              // RtklibNavRecordKind as int
+    int kind; // RtklibNavRecordKind as int
     int system;
     int prn;
     int satellite_number;
@@ -65,8 +64,13 @@ std::vector<ProbeRecord> load_old_records(const RtklibNavStore* store) {
             continue;
         }
         records.push_back(ProbeRecord{
-            static_cast<int>(info.kind), info.system, info.prn,
-            info.satellite_number, info.iode, info.iodc, info.gps_week,
+            static_cast<int>(info.kind),
+            info.system,
+            info.prn,
+            info.satellite_number,
+            info.iode,
+            info.iodc,
+            info.gps_week,
             info.toe_sow_sec,
         });
     }
@@ -99,9 +103,16 @@ std::vector<SharedRecord> load_shared_records(rtklib_shared_nav_store_t* store) 
             continue;
         }
         records.push_back(SharedRecord{
-            record_id, identity.record_kind, identity.system, identity.prn,
-            identity.family, identity.iode, identity.iodc, identity.health_raw,
-            identity.toe.week, identity.toe.sow,
+            record_id,
+            identity.record_kind,
+            identity.system,
+            identity.prn,
+            identity.family,
+            identity.iode,
+            identity.iodc,
+            identity.health_raw,
+            identity.toe.week,
+            identity.toe.sow,
         });
     }
     return records;
@@ -111,10 +122,14 @@ int shared_kind_to_old(uint32_t record_kind) {
     // The old RtklibNavRecordKind enumerates from 0 (ephemeris, GLONASS
     // ephemeris, ionosphere); the shared ABI enumerates from 1.
     switch (record_kind) {
-        case RTKLIB_SHARED_RECORD_EPH: return 0;
-        case RTKLIB_SHARED_RECORD_GLO_EPH: return 1;
-        case RTKLIB_SHARED_RECORD_ION: return 2;
-        default: return -1;
+        case RTKLIB_SHARED_RECORD_EPH:
+            return 0;
+        case RTKLIB_SHARED_RECORD_GLO_EPH:
+            return 1;
+        case RTKLIB_SHARED_RECORD_ION:
+            return 2;
+        default:
+            return -1;
     }
 }
 
@@ -123,15 +138,13 @@ std::string record_key(int kind, int system, int prn, int week, double toe_sow) 
     // record onto one GPST week, so (kind, system, prn, week, toe) identifies
     // a record across both stores.
     char buffer[96];
-    std::snprintf(buffer, sizeof(buffer), "%d|%d|%d|%d|%.6f", kind, system, prn,
-                  week, toe_sow);
+    std::snprintf(buffer, sizeof(buffer), "%d|%d|%d|%d|%.6f", kind, system, prn, week, toe_sow);
     return buffer;
 }
 
-std::string shared_key(uint32_t record_kind, uint32_t system, uint32_t prn,
-                       int toe_week, double toe_sow) {
-    return record_key(shared_kind_to_old(record_kind), static_cast<int>(system),
-                      static_cast<int>(prn), toe_week, toe_sow);
+std::string shared_key(uint32_t record_kind, uint32_t system, uint32_t prn, int toe_week, double toe_sow) {
+    return record_key(shared_kind_to_old(record_kind), static_cast<int>(system), static_cast<int>(prn), toe_week,
+                      toe_sow);
 }
 
 bool resolve_observation_code(const char* rinex_code, int* code) {
@@ -144,23 +157,36 @@ bool resolve_observation_code(const char* rinex_code, int* code) {
 // query mask, so the code must be consistent with the record's family.
 const char* rinex_code_for_family(uint32_t family) {
     switch (family) {
-        case RTKLIB_SHARED_NAV_LNAV: return "1C";
-        case RTKLIB_SHARED_NAV_FDMA: return "1C";
-        case RTKLIB_SHARED_NAV_FNAV: return "1C";
-        case RTKLIB_SHARED_NAV_INAV: return "1C";
-        case RTKLIB_SHARED_NAV_D1: return "2I";
-        case RTKLIB_SHARED_NAV_D2: return "2I";
-        case RTKLIB_SHARED_NAV_D1D2: return "2I";
-        case RTKLIB_SHARED_NAV_CNAV: return "2S";
-        case RTKLIB_SHARED_NAV_CNV1: return "1P";
-        case RTKLIB_SHARED_NAV_CNV2: return "1P";
-        case RTKLIB_SHARED_NAV_CNV3: return "5P";
-        case RTKLIB_SHARED_NAV_IFNV: return "1C";
-        default: return "1C";
+        case RTKLIB_SHARED_NAV_LNAV:
+            return "1C";
+        case RTKLIB_SHARED_NAV_FDMA:
+            return "1C";
+        case RTKLIB_SHARED_NAV_FNAV:
+            return "1C";
+        case RTKLIB_SHARED_NAV_INAV:
+            return "1C";
+        case RTKLIB_SHARED_NAV_D1:
+            return "2I";
+        case RTKLIB_SHARED_NAV_D2:
+            return "2I";
+        case RTKLIB_SHARED_NAV_D1D2:
+            return "2I";
+        case RTKLIB_SHARED_NAV_CNAV:
+            return "2S";
+        case RTKLIB_SHARED_NAV_CNV1:
+            return "1P";
+        case RTKLIB_SHARED_NAV_CNV2:
+            return "1P";
+        case RTKLIB_SHARED_NAV_CNV3:
+            return "5P";
+        case RTKLIB_SHARED_NAV_IFNV:
+            return "1C";
+        default:
+            return "1C";
     }
 }
 
-}  // namespace
+} // namespace
 
 TEST(SharedApiParityBaseline, LinkedAbiIsVersionOne) {
     EXPECT_EQ(RTKLIB_SHARED_ABI_VERSION, 0x00010000u);
@@ -174,33 +200,27 @@ TEST(SharedApiParityBaseline, RecordSetsAgreeOnRealMultiGnssFixture) {
 
     rtklib_shared_nav_store_t* shared_store = rtklib_shared_nav_create();
     ASSERT_NE(shared_store, nullptr);
-    ASSERT_EQ(rtklib_shared_nav_load_rinex(
-                  shared_store,
-                  data_file("mixed_nav_2019.rnx").c_str(), "",
-                  "SOURCE:parity-baseline"),
+    ASSERT_EQ(rtklib_shared_nav_load_rinex(shared_store, data_file("mixed_nav_2019.rnx").c_str(), "",
+                                           "SOURCE:parity-baseline"),
               RTKLIB_SHARED_OK);
 
     const std::vector<ProbeRecord> old_records = load_old_records(old_store);
-    const std::vector<SharedRecord> shared_records =
-        load_shared_records(shared_store);
+    const std::vector<SharedRecord> shared_records = load_shared_records(shared_store);
     ASSERT_FALSE(old_records.empty());
     ASSERT_FALSE(shared_records.empty());
 
     std::multimap<std::string, const SharedRecord*> by_key;
     for (const SharedRecord& record : shared_records) {
-        by_key.emplace(shared_key(record.record_kind, record.system, record.prn,
-                                  record.toe_week, record.toe_sow),
+        by_key.emplace(shared_key(record.record_kind, record.system, record.prn, record.toe_week, record.toe_sow),
                        &record);
     }
     size_t matched = 0;
     for (const ProbeRecord& record : old_records) {
-        const auto found = by_key.equal_range(record_key(
-            record.kind, record.system, record.prn, record.gps_week,
-            record.toe_sow));
+        const auto found =
+            by_key.equal_range(record_key(record.kind, record.system, record.prn, record.gps_week, record.toe_sow));
         ASSERT_NE(found.first, found.second)
-            << "shared store is missing a record the old adapter loaded: kind="
-            << record.kind << " system=" << record.system
-            << " prn=" << record.prn;
+            << "shared store is missing a record the old adapter loaded: kind=" << record.kind
+            << " system=" << record.system << " prn=" << record.prn;
         for (auto it = found.first; it != found.second; ++it) {
             EXPECT_EQ(it->second->iode, record.iode);
             EXPECT_EQ(it->second->iodc, record.iodc);
@@ -223,15 +243,12 @@ TEST(SharedApiParityBaseline, SatelliteStatesAgreeForUniqueRecords) {
 
     rtklib_shared_nav_store_t* shared_store = rtklib_shared_nav_create();
     ASSERT_NE(shared_store, nullptr);
-    ASSERT_EQ(rtklib_shared_nav_load_rinex(
-                  shared_store,
-                  data_file("mixed_nav_2019.rnx").c_str(), "",
-                  "SOURCE:parity-baseline"),
+    ASSERT_EQ(rtklib_shared_nav_load_rinex(shared_store, data_file("mixed_nav_2019.rnx").c_str(), "",
+                                           "SOURCE:parity-baseline"),
               RTKLIB_SHARED_OK);
 
     const std::vector<ProbeRecord> old_records = load_old_records(old_store);
-    const std::vector<SharedRecord> shared_records =
-        load_shared_records(shared_store);
+    const std::vector<SharedRecord> shared_records = load_shared_records(shared_store);
 
     // Old-side uniqueness: only satellites with exactly one broadcast record
     // in the store give both selectors a provably identical target.
@@ -240,12 +257,14 @@ TEST(SharedApiParityBaseline, SatelliteStatesAgreeForUniqueRecords) {
         if (record.kind == static_cast<int>(RtklibNavRecordKind::kIonosphere)) {
             continue;
         }
-        ++ephemeral_count[record_key(record.kind, record.system, record.prn,
-                                     record.gps_week, record.toe_sow)];
+        ++ephemeral_count[record_key(record.kind, record.system, record.prn, record.gps_week, record.toe_sow)];
     }
     std::map<int, int> comparisons_per_system;
     std::map<int, int> system_name = {
-        {0x01, 'G'}, {0x04, 'R'}, {0x08, 'E'}, {0x20, 'C'},
+        {0x01, 'G'},
+        {0x04, 'R'},
+        {0x08, 'E'},
+        {0x20, 'C'},
     };
 
     double max_position_delta = 0.0;
@@ -258,16 +277,13 @@ TEST(SharedApiParityBaseline, SatelliteStatesAgreeForUniqueRecords) {
         if (record.kind == static_cast<int>(RtklibNavRecordKind::kIonosphere)) {
             continue;
         }
-        const std::string key = record_key(record.kind, record.system,
-                                           record.prn, record.gps_week,
-                                           record.toe_sow);
+        const std::string key = record_key(record.kind, record.system, record.prn, record.gps_week, record.toe_sow);
         if (ephemeral_count.at(key) != 1) {
             continue;
         }
         const SharedRecord* shared = nullptr;
         for (const SharedRecord& candidate : shared_records) {
-            if (shared_key(candidate.record_kind, candidate.system,
-                           candidate.prn, candidate.toe_week,
+            if (shared_key(candidate.record_kind, candidate.system, candidate.prn, candidate.toe_week,
                            candidate.toe_sow) == key) {
                 shared = &candidate;
                 break;
@@ -287,14 +303,11 @@ TEST(SharedApiParityBaseline, SatelliteStatesAgreeForUniqueRecords) {
 
         RtklibSatelliteState old_state{};
         ASSERT_TRUE(get_rtklib_satellite_state_with_selection_time(
-            old_store, probe_week, probe_sow, probe_week, probe_sow,
-            record.satellite_number, &old_state, &error))
+            old_store, probe_week, probe_sow, probe_week, probe_sow, record.satellite_number, &old_state, &error))
             << error;
 
         int family_code = 0;
-        if (!resolve_observation_code(
-                rinex_code_for_family(shared->family),
-                &family_code)) {
+        if (!resolve_observation_code(rinex_code_for_family(shared->family), &family_code)) {
             continue;
         }
         rtklib_shared_state_query_t query{};
@@ -313,13 +326,11 @@ TEST(SharedApiParityBaseline, SatelliteStatesAgreeForUniqueRecords) {
         rtklib_shared_state_result_t result{};
         result.abi_version = RTKLIB_SHARED_ABI_VERSION;
         result.struct_size = static_cast<uint32_t>(sizeof(result));
-        const int query_status =
-            rtklib_shared_state_query(shared_store, &query, &result);
+        const int query_status = rtklib_shared_state_query(shared_store, &query, &result);
         if (query_status != RTKLIB_SHARED_OK) {
             std::printf("probe unsupported: sys=0x%x prn=%u family=0x%x "
                         "iode=%d toe=%.1f status=%d\n",
-                        query.system, query.prn, shared->family, shared->iode,
-                        shared->toe_sow, query_status);
+                        query.system, query.prn, shared->family, shared->iode, shared->toe_sow, query_status);
         }
         ASSERT_EQ(query_status, RTKLIB_SHARED_OK);
         EXPECT_EQ(result.status, RTKLIB_SHARED_OK);
@@ -329,21 +340,14 @@ TEST(SharedApiParityBaseline, SatelliteStatesAgreeForUniqueRecords) {
         }
 
         for (int axis = 0; axis < 3; ++axis) {
-            max_position_delta = std::max(
-                max_position_delta,
-                std::abs(result.position_ecef_m[axis] -
-                         old_state.position_ecef_m[axis]));
-            max_velocity_delta = std::max(
-                max_velocity_delta,
-                std::abs(result.velocity_ecef_mps[axis] -
-                         old_state.velocity_ecef_mps[axis]));
+            max_position_delta =
+                std::max(max_position_delta, std::abs(result.position_ecef_m[axis] - old_state.position_ecef_m[axis]));
+            max_velocity_delta = std::max(max_velocity_delta,
+                                          std::abs(result.velocity_ecef_mps[axis] - old_state.velocity_ecef_mps[axis]));
         }
-        max_clock_delta = std::max(
-            max_clock_delta,
-            std::abs(result.clock_bias_s - old_state.clock_bias_sec));
-        max_drift_delta = std::max(
-            max_drift_delta,
-            std::abs(result.clock_drift_sps - old_state.clock_drift_sec_per_sec));
+        max_clock_delta = std::max(max_clock_delta, std::abs(result.clock_bias_s - old_state.clock_bias_sec));
+        max_drift_delta =
+            std::max(max_drift_delta, std::abs(result.clock_drift_sps - old_state.clock_drift_sec_per_sec));
         EXPECT_EQ(result.health_raw, old_state.health);
         ++compared;
         ++comparisons_per_system[record.system];
@@ -363,13 +367,11 @@ TEST(SharedApiParityBaseline, SatelliteStatesAgreeForUniqueRecords) {
     EXPECT_LT(max_clock_delta, 1.0e-11);
     EXPECT_LT(max_drift_delta, 1.0e-12);
 
-    std::printf(
-        "parity baseline: compared=%zu max_pos_m=%.3e max_vel_mps=%.3e "
-        "max_clk_s=%.3e max_drift_sps=%.3e coverage=[G:%d R:%d E:%d C:%d]\n",
-        compared, max_position_delta, max_velocity_delta, max_clock_delta,
-        max_drift_delta, comparisons_per_system[0x01],
-        comparisons_per_system[0x04], comparisons_per_system[0x08],
-        comparisons_per_system[0x20]);
+    std::printf("parity baseline: compared=%zu max_pos_m=%.3e max_vel_mps=%.3e "
+                "max_clk_s=%.3e max_drift_sps=%.3e coverage=[G:%d R:%d E:%d C:%d]\n",
+                compared, max_position_delta, max_velocity_delta, max_clock_delta, max_drift_delta,
+                comparisons_per_system[0x01], comparisons_per_system[0x04], comparisons_per_system[0x08],
+                comparisons_per_system[0x20]);
 
     rtklib_shared_nav_destroy(shared_store);
     destroy_rtklib_nav_store(old_store);

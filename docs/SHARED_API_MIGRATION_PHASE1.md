@@ -11,13 +11,12 @@ The RTKLIB submodule was advanced to the revision that carries the shared
 GNSS adapter API (fork PR #17 / #25):
 
 ```text
-RTKLIB commit SHA      bbb12e8 (fork PRs #31, #32, #33 and #35 on top of 353155f)
+RTKLIB commit SHA      19938fd (fork PR #36 on top of bbb12e8)
 shared adapter ABI     1.2 (numeric 0x00010002; 1.0 and 1.1 layouts unchanged)
 ```
 
-The full simulator suite passes on the new pin (375/375 including the new
-parity tests), so the pin update is backward-compatible with every existing
-adapter call.
+The full simulator suite passes on the new pin (377/377, serial). The shared
+ABI is unchanged; only the ext Doppler equations changed (§1.4).
 
 ### 1.1 Modern-family orbit and accuracy corrections (RTKLIB #27, #20)
 
@@ -80,6 +79,41 @@ Consequences in the simulator:
   ionosphere identical (`NavEquivalence.*`).
 
 The full suite passes on the new pin (375/375, serial).
+
+### 1.4 Exact Doppler range rate (RTKLIB #36, simulator #181)
+
+The pin was advanced from `bbb12e8` to `19938fd`. The fork adds
+`rtklib_range_rate_ext()`, the exact rate of
+`rho(t) = geodist(r_s(t - rho/c), r_r(t))`:
+
+```text
+rate = (A + B) / (1 + A/c)
+A = los.v_s + omega/c (v_xs y_r - v_ys x_r)
+B = -los.v_r + omega/c (x_s v_yr - y_s v_xr)
+```
+
+The three `rtklib_resdop_*_ext` functions and `rtklib_pntvel_ext` use it. They
+previously copied stock `resdop()`, which has two problems: the Sagnac-rate
+term has the opposite sign of `d(geodist)/dt`, and there is no light-time
+factor. Stock `resdop()` and the shared ABI are unchanged.
+
+Simulator changes (gnss-data-simulator #181, items 2 and 3):
+
+- `compute_range_rate()` returns the same exact rate, so `range_rate_mps`,
+  `doppler_hz` and ADR truth describe the geometry of `geometric_range_m`.
+  On BRD400DLR 2026-120 the largest per-satellite median gap to the 1 Hz
+  finite difference of the range falls from 7.3 mm/s to 0.25 mm/s. The
+  remaining gap is RTKLIB's 1 ms forward-difference satellite velocity.
+- Range, range rate, clock bias and clock drift all come from the record
+  that the signal's own NAV family selects. The drift used to come from the
+  satellite-level default record. The largest per-signal median gap between
+  drift and the clock-bias finite difference falls from 1.6e-5 m/s
+  (GPS CNAV, QZSS LNAV) to below 1e-8 m/s.
+- The residual validator (2 mm/s Doppler floor) and the PSRVEL solver (1 mm/s
+  on a static receiver) keep their tolerances because they use the same
+  model.
+- Tests: `SatelliteEngineTest.RangeRateIsTheRateOfTheSimulatedRange` and
+  `ZeroNoiseMeasurement.ClockDriftAndRangeRateComeFromTheSignalFamilyRecord`.
 
 ## 2. Old-vs-shared parity baseline (established, green)
 

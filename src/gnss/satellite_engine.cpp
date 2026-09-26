@@ -24,37 +24,6 @@ bool finite_vector3(const double value[3]) {
     return value != nullptr && std::isfinite(value[0]) && std::isfinite(value[1]) && std::isfinite(value[2]);
 }
 
-bool compute_range_rate(const RtklibSatelliteState& satellite_state, const ReceiverTruth& receiver,
-                        const double line_of_sight_ecef[3], double* range_rate_mps) {
-    if (range_rate_mps == nullptr || !finite_vector3(satellite_state.position_ecef_m) ||
-        !finite_vector3(satellite_state.velocity_ecef_mps) || !finite_vector3(receiver.position_ecef_m) ||
-        !finite_vector3(receiver.velocity_ecef_mps) || !finite_vector3(line_of_sight_ecef)) {
-        return false;
-    }
-
-    double relative_velocity_ecef_mps[3]{};
-    for (int index = 0; index < 3; ++index) {
-        relative_velocity_ecef_mps[index] =
-            satellite_state.velocity_ecef_mps[index] - receiver.velocity_ecef_mps[index];
-    }
-
-    double rate_mps = 0.0;
-    for (int index = 0; index < 3; ++index) {
-        rate_mps += relative_velocity_ecef_mps[index] * line_of_sight_ecef[index];
-    }
-
-    // Match RTKLIB pntpos.c/resdop(): range rate includes the time derivative
-    // of geodist()'s first-order Earth-rotation correction.
-    rate_mps += kEarthRotationRateRadPerSec / kSpeedOfLightMps *
-                (satellite_state.velocity_ecef_mps[1] * receiver.position_ecef_m[0] +
-                 satellite_state.position_ecef_m[1] * receiver.velocity_ecef_mps[0] -
-                 satellite_state.velocity_ecef_mps[0] * receiver.position_ecef_m[1] -
-                 satellite_state.position_ecef_m[0] * receiver.velocity_ecef_mps[1]);
-
-    *range_rate_mps = rate_mps;
-    return std::isfinite(rate_mps);
-}
-
 struct RtklibStateProviderContext {
     const RtklibNavStore* nav_store;
     int selection_gps_week;
@@ -74,6 +43,44 @@ bool rtklib_state_provider(const void* context, int gps_week, double sow_sec, in
 }
 
 } // namespace
+
+bool compute_range_rate(const RtklibSatelliteState& satellite_state, const ReceiverTruth& receiver,
+                        const double line_of_sight_ecef[3], double* range_rate_mps) {
+    if (range_rate_mps == nullptr || !finite_vector3(satellite_state.position_ecef_m) ||
+        !finite_vector3(satellite_state.velocity_ecef_mps) || !finite_vector3(receiver.position_ecef_m) ||
+        !finite_vector3(receiver.velocity_ecef_mps) || !finite_vector3(line_of_sight_ecef)) {
+        return false;
+    }
+
+    // Exact time derivative of the simulated range
+    //   rho(t) = geodist(r_s(t - rho/c), r_r(t)),
+    //   geodist = |r_s - r_r| + omega/c * (x_s y_r - y_s x_r),
+    // so the Doppler and ADR truth describe the same geometry as the
+    // pseudorange truth. With the transmit-time chain d(t - rho/c)/dt =
+    // 1 - rho_dot/c:
+    //   rho_dot = (A + B) / (1 + A/c), where A is the satellite-motion term
+    //   and B the receiver-motion term of d(geodist). RTKLIB resdop() keeps
+    //   only A + B with the opposite Sagnac-rate sign (issue #181, item 2).
+    const double* satellite_position = satellite_state.position_ecef_m;
+    const double* satellite_velocity = satellite_state.velocity_ecef_mps;
+    const double* receiver_position = receiver.position_ecef_m;
+    const double* receiver_velocity = receiver.velocity_ecef_mps;
+    double satellite_term_mps = 0.0;
+    double receiver_term_mps = 0.0;
+    for (int index = 0; index < 3; ++index) {
+        satellite_term_mps += satellite_velocity[index] * line_of_sight_ecef[index];
+        receiver_term_mps -= receiver_velocity[index] * line_of_sight_ecef[index];
+    }
+    constexpr double kSagnacRatePerM = kEarthRotationRateRadPerSec / kSpeedOfLightMps;
+    satellite_term_mps +=
+        kSagnacRatePerM * (satellite_velocity[0] * receiver_position[1] - satellite_velocity[1] * receiver_position[0]);
+    receiver_term_mps +=
+        kSagnacRatePerM * (satellite_position[0] * receiver_velocity[1] - satellite_position[1] * receiver_velocity[0]);
+
+    const double rate_mps = (satellite_term_mps + receiver_term_mps) / (1.0 + satellite_term_mps / kSpeedOfLightMps);
+    *range_rate_mps = rate_mps;
+    return std::isfinite(rate_mps);
+}
 
 bool subtract_propagation_time(const SimTime& receive_time, double propagation_time_sec, int* transmit_gps_week,
                                double* transmit_sow_sec) {

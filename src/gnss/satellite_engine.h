@@ -38,6 +38,10 @@ bool compute_satellite_geometry_with_provider(SatelliteStateProvider state_provi
 bool subtract_propagation_time(const SimTime& receive_time, double propagation_time_sec, int* transmit_gps_week,
                                double* transmit_sow_sec);
 bool elevation_passes_mask(double elevation_rad, double elevation_mask_deg);
+// Rate of the simulated range geodist(r_s(t - rho/c), r_r(t)); line_of_sight_ecef
+// is the geodist() unit vector from the receiver to the satellite.
+bool compute_range_rate(const RtklibSatelliteState& satellite_state, const ReceiverTruth& receiver,
+                        const double line_of_sight_ecef[3], double* range_rate_mps);
 bool compute_satellite_geometry(const RtklibNavStore* nav_store, const ReceiverTruth& receiver,
                                 const SimTime& receive_time, int satellite_number, double elevation_mask_deg,
                                 SatelliteGeometry* geometry, std::string* error_message);

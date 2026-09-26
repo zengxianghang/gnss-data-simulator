@@ -16,8 +16,17 @@ extern "C" {
 #ifdef unlock
 #undef unlock
 #endif
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
 #include <string>
 
 namespace {
@@ -157,15 +166,21 @@ TEST_F(SatelliteEngineTest, GeometryMatchesDirectRtklibReferenceAtConvergedTrans
     ecef2pos(receiver_.position_ecef_m, receiver_pos);
     satazel(receiver_pos, reference_los, reference_azel);
 
-    double reference_range_rate_mps = 0.0;
+    // Rate of geodist(r_s(t - rho/c), r_r(t)): satellite term A, receiver term B.
+    double satellite_term_mps = 0.0;
+    double receiver_term_mps = 0.0;
     for (int index = 0; index < 3; ++index) {
-        reference_range_rate_mps +=
-            (reference_state[index + 3] - receiver_.velocity_ecef_mps[index]) * reference_los[index];
+        satellite_term_mps += reference_state[index + 3] * reference_los[index];
+        receiver_term_mps -= receiver_.velocity_ecef_mps[index] * reference_los[index];
     }
-    reference_range_rate_mps +=
+    satellite_term_mps +=
         OMGE / kSpeedOfLightMps *
-        (reference_state[4] * receiver_.position_ecef_m[0] + reference_state[1] * receiver_.velocity_ecef_mps[0] -
-         reference_state[3] * receiver_.position_ecef_m[1] - reference_state[0] * receiver_.velocity_ecef_mps[1]);
+        (reference_state[3] * receiver_.position_ecef_m[1] - reference_state[4] * receiver_.position_ecef_m[0]);
+    receiver_term_mps +=
+        OMGE / kSpeedOfLightMps *
+        (reference_state[0] * receiver_.velocity_ecef_mps[1] - reference_state[1] * receiver_.velocity_ecef_mps[0]);
+    const double reference_range_rate_mps =
+        (satellite_term_mps + receiver_term_mps) / (1.0 + satellite_term_mps / kSpeedOfLightMps);
 
     for (int index = 0; index < 3; ++index) {
         EXPECT_NEAR(geometry.satellite_state.position_ecef_m[index], reference_state[index], 1.0e-6);
@@ -182,6 +197,67 @@ TEST_F(SatelliteEngineTest, GeometryMatchesDirectRtklibReferenceAtConvergedTrans
     EXPECT_NEAR(geometry.propagation_time_sec, geometry.geometric_range_m / kSpeedOfLightMps, 1.0e-15);
 
     freenav(&reference_nav, 0xFF);
+}
+
+TEST_F(SatelliteEngineTest, RangeRateIsTheRateOfTheSimulatedRange) {
+    // Issue #181 item 2: range_rate_mps must be d(geometric_range_m)/dt of the
+    // simulated light-time range, not RTKLIB resdop()'s first-order model.
+    gnss_sim::RtklibNavStore* brd4_nav = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(brd4_nav, nullptr);
+    std::string load_error;
+    const std::string brd4_nav_path = std::string(GNSS_SIM_TEST_DATA_DIR) + "/brd400dlr_rinex4_acceptance_nav.rnx";
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(brd4_nav, brd4_nav_path.c_str(), &load_error)) << load_error;
+
+    gnss_sim::SimTime receive_time{};
+    ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2347, 437100.0, &receive_time));
+    constexpr std::int64_t kHalfStepNs = 1000000;
+    gnss_sim::SimTime before{};
+    gnss_sim::SimTime after{};
+    ASSERT_TRUE(gnss_sim::add_time_ns(receive_time, -kHalfStepNs, &before));
+    ASSERT_TRUE(gnss_sim::add_time_ns(receive_time, kHalfStepNs, &after));
+
+    int checked = 0;
+    double max_first_order_error_mps = 0.0;
+    for (int prn = 1; prn <= 32; ++prn) {
+        char satellite_id[8]{};
+        std::snprintf(satellite_id, sizeof(satellite_id), "G%02d", prn);
+        int satellite_number = 0;
+        ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number(satellite_id, &satellite_number));
+        gnss_sim::SatelliteGeometry geometry{};
+        gnss_sim::SatelliteGeometry geometry_before{};
+        gnss_sim::SatelliteGeometry geometry_after{};
+        std::string error_message;
+        if (!gnss_sim::compute_satellite_geometry(brd4_nav, receiver_, receive_time, satellite_number, -90.0, &geometry,
+                                                  &error_message)) {
+            continue;
+        }
+        ASSERT_TRUE(gnss_sim::compute_satellite_geometry(brd4_nav, receiver_, before, satellite_number, -90.0,
+                                                         &geometry_before, &error_message))
+            << error_message;
+        ASSERT_TRUE(gnss_sim::compute_satellite_geometry(brd4_nav, receiver_, after, satellite_number, -90.0,
+                                                         &geometry_after, &error_message))
+            << error_message;
+        const double finite_difference_mps =
+            (geometry_after.geometric_range_m - geometry_before.geometric_range_m) / (2.0e-9 * kHalfStepNs);
+
+        // RTKLIB's broadcast velocity is a 1 ms forward difference, which alone
+        // leaves up to ~0.3 mm/s; the first-order model is off by millimetres.
+        EXPECT_NEAR(geometry.range_rate_mps, finite_difference_mps, 5.0e-4) << satellite_id;
+
+        const double* vs = geometry.satellite_state.velocity_ecef_mps;
+        double first_order_mps = 0.0;
+        for (int index = 0; index < 3; ++index) {
+            first_order_mps += vs[index] * geometry.line_of_sight_ecef[index];
+        }
+        first_order_mps +=
+            OMGE / kSpeedOfLightMps * (vs[1] * receiver_.position_ecef_m[0] - vs[0] * receiver_.position_ecef_m[1]);
+        max_first_order_error_mps =
+            std::max(max_first_order_error_mps, std::fabs(first_order_mps - finite_difference_mps));
+        ++checked;
+    }
+    gnss_sim::destroy_rtklib_nav_store(brd4_nav);
+    EXPECT_GE(checked, 12);
+    EXPECT_GT(max_first_order_error_mps, 2.0e-3);
 }
 
 TEST_F(SatelliteEngineTest, AdapterCanFixEphemerisSelectionAtReceiveEpoch) {

@@ -254,6 +254,23 @@ bool legacy_beidou_ion_message(int message_type) {
     return message_type == NAV_D1 || message_type == NAV_D2 || message_type == NAV_D1D2;
 }
 
+// IONUTCA must carry exactly the pinned RTKLIB nav.ion_gps solver state (#88),
+// so an ASCII round-trip cannot change the solver ionosphere model.  Since
+// RTKLIB #34/#35 a RINEX 4 load projects one GPS LNAV "> ION" record into
+// nav.ion_gps; only an LNAV record equal to that projection is legacy
+// IONUTC metadata.  GPS CNAV (CNVX) records never are.
+bool is_projected_gps_lnav_ion(const nav_t& nav, const ion_t& ion) {
+    if (ion.hdr.sys != SYS_GPS || ion.hdr.msg_type != NAV_LNAV || ion.ndata < 8 || !array_has_nonzero(nav.ion_gps, 8)) {
+        return false;
+    }
+    for (int index = 0; index < 8; ++index) {
+        if (ion.data[index] != nav.ion_gps[index]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool fill_explicit_ion(const nav_t& nav, int index, NavOutputRecord* record) {
     const ion_t& ion = nav.ion[index];
     IonosphereNavOutputData output{};
@@ -270,7 +287,8 @@ bool fill_explicit_ion(const nav_t& nav, int index, NavOutputRecord* record) {
     std::memcpy(output.coefficients, ion.alpha, sizeof(output.coefficients));
     output.region = ion.region;
     output.leap_seconds = nav.leaps;
-    output.legacy_metadata = ion.hdr.sys == SYS_CMP && legacy_beidou_ion_message(ion.hdr.msg_type);
+    output.legacy_metadata =
+        (ion.hdr.sys == SYS_CMP && legacy_beidou_ion_message(ion.hdr.msg_type)) || is_projected_gps_lnav_ion(nav, ion);
     record->kind = RtklibNavRecordKind::kIonosphere;
     record->ionosphere = output;
     return output.system != NavOutputSystem::kUnknown;

@@ -199,7 +199,9 @@ TEST(AtmosphereBroadcast, MultiFrequencyIonosphereScalesWithInverseFrequencySqua
     EXPECT_DOUBLE_EQ(l5.troposphere_delay_m, l1.troposphere_delay_m);
 }
 
-TEST(AtmosphereBroadcast, Rinex4ZeroLegacyCoefficientsRetainPinnedRtklibFallback) {
+TEST(AtmosphereBroadcast, Rinex4IonRecordsProvideTheBroadcastKlobucharSet) {
+    // RTKLIB #34/#35: RINEX 4 "> ION" records fill nav.ion_gps, so broadcast
+    // ionosphere uses the file's Klobuchar set instead of ion_default.
     NavGuard nav{gnss_sim::create_rtklib_nav_store()};
     ASSERT_NE(nav.store, nullptr);
     std::string error_message;
@@ -218,16 +220,28 @@ TEST(AtmosphereBroadcast, Rinex4ZeroLegacyCoefficientsRetainPinnedRtklibFallback
     ASSERT_TRUE(direct_rtklib_broadcast_ionosphere(brd4_nav_path(), time.gps_week, gnss_sim::sim_time_sow_sec(time),
                                                    receiver_ecef, azimuth, elevation, &direct_delay_m, &ion_gps_norm,
                                                    &ion_record_count));
-    EXPECT_DOUBLE_EQ(ion_gps_norm, 0.0);
     EXPECT_GT(ion_record_count, 0);
-    EXPECT_GT(direct_delay_m, 0.0);
+
+    // The fixture's "> ION G07 LNAV" record.
+    const double file_set[8] = {2.793967723846e-08, 2.235174179077e-08,  -1.192092895508e-07, 5.960464477539e-08,
+                                1.515520000000e+05, -1.966080000000e+05, -6.553600000000e+04, 3.276800000000e+05};
+    const double zero_set[8] = {};
+    double position_rad_m[3]{};
+    ecef2pos(receiver_ecef, position_rad_m);
+    const double azel[2] = {azimuth, elevation};
+    const gtime_t epoch = gpst2time(time.gps_week, gnss_sim::sim_time_sow_sec(time));
+    const double file_delay_m = ionmodel(epoch, file_set, position_rad_m, azel);
+    const double default_delay_m = ionmodel(epoch, zero_set, position_rad_m, azel);
+    EXPECT_NEAR(ion_gps_norm, norm(file_set, 8), 1.0e-9);
+    EXPECT_NEAR(direct_delay_m, file_delay_m, 1.0e-9);
+    EXPECT_GT(std::fabs(file_delay_m - default_delay_m), 1.0e-3);
 
     gnss_sim::AtmosphereCorrection correction{};
     ASSERT_TRUE(gnss_sim::compute_atmosphere_correction(gnss_sim::AtmosphereMode::BROADCAST, nav.store, time,
                                                         gnss_sim::SignalId::kGpsL1Ca, 0, receiver_ecef, azimuth,
                                                         elevation, &correction, &error_message));
     EXPECT_EQ(correction.ionosphere_status, gnss_sim::IonosphereCorrectionStatus::kApplied);
-    EXPECT_NEAR(correction.ionosphere_code_delay_m, direct_delay_m, 1.0e-12);
+    EXPECT_NEAR(correction.ionosphere_code_delay_m, file_delay_m, 1.0e-9);
 }
 
 TEST(AtmosphereBroadcast, AllV1ConstellationsSharePinnedRtklibBaseAndUseSignalFrequencyScaling) {

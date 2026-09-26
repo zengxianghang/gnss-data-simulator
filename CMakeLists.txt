@@ -12,21 +12,78 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(CTest)
 include(cmake/CompilerWarnings.cmake)
 
-set(GNSS_SIM_RTKLIB_COMMIT "c03a768a180caea7c85586fe0f3c6842f832df27" CACHE STRING
-    "Pinned RTKLIB commit used by this simulator build")
-set(GNSS_SIM_CJSON_COMMIT "acc76239bee01d8e9c858ae2cab296704e52d916" CACHE STRING
-    "Pinned cJSON commit used by this simulator build")
+# Provenance: the commits actually checked out, read at configure time. The
+# checkout's HEAD (and branch ref) files are configure dependencies, so a new
+# commit or submodule checkout re-runs configure instead of leaving a stale SHA.
+function(gnss_sim_git_output directory out_var)
+    execute_process(
+        COMMAND git ${ARGN}
+        WORKING_DIRECTORY "${directory}"
+        RESULT_VARIABLE result
+        OUTPUT_VARIABLE output
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(NOT result EQUAL 0)
+        set(output "")
+    endif()
+    set(${out_var} "${output}" PARENT_SCOPE)
+endfunction()
 
-execute_process(
-    COMMAND git rev-parse HEAD
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    RESULT_VARIABLE GNSS_SIM_GIT_RESULT
-    OUTPUT_VARIABLE GNSS_SIM_SOURCE_COMMIT
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
-)
-if(NOT GNSS_SIM_GIT_RESULT EQUAL 0 OR GNSS_SIM_SOURCE_COMMIT STREQUAL "")
-    set(GNSS_SIM_SOURCE_COMMIT "unknown")
+function(gnss_sim_git_commit directory out_var)
+    gnss_sim_git_output("${directory}" commit rev-parse HEAD)
+    if(NOT commit MATCHES "^[0-9a-f]+$")
+        set(${out_var} "unknown" PARENT_SCOPE)
+        return()
+    endif()
+    # HEAD changes on a detached checkout; the branch ref (or packed-refs) on a
+    # commit to the current branch.
+    set(ref_names HEAD packed-refs)
+    gnss_sim_git_output("${directory}" branch_ref symbolic-ref -q HEAD)
+    if(NOT branch_ref STREQUAL "")
+        list(APPEND ref_names "${branch_ref}")
+    endif()
+    foreach(ref_name IN LISTS ref_names)
+        gnss_sim_git_output("${directory}" ref_path rev-parse --path-format=absolute --git-path "${ref_name}")
+        if(NOT ref_path STREQUAL "" AND EXISTS "${ref_path}")
+            set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ref_path}")
+        endif()
+    endforeach()
+    set(${out_var} "${commit}" PARENT_SCOPE)
+endfunction()
+
+# The superproject's recorded pin (gitlink) for a submodule path.
+function(gnss_sim_gitlink_commit path out_var)
+    gnss_sim_git_output("${CMAKE_CURRENT_SOURCE_DIR}" entry ls-tree HEAD "${path}")
+    if(entry MATCHES "^160000 commit ([0-9a-f]+)\t")
+        set(${out_var} "${CMAKE_MATCH_1}" PARENT_SCOPE)
+    else()
+        set(${out_var} "unknown" PARENT_SCOPE)
+    endif()
+endfunction()
+
+gnss_sim_git_commit("${CMAKE_CURRENT_SOURCE_DIR}" GNSS_SIM_SOURCE_COMMIT)
+gnss_sim_gitlink_commit(third_party/RTKLIB GNSS_SIM_RTKLIB_PINNED_COMMIT)
+# Earlier builds cached a hard-coded GNSS_SIM_<dep>_COMMIT; drop it so it cannot
+# shadow the checkout. A source archive without git metadata can name the
+# commits with -DGNSS_SIM_<dep>_COMMIT_OVERRIDE=<sha>.
+set(GNSS_SIM_RTKLIB_COMMIT_OVERRIDE "" CACHE STRING "RTKLIB commit to record when the checkout has no git metadata")
+set(GNSS_SIM_CJSON_COMMIT_OVERRIDE "" CACHE STRING "cJSON commit to record when the checkout has no git metadata")
+foreach(dependency RTKLIB CJSON)
+    unset(GNSS_SIM_${dependency}_COMMIT CACHE)
+endforeach()
+gnss_sim_git_commit("${CMAKE_CURRENT_SOURCE_DIR}/third_party/RTKLIB" GNSS_SIM_RTKLIB_COMMIT)
+gnss_sim_git_commit("${CMAKE_CURRENT_SOURCE_DIR}/third_party/cJSON" GNSS_SIM_CJSON_COMMIT)
+foreach(dependency RTKLIB CJSON)
+    if(NOT GNSS_SIM_${dependency}_COMMIT_OVERRIDE STREQUAL "")
+        set(GNSS_SIM_${dependency}_COMMIT "${GNSS_SIM_${dependency}_COMMIT_OVERRIDE}")
+    endif()
+endforeach()
+if(NOT GNSS_SIM_RTKLIB_PINNED_COMMIT STREQUAL "unknown" AND
+   NOT GNSS_SIM_RTKLIB_COMMIT STREQUAL GNSS_SIM_RTKLIB_PINNED_COMMIT)
+    message(WARNING
+        "third_party/RTKLIB is checked out at ${GNSS_SIM_RTKLIB_COMMIT}, not the pinned "
+        "${GNSS_SIM_RTKLIB_PINNED_COMMIT}; run manifests will record the checkout.")
 endif()
 
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/RTKLIB/src/rtklib.h")
@@ -289,7 +346,8 @@ if(BUILD_TESTING)
     target_include_directories(gnss_sim_unit_tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_compile_definitions(gnss_sim_unit_tests PRIVATE
-        GNSS_SIM_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/minimal")
+        GNSS_SIM_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/minimal"
+        GNSS_SIM_RTKLIB_PINNED_COMMIT="${GNSS_SIM_RTKLIB_PINNED_COMMIT}")
     target_link_libraries(gnss_sim_unit_tests PRIVATE
         gnss_sim::core
         gnss_sim::rtklib

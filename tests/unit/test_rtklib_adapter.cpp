@@ -78,6 +78,15 @@ TEST(RtklibAdapterMetadata, ExposesExactPinnedRtklibCommit) {
     EXPECT_EQ(std::strlen(gnss_sim::rtklib_commit_sha()), 40U);
 }
 
+TEST(RtklibAdapterMetadata, RecordedRtklibCommitIsTheSubmodulePin) {
+    // The manifest's rtklib_commit_sha once stayed hard-coded across several
+    // pin bumps. It must name the superproject's third_party/RTKLIB gitlink.
+    if (std::strcmp(GNSS_SIM_RTKLIB_PINNED_COMMIT, "unknown") == 0) {
+        GTEST_SKIP() << "no git metadata for the RTKLIB gitlink";
+    }
+    EXPECT_STREQ(gnss_sim::rtklib_commit_sha(), GNSS_SIM_RTKLIB_PINNED_COMMIT);
+}
+
 TEST_F(RtklibAdapterTest, SatelliteIdMappingCoversFrozenConstellations) {
     const char* const satellite_ids[] = {"G01", "R26", "E01", "C01", "J01"};
     for (const char* satellite_id : satellite_ids) {

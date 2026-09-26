@@ -11,8 +11,8 @@ The RTKLIB submodule was advanced to the revision that carries the shared
 GNSS adapter API (fork PR #17 / #25):
 
 ```text
-RTKLIB commit SHA      353155f (fork PRs #28 and #29 on top of 767337d)
-shared adapter ABI     1.1 (numeric 0x00010001; 1.0 layouts unchanged)
+RTKLIB commit SHA      bbb12e8 (fork PRs #31, #32, #33 and #35 on top of 353155f)
+shared adapter ABI     1.2 (numeric 0x00010002; 1.0 and 1.1 layouts unchanged)
 ```
 
 The full simulator suite passes on the new pin (375/375 including the new
@@ -52,6 +52,34 @@ failed. The correction normalizes separators at the shared API boundary
 loads identically on Windows, Linux and macOS; the public ABI, source
 identity and fail-closed statuses are unchanged. `rtklib_shared_api.c` is compiled into the existing
 `rtklib_pinned` target; no second RTKLIB build exists.
+
+### 1.3 RINEX 4 broadcast ionosphere (RTKLIB #34)
+
+The pin was advanced from `353155f` to `bbb12e8`. The fork changes are:
+
+- ABI 1.2 explicit-parameter Saastamoinen and Klobuchar helpers (#31).
+- ICD code-family coverage, component biases and QZSS per-signal health
+  (#32).
+- Shared-API azimuth/elevation below the horizon (#33).
+- **RINEX 4 `> ION` records now fill `nav.ion_gps`/`ion_qzs`/`ion_cmp`/
+  `ion_gal` (#35).** Previously every RINEX 4 load left those arrays zero,
+  so `ionocorr(IONOOPT_BRDC)` silently evaluated RTKLIB's built-in
+  `ion_default` (gnss-data-simulator #181, item 4).
+
+Consequences in the simulator:
+
+- **Broadcast atmosphere on BRD4 input** now uses the file's GPS Klobuchar
+  set. The delay now equals `ionmodel()` evaluated with that set and no
+  longer equals the `ion_default` delay.
+  `AtmosphereBroadcast.Rinex4IonRecordsProvideTheBroadcastKlobucharSet`
+  replaces the test that pinned the fallback.
+- **`IONUTCA`** still carries exactly the `nav.ion_gps` solver state (#88).
+  The GPS LNAV `> ION` record that RTKLIB projects into `nav.ion_gps` is now
+  that state, so it (and only it) serializes as `IONUTCA`; GPS CNAV `CNVX`
+  records stay explicit. The serialized-NAV round trip keeps the solver
+  ionosphere identical (`NavEquivalence.*`).
+
+The full suite passes on the new pin (375/375, serial).
 
 ## 2. Old-vs-shared parity baseline (established, green)
 

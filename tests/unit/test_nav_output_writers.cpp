@@ -467,11 +467,19 @@ TEST(NavOutputWriter, RealRinex4BeiDouLegacyIonSerializesWithoutModernFamilyMasq
 }
 
 TEST(NavOutputWriter, RealRinex4ExplicitGpsIonDoesNotMasqueradeAsLegacyIonutca) {
+    // #88: IONUTCA carries exactly the RTKLIB nav.ion_gps solver state.  Since
+    // RTKLIB #34/#35 the fixture's GPS LNAV "> ION" record is projected into
+    // nav.ion_gps, so that record (and only it) is legacy IONUTCA metadata; the
+    // GPS CNAV (CNVX) record never masquerades as IONUTCA.
     gnss_sim::RtklibNavStore* store = gnss_sim::create_rtklib_nav_store();
     ASSERT_NE(store, nullptr);
     std::string error_message;
     ASSERT_TRUE(
         gnss_sim::load_rinex_nav_file(store, data_path("brd400dlr_rinex4_acceptance_nav.rnx").c_str(), &error_message))
+        << error_message;
+    gnss_sim::RtklibIonosphereModelState solver_state{};
+    ASSERT_TRUE(gnss_sim::rtklib_broadcast_ionosphere_model_state(store, gnss_sim::RtklibIonosphereSystem::kGps,
+                                                                  &solver_state, &error_message))
         << error_message;
 
     int explicit_gps_ion_count = 0;
@@ -495,15 +503,20 @@ TEST(NavOutputWriter, RealRinex4ExplicitGpsIonDoesNotMasqueradeAsLegacyIonutca) 
             EXPECT_TRUE(supported);
             EXPECT_EQ(log_name(message), "IONUTCA");
             EXPECT_TRUE(valid_ascii_crc(message));
+            for (int coefficient = 0; coefficient < 8; ++coefficient) {
+                EXPECT_EQ(record.ionosphere.coefficients[coefficient], solver_state.coefficients[coefficient])
+                    << "IONUTCA coefficient " << coefficient << " must be the nav.ion_gps solver state";
+            }
         } else {
             ++explicit_gps_ion_count;
-            EXPECT_FALSE(supported) << "explicit RINEX4 GPS ION must not masquerade as legacy IONUTCA";
+            EXPECT_FALSE(supported) << "a GPS ION record other than the nav.ion_gps projection must not "
+                                       "masquerade as legacy IONUTCA";
             EXPECT_TRUE(message.empty());
         }
     }
 
-    EXPECT_GT(explicit_gps_ion_count, 0) << "real BRD400DLR fixture must contain explicit GPS ION records";
-    EXPECT_EQ(legacy_gps_ion_count, 0) << "BRD400DLR nav.ion_gps stays at the zero/fallback state";
+    EXPECT_EQ(legacy_gps_ion_count, 1) << "exactly the projected GPS LNAV record serializes as IONUTCA";
+    EXPECT_GT(explicit_gps_ion_count, 0) << "the fixture's GPS CNVX record must stay explicit";
     gnss_sim::destroy_rtklib_nav_store(store);
 }
 

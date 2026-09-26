@@ -254,6 +254,7 @@ namespace {
 struct CodeModelSelection {
     RtklibSatelliteState satellite_state;
     double geometric_range_m;
+    double range_rate_mps;
     RtklibBroadcastBiasData bias_data;
     double code_bias_m;
     BroadcastCodeBiasStatus code_bias_status;
@@ -277,9 +278,11 @@ bool finish_zero_noise_measurement(const SignalDefinition& signal, const Satelli
     result.glonass_fcn = code_model.bias_data.glonass_fcn;
     result.wavelength_m = wavelength_m;
     result.geometric_range_m = code_model.geometric_range_m;
-    result.range_rate_mps = geometry.range_rate_mps;
+    // Range, range rate, clock bias and clock drift all come from the one
+    // selected signal-family record (issue #181, items 2 and 3).
+    result.range_rate_mps = code_model.range_rate_mps;
     result.satellite_clock_bias_m = kSpeedOfLightMps * code_model.satellite_state.clock_bias_sec;
-    result.satellite_clock_drift_mps = kSpeedOfLightMps * geometry.satellite_state.clock_drift_sec_per_sec;
+    result.satellite_clock_drift_mps = kSpeedOfLightMps * code_model.satellite_state.clock_drift_sec_per_sec;
     result.broadcast_message_family = code_model.bias_data.message_family;
     for (int index = 0; index < 4; ++index) {
         result.tgd_sec[index] = code_model.bias_data.tgd_sec[index];
@@ -359,6 +362,7 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
     CodeModelSelection code_model{};
     code_model.satellite_state = geometry.satellite_state;
     code_model.geometric_range_m = geometry.geometric_range_m;
+    code_model.range_rate_mps = geometry.range_rate_mps;
     code_model.bias_data = bias_data;
     if (!signal_family_bias_available) {
         set_unavailable(&code_model.code_bias_m, &code_model.code_bias_status);
@@ -383,6 +387,8 @@ bool generate_zero_noise_measurement(const RtklibNavStore* nav_store, const Sate
                                                &code_model.satellite_state, error_message) ||
             !rtklib_geometric_distance(code_model.satellite_state.position_ecef_m, receiver.position_ecef_m,
                                        &code_model.geometric_range_m, code_line_of_sight_ecef) ||
+            !compute_range_rate(code_model.satellite_state, receiver, code_line_of_sight_ecef,
+                                &code_model.range_rate_mps) ||
             !rtklib_azimuth_elevation(receiver.position_ecef_m, code_line_of_sight_ecef, &code_azimuth_rad,
                                       &code_elevation_rad) ||
             !compute_atmosphere_correction(atmosphere.mode, nav_store, geometry.receive_time, tracker.signal_id,
@@ -412,6 +418,7 @@ bool generate_zero_noise_measurement_with_explicit_code_bias(
     CodeModelSelection code_model{};
     code_model.satellite_state = geometry.satellite_state;
     code_model.geometric_range_m = geometry.geometric_range_m;
+    code_model.range_rate_mps = geometry.range_rate_mps;
     code_model.bias_data.message_family = RtklibBroadcastMessageFamily::kUnknown;
     code_model.code_bias_m = code_bias_m;
     code_model.code_bias_status = BroadcastCodeBiasStatus::kApplied;

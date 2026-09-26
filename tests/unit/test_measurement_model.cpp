@@ -20,6 +20,10 @@ constexpr double kGalE1Hz = 1575.42e6;
 constexpr double kGalE5aHz = 1176.45e6;
 constexpr double kGalE5bHz = 1207.14e6;
 
+std::string brd4_nav_path() {
+    return std::string(GNSS_SIM_TEST_DATA_DIR) + "/brd400dlr_rinex4_acceptance_nav.rnx";
+}
+
 std::string mixed_nav_path() {
     return std::string(GNSS_SIM_TEST_DATA_DIR) + "/mixed_nav_2019.rnx";
 }
@@ -325,6 +329,77 @@ TEST(ZeroNoiseMeasurement, BroadcastHealthDoesNotInvalidateTrackedRawMeasurement
     EXPECT_TRUE(observation.pseudorange_valid);
     EXPECT_TRUE(observation.doppler_valid);
     EXPECT_TRUE(observation.adr_valid);
+}
+
+TEST(ZeroNoiseMeasurement, ClockDriftAndRangeRateComeFromTheSignalFamilyRecord) {
+    // Issue #181 items 2/3: G17 and J04 carry LNAV and CNAV records with
+    // different af1. Each signal's clock drift, range rate and Doppler must
+    // come from the record its own NAV family selects, the same record as its
+    // clock bias and range.
+    NavGuard nav{gnss_sim::create_rtklib_nav_store()};
+    ASSERT_NE(nav.store, nullptr);
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(nav.store, brd4_nav_path().c_str(), &error_message)) << error_message;
+    gnss_sim::ReceiverTruth receiver{};
+    ASSERT_TRUE(make_test_receiver(&receiver, &error_message)) << error_message;
+    gnss_sim::SimTime receive_time{};
+    ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2347, 437100.0, &receive_time));
+
+    for (const char* satellite_id : {"G17", "J04"}) {
+        int satellite_number = 0;
+        ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number(satellite_id, &satellite_number));
+        gnss_sim::SatelliteGeometry geometry{};
+        ASSERT_TRUE(gnss_sim::compute_satellite_geometry(nav.store, receiver, receive_time, satellite_number, -90.0,
+                                                         &geometry, &error_message))
+            << error_message;
+
+        const gnss_sim::SignalId signals[] = {
+            satellite_id[0] == 'G' ? gnss_sim::SignalId::kGpsL1Ca : gnss_sim::SignalId::kQzssL1Ca,
+            satellite_id[0] == 'G' ? gnss_sim::SignalId::kGpsL2C : gnss_sim::SignalId::kQzssL2C};
+        const gnss_sim::RtklibBroadcastMessageFamily families[] = {gnss_sim::RtklibBroadcastMessageFamily::kLegacy,
+                                                                   gnss_sim::RtklibBroadcastMessageFamily::kCnav};
+        double drift_mps[2]{};
+        for (int index = 0; index < 2; ++index) {
+            gnss_sim::SignalTracker tracker = tracking_tracker(signals[index], receive_time);
+            gnss_sim::AtmosphereCorrection atmosphere{};
+            atmosphere.mode = gnss_sim::AtmosphereMode::NONE;
+            gnss_sim::CarrierAmbiguityState ambiguity{};
+            gnss_sim::MeasurementObservation observation{};
+            ASSERT_TRUE(gnss_sim::generate_zero_noise_measurement(nav.store, geometry, receiver, tracker, atmosphere,
+                                                                  &ambiguity, &observation, &error_message))
+                << satellite_id << ' ' << error_message;
+            ASSERT_EQ(observation.broadcast_message_family, families[index]) << satellite_id;
+
+            int observation_code = 0;
+            int frequency_index = 0;
+            ASSERT_TRUE(
+                gnss_sim::signal_rtklib_observation_code(signal(signals[index]), &observation_code, &frequency_index));
+            gnss_sim::RtklibSatelliteState family_state{};
+            ASSERT_TRUE(gnss_sim::get_rtklib_signal_satellite_state(
+                nav.store, geometry.transmit_gps_week, geometry.transmit_sow_sec, satellite_number, observation_code,
+                families[index], &family_state, &error_message))
+                << error_message;
+            double range_m = 0.0;
+            double line_of_sight[3]{};
+            ASSERT_TRUE(gnss_sim::rtklib_geometric_distance(family_state.position_ecef_m, receiver.position_ecef_m,
+                                                            &range_m, line_of_sight));
+            double range_rate_mps = 0.0;
+            ASSERT_TRUE(gnss_sim::compute_range_rate(family_state, receiver, line_of_sight, &range_rate_mps));
+
+            EXPECT_DOUBLE_EQ(observation.satellite_clock_bias_m, kSpeedOfLightMps * family_state.clock_bias_sec);
+            EXPECT_DOUBLE_EQ(observation.satellite_clock_drift_mps,
+                             kSpeedOfLightMps * family_state.clock_drift_sec_per_sec);
+            EXPECT_DOUBLE_EQ(observation.geometric_range_m, range_m);
+            EXPECT_DOUBLE_EQ(observation.range_rate_mps, range_rate_mps);
+            EXPECT_NEAR(observation.doppler_hz,
+                        -(observation.range_rate_mps - observation.satellite_clock_drift_mps) /
+                            observation.wavelength_m,
+                        1.0e-12);
+            drift_mps[index] = observation.satellite_clock_drift_mps;
+        }
+        // The records differ, so a satellite-level drift would break one family.
+        EXPECT_GT(std::fabs(drift_mps[1] - drift_mps[0]), 1.0e-6) << satellite_id;
+    }
 }
 
 TEST(ZeroNoiseMeasurement, MultiFrequencySharesGeometryClockAndDiffersByWavelengthAndBias) {

@@ -21,6 +21,7 @@ constexpr int kGlonassMinFcn = -7;
 constexpr int kGlonassMaxFcn = 6;
 constexpr int kBeidouLegacyGeoPrnMax = 5;
 constexpr int kBeidouModernGeoPrnMin = 59;
+constexpr int kBeidouModernGeoPrnMax = 63;
 constexpr int kBeidouD2SignalTypeOffset = 4;
 
 void set_error(std::string* error_message, const char* message) {
@@ -97,7 +98,8 @@ bool satellite_fields(const SignalDefinition& definition, const MeasurementObser
 }
 
 bool beidou_geo_prn(int prn) {
-    return (prn >= 1 && prn <= kBeidouLegacyGeoPrnMax) || prn >= kBeidouModernGeoPrnMin;
+    return (prn >= 1 && prn <= kBeidouLegacyGeoPrnMax) ||
+           (prn >= kBeidouModernGeoPrnMin && prn <= kBeidouModernGeoPrnMax);
 }
 
 int novatel_oem7_signal_type(const SignalDefinition& definition, int range_prn) {

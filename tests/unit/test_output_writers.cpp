@@ -31,6 +31,16 @@ std::string ascii_body(const std::string& message) {
     return message.substr(semicolon + 1, star - semicolon - 1);
 }
 
+std::size_t count_occurrences(const std::string& text, const std::string& needle) {
+    std::size_t count = 0;
+    std::size_t offset = 0;
+    while ((offset = text.find(needle, offset)) != std::string::npos) {
+        ++count;
+        offset += needle.size();
+    }
+    return count;
+}
+
 gnss_sim::MeasurementObservation observation(const char* satellite_id, gnss_sim::SignalId signal_id, int glonass_fcn,
                                              double pseudorange_m, double adr_cycles, double doppler_hz,
                                              double cn0_dbhz, double lock_time_sec) {
@@ -81,6 +91,28 @@ TEST(NovatelRangeWriter, MultiConstellationRangeAIsByteStable) {
                        "194,0,24000000.000,0.500,-100000000.000000,0.050,-50.000,40.0,5.000,01c51c04,"
                        "19,0,22500000.250,0.500,-118000000.125000,0.050,25.500,43.3,6.750,00e41c04"
                        "*6d3dc9c0\r\n");
+}
+
+TEST(NovatelRangeWriter, BeidouGeoB1IAndB3IUseD2TrackingTypes) {
+    gnss_sim::MeasurementObservation observations[] = {
+        observation("C01", gnss_sim::SignalId::kBeidouB1I, 0, 22000001.0, -110000001.0, 10.0, 42.0, 5.0),
+        observation("C01", gnss_sim::SignalId::kBeidouB3I, 0, 22000002.0, -110000002.0, 11.0, 42.0, 5.0),
+        observation("C19", gnss_sim::SignalId::kBeidouB1I, 0, 22000003.0, -110000003.0, 12.0, 42.0, 5.0),
+        observation("C19", gnss_sim::SignalId::kBeidouB3I, 0, 22000004.0, -110000004.0, 13.0, 42.0, 5.0),
+        observation("C59", gnss_sim::SignalId::kBeidouB1I, 0, 22000005.0, -110000005.0, 14.0, 42.0, 5.0),
+        observation("C59", gnss_sim::SignalId::kBeidouB3I, 0, 22000006.0, -110000006.0, 15.0, 42.0, 5.0),
+    };
+
+    std::string message;
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::format_novatel_rangea(writer_time(), observations, 6, &message, &error_message))
+        << error_message;
+
+    const std::string body = ascii_body(message);
+    EXPECT_EQ(count_occurrences(body, ",00841c04"), 2U); // B1I D2: C01 and C59 GEO.
+    EXPECT_EQ(count_occurrences(body, ",00c41c04"), 2U); // B3I D2: C01 and C59 GEO.
+    EXPECT_EQ(count_occurrences(body, ",00041c04"), 1U); // B1I D1: C19 MEO.
+    EXPECT_EQ(count_occurrences(body, ",00441c04"), 1U); // B3I D1: C19 MEO.
 }
 
 TEST(NovatelRangeWriter, ReaSignalOffEmitsZeroObservationGoldenRecord) {

@@ -85,6 +85,18 @@ TEST(SignalDefinitions, FrozenMappingsMatchExpectedValuesAndRoundTrip) {
     }
 }
 
+TEST(SignalDefinitions, BeidouD2Oem7TypesResolveToLegacyCanonicalSignals) {
+    const auto* b1i = gnss_sim::find_signal_definition(gnss_sim::SignalId::kBeidouB1I);
+    const auto* b3i = gnss_sim::find_signal_definition(gnss_sim::SignalId::kBeidouB3I);
+    ASSERT_NE(b1i, nullptr);
+    ASSERT_NE(b3i, nullptr);
+
+    EXPECT_EQ(gnss_sim::find_signal_definition_by_oem7(gnss_sim::GnssConstellation::kBeidou, 4), b1i);
+    EXPECT_EQ(gnss_sim::find_signal_definition_by_oem7(gnss_sim::GnssConstellation::kBeidou, 6), b3i);
+    EXPECT_EQ(b1i->novatel_oem7_signal_type, 0);
+    EXPECT_EQ(b3i->novatel_oem7_signal_type, 2);
+}
+
 TEST(SignalDefinitions, GalileoE6UsesHasCodeBiasObservable) {
     const auto* e6 = gnss_sim::find_signal_definition(gnss_sim::SignalId::kGalileoE6);
     ASSERT_NE(e6, nullptr);

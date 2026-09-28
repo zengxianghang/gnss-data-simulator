@@ -19,6 +19,10 @@ constexpr double kPseudorangeSigmaM = 0.500;
 constexpr double kAdrSigmaCycles = 0.050;
 constexpr int kGlonassMinFcn = -7;
 constexpr int kGlonassMaxFcn = 6;
+constexpr int kBeidouLegacyGeoPrnMax = 5;
+constexpr int kBeidouModernGeoPrnMin = 59;
+constexpr int kBeidouModernGeoPrnMax = 63;
+constexpr int kBeidouD2SignalTypeOffset = 4;
 
 void set_error(std::string* error_message, const char* message) {
     if (error_message != nullptr) {
@@ -93,7 +97,23 @@ bool satellite_fields(const SignalDefinition& definition, const MeasurementObser
     return false;
 }
 
-unsigned int tracking_status(const SignalDefinition& definition, const MeasurementObservation& observation) {
+bool beidou_geo_prn(int prn) {
+    return (prn >= 1 && prn <= kBeidouLegacyGeoPrnMax) ||
+           (prn >= kBeidouModernGeoPrnMin && prn <= kBeidouModernGeoPrnMax);
+}
+
+int novatel_oem7_signal_type(const SignalDefinition& definition, int range_prn) {
+    if (definition.constellation == GnssConstellation::kBeidou && beidou_geo_prn(range_prn) &&
+        (definition.signal_id == SignalId::kBeidouB1I || definition.signal_id == SignalId::kBeidouB3I)) {
+        // OEM7 distinguishes legacy BeiDou D1 and D2 tracking types. BDS GEO
+        // satellites broadcast D2, while IGSO/MEO satellites broadcast D1.
+        return definition.novatel_oem7_signal_type + kBeidouD2SignalTypeOffset;
+    }
+    return definition.novatel_oem7_signal_type;
+}
+
+unsigned int tracking_status(const SignalDefinition& definition, const MeasurementObservation& observation,
+                             int oem7_signal_type) {
     unsigned int status = observation.adr_valid ? 4U : 7U;
     if (observation.adr_valid) {
         status |= 1U << 10U;
@@ -103,7 +123,7 @@ unsigned int tracking_status(const SignalDefinition& definition, const Measureme
         status |= 1U << 12U;
     }
     status |= (constellation_status_bits(definition.constellation) & 7U) << 16U;
-    status |= (static_cast<unsigned int>(definition.novatel_oem7_signal_type) & 0x1FU) << 21U;
+    status |= (static_cast<unsigned int>(oem7_signal_type) & 0x1FU) << 21U;
     return status;
 }
 
@@ -143,8 +163,7 @@ bool format_novatel_rangea(const SimTime& time, const MeasurementObservation* ob
     body << emitted.size();
     for (const MeasurementObservation* observation : emitted) {
         const SignalDefinition* definition = find_signal_definition(observation->signal_id);
-        if (definition == nullptr || definition->novatel_oem7_signal_type < 0 ||
-            definition->novatel_oem7_signal_type > 31 || !finite_observation(*observation)) {
+        if (definition == nullptr || !finite_observation(*observation)) {
             set_error(error_message, "RANGEA observation cannot be represented deterministically");
             return false;
         }
@@ -152,6 +171,11 @@ bool format_novatel_rangea(const SimTime& time, const MeasurementObservation* ob
         int glofreq = 0;
         if (!satellite_fields(*definition, *observation, &range_prn, &glofreq)) {
             set_error(error_message, "RANGEA satellite mapping is invalid");
+            return false;
+        }
+        const int oem7_signal_type = novatel_oem7_signal_type(*definition, range_prn);
+        if (oem7_signal_type < 0 || oem7_signal_type > 31) {
+            set_error(error_message, "RANGEA signal type cannot be represented deterministically");
             return false;
         }
 
@@ -167,7 +191,8 @@ bool format_novatel_rangea(const SimTime& time, const MeasurementObservation* ob
              << pseudorange_sigma_m << ',' << std::setprecision(6) << adr_cycles << ',' << std::setprecision(3)
              << adr_sigma_cycles << ',' << doppler_hz << ',' << std::setprecision(1) << observation->cn0_dbhz << ','
              << std::setprecision(3) << lock_time_sec << ',' << std::hex << std::nouppercase << std::setw(8)
-             << std::setfill('0') << tracking_status(*definition, *observation) << std::dec << std::setfill(' ');
+             << std::setfill('0') << tracking_status(*definition, *observation, oem7_signal_type) << std::dec
+             << std::setfill(' ');
     }
 
     if (!novatel_ascii::frame("RANGEA", time, body.str(), message)) {

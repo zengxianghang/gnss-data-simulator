@@ -15,6 +15,8 @@ constexpr double kGlonassG2BaseHz = 1246.0e6;
 constexpr double kGlonassG2StepHz = 0.4375e6;
 constexpr int kGlonassMinFcn = -7;
 constexpr int kGlonassMaxFcn = 6;
+constexpr int kBeidouB1ID2Oem7SignalType = 4;
+constexpr int kBeidouB3ID2Oem7SignalType = 6;
 
 constexpr CodeCorrelationProfile unsupported_correlation() {
     return {CodeCorrelationModel::kUnsupported, 0.0, 0.0, 0.0, 0.0, CompositeSubcarrierPhase::kNotApplicable};
@@ -164,6 +166,14 @@ const SignalDefinition* find_signal_definition_by_rinex(GnssConstellation conste
 }
 
 const SignalDefinition* find_signal_definition_by_oem7(GnssConstellation constellation, int novatel_oem7_signal_type) {
+    if (constellation == GnssConstellation::kBeidou) {
+        if (novatel_oem7_signal_type == kBeidouB1ID2Oem7SignalType) {
+            return find_signal_definition(SignalId::kBeidouB1I);
+        }
+        if (novatel_oem7_signal_type == kBeidouB3ID2Oem7SignalType) {
+            return find_signal_definition(SignalId::kBeidouB3I);
+        }
+    }
     for (const SignalDefinition& definition : kSignalDefinitions) {
         if (definition.constellation == constellation &&
             definition.novatel_oem7_signal_type == novatel_oem7_signal_type) {

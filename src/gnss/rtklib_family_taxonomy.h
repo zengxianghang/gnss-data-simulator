@@ -152,6 +152,66 @@ constexpr RtklibBroadcastMessageFamily rtklib_broadcast_message_family(NavMessag
     return RtklibBroadcastMessageFamily::kUnknown;
 }
 
+struct RtklibNavMessageFamilyProjection {
+    bool supported;
+    NavMessageFamily family;
+};
+
+// Preserve the reverse projection used by the simulator's NAV-delivery path.
+// Legacy/CNAV/CNAV2 are system-sensitive. The already-classified modern
+// Galileo/BeiDou/GLONASS families are intentionally projected without another
+// system check because that is the established simulator behavior. Tightening
+// those combinations is a separate semantic change, not part of this refactor.
+constexpr RtklibNavMessageFamilyProjection rtklib_nav_message_family_projection(int system,
+                                                                                RtklibBroadcastMessageFamily family) {
+    switch (family) {
+        case RtklibBroadcastMessageFamily::kLegacy:
+            if (system == SYS_GPS) {
+                return {true, NavMessageFamily::kGpsLnav};
+            }
+            if (system == SYS_QZS) {
+                return {true, NavMessageFamily::kQzssLnav};
+            }
+            if (system == SYS_CMP) {
+                return {true, NavMessageFamily::kBeidouD1D2};
+            }
+            break;
+        case RtklibBroadcastMessageFamily::kCnav:
+            if (system == SYS_GPS) {
+                return {true, NavMessageFamily::kGpsCnav};
+            }
+            if (system == SYS_QZS) {
+                return {true, NavMessageFamily::kQzssCnav};
+            }
+            break;
+        case RtklibBroadcastMessageFamily::kCnav2:
+            if (system == SYS_GPS) {
+                return {true, NavMessageFamily::kGpsCnav2};
+            }
+            if (system == SYS_QZS) {
+                return {true, NavMessageFamily::kQzssCnav2};
+            }
+            break;
+        case RtklibBroadcastMessageFamily::kGalileoInav:
+            return {true, NavMessageFamily::kGalileoInav};
+        case RtklibBroadcastMessageFamily::kGalileoFnav:
+            return {true, NavMessageFamily::kGalileoFnav};
+        case RtklibBroadcastMessageFamily::kBeidouBcnav1:
+            return {true, NavMessageFamily::kBeidouBcnav1};
+        case RtklibBroadcastMessageFamily::kBeidouBcnav2:
+            return {true, NavMessageFamily::kBeidouBcnav2};
+        case RtklibBroadcastMessageFamily::kBeidouBcnav3:
+            return {true, NavMessageFamily::kBeidouBcnav3};
+        case RtklibBroadcastMessageFamily::kGlonassFdma:
+            return {true, NavMessageFamily::kGlonassFdma};
+        case RtklibBroadcastMessageFamily::kGlonassL3Oc:
+            return {true, NavMessageFamily::kGlonassL3Oc};
+        case RtklibBroadcastMessageFamily::kUnknown:
+            break;
+    }
+    return {false, NavMessageFamily::kGpsLnav};
+}
+
 // Exhaust the current public simulator family enum at compile time. These
 // assertions are intentionally next to the mapping so adding/reassigning a
 // family cannot silently change the SPP/raw-position selection contract.
@@ -219,6 +279,48 @@ static_assert(rtklib_broadcast_message_family(NavMessageFamily::kBeidouBcnav2) =
               RtklibBroadcastMessageFamily::kBeidouBcnav2);
 static_assert(rtklib_broadcast_message_family(NavMessageFamily::kBeidouBcnav3) ==
               RtklibBroadcastMessageFamily::kBeidouBcnav3);
+
+static_assert(rtklib_nav_message_family_projection(SYS_GPS, RtklibBroadcastMessageFamily::kLegacy).supported);
+static_assert(rtklib_nav_message_family_projection(SYS_GPS, RtklibBroadcastMessageFamily::kLegacy).family ==
+              NavMessageFamily::kGpsLnav);
+static_assert(rtklib_nav_message_family_projection(SYS_QZS, RtklibBroadcastMessageFamily::kLegacy).family ==
+              NavMessageFamily::kQzssLnav);
+static_assert(rtklib_nav_message_family_projection(SYS_CMP, RtklibBroadcastMessageFamily::kLegacy).family ==
+              NavMessageFamily::kBeidouD1D2);
+static_assert(!rtklib_nav_message_family_projection(SYS_GAL, RtklibBroadcastMessageFamily::kLegacy).supported);
+static_assert(rtklib_nav_message_family_projection(SYS_GPS, RtklibBroadcastMessageFamily::kCnav).family ==
+              NavMessageFamily::kGpsCnav);
+static_assert(rtklib_nav_message_family_projection(SYS_QZS, RtklibBroadcastMessageFamily::kCnav).family ==
+              NavMessageFamily::kQzssCnav);
+static_assert(!rtklib_nav_message_family_projection(SYS_CMP, RtklibBroadcastMessageFamily::kCnav).supported);
+static_assert(rtklib_nav_message_family_projection(SYS_GPS, RtklibBroadcastMessageFamily::kCnav2).family ==
+              NavMessageFamily::kGpsCnav2);
+static_assert(rtklib_nav_message_family_projection(SYS_QZS, RtklibBroadcastMessageFamily::kCnav2).family ==
+              NavMessageFamily::kQzssCnav2);
+static_assert(!rtklib_nav_message_family_projection(SYS_CMP, RtklibBroadcastMessageFamily::kCnav2).supported);
+static_assert(rtklib_nav_message_family_projection(SYS_GAL, RtklibBroadcastMessageFamily::kGalileoInav).family ==
+              NavMessageFamily::kGalileoInav);
+static_assert(rtklib_nav_message_family_projection(SYS_GAL, RtklibBroadcastMessageFamily::kGalileoFnav).family ==
+              NavMessageFamily::kGalileoFnav);
+static_assert(rtklib_nav_message_family_projection(SYS_CMP, RtklibBroadcastMessageFamily::kBeidouBcnav1).family ==
+              NavMessageFamily::kBeidouBcnav1);
+static_assert(rtklib_nav_message_family_projection(SYS_CMP, RtklibBroadcastMessageFamily::kBeidouBcnav2).family ==
+              NavMessageFamily::kBeidouBcnav2);
+static_assert(rtklib_nav_message_family_projection(SYS_CMP, RtklibBroadcastMessageFamily::kBeidouBcnav3).family ==
+              NavMessageFamily::kBeidouBcnav3);
+static_assert(rtklib_nav_message_family_projection(SYS_GLO, RtklibBroadcastMessageFamily::kGlonassFdma).family ==
+              NavMessageFamily::kGlonassFdma);
+static_assert(rtklib_nav_message_family_projection(SYS_GLO, RtklibBroadcastMessageFamily::kGlonassL3Oc).family ==
+              NavMessageFamily::kGlonassL3Oc);
+static_assert(!rtklib_nav_message_family_projection(SYS_GPS, RtklibBroadcastMessageFamily::kUnknown).supported);
+// Freeze the current Keplerian reverse-projection asymmetry: modern family
+// enums are already classified and are not revalidated against eph.system.
+static_assert(rtklib_nav_message_family_projection(SYS_GPS, RtklibBroadcastMessageFamily::kGalileoInav).family ==
+              NavMessageFamily::kGalileoInav);
+static_assert(rtklib_nav_message_family_projection(SYS_GPS, RtklibBroadcastMessageFamily::kBeidouBcnav1).family ==
+              NavMessageFamily::kBeidouBcnav1);
+static_assert(rtklib_nav_message_family_projection(SYS_GPS, RtklibBroadcastMessageFamily::kGlonassFdma).family ==
+              NavMessageFamily::kGlonassFdma);
 
 } // namespace gnss_sim
 

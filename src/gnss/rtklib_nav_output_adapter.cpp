@@ -1,4 +1,5 @@
 #include "gnss/nav_output_record.h"
+#include "gnss/rtklib_family_taxonomy.h"
 
 #include <cmath>
 #include <cstring>
@@ -40,29 +41,11 @@ NavOutputSystem output_system(int system) {
 }
 
 RtklibBroadcastMessageFamily message_family(int system, int message_type) {
-    if (system == SYS_GLO) {
-        return message_type == NAV_L3OC ? RtklibBroadcastMessageFamily::kGlonassL3Oc
-                                        : RtklibBroadcastMessageFamily::kGlonassFdma;
+    const RtklibBroadcastMessageFamily explicit_family = rtklib_message_type_family(system, message_type);
+    if (explicit_family != RtklibBroadcastMessageFamily::kUnknown) {
+        return explicit_family;
     }
-    switch (message_type) {
-        case NAV_CNAV:
-            return RtklibBroadcastMessageFamily::kCnav;
-        case NAV_CNV1:
-            return RtklibBroadcastMessageFamily::kBeidouBcnav1;
-        case NAV_CNV2:
-            if (system == SYS_CMP) {
-                return RtklibBroadcastMessageFamily::kBeidouBcnav2;
-            }
-            return RtklibBroadcastMessageFamily::kCnav2;
-        case NAV_CNV3:
-            return RtklibBroadcastMessageFamily::kBeidouBcnav3;
-        case NAV_INAV:
-            return RtklibBroadcastMessageFamily::kGalileoInav;
-        case NAV_FNAV:
-            return RtklibBroadcastMessageFamily::kGalileoFnav;
-        default:
-            return RtklibBroadcastMessageFamily::kLegacy;
-    }
+    return system == SYS_GLO ? RtklibBroadcastMessageFamily::kGlonassFdma : RtklibBroadcastMessageFamily::kLegacy;
 }
 
 bool time_week_sow(gtime_t time, int* week, double* sow_sec) {

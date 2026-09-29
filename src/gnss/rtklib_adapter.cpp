@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <new>
 #include <utility>
@@ -14,6 +15,7 @@
 extern "C" {
 #include <rtklib.h>
 #include <rtklib_obs_ext.h>
+#include <rtklib_shared_api.h>
 #include <rtklib_signal_bias_ext.h>
 }
 namespace gnss_sim {
@@ -463,11 +465,17 @@ bool rtklib_satellite_id_to_number(const char* satellite_id, int* satellite_numb
     if (satellite_id == nullptr || satellite_number == nullptr) {
         return false;
     }
-    const int satellite = satid2no(satellite_id);
-    if (satellite <= 0) {
+
+    uint32_t system = 0;
+    uint32_t prn = 0;
+    uint32_t shared_satellite_number = 0;
+    const int status = rtklib_shared_satellite_from_id(satellite_id, &system, &prn, &shared_satellite_number);
+    if (status != RTKLIB_SHARED_OK || shared_satellite_number == 0 ||
+        shared_satellite_number > static_cast<uint32_t>((std::numeric_limits<int>::max)())) {
         return false;
     }
-    *satellite_number = satellite;
+
+    *satellite_number = static_cast<int>(shared_satellite_number);
     return true;
 }
 

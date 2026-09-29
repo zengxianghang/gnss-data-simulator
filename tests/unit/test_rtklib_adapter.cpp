@@ -90,10 +90,27 @@ TEST(RtklibAdapterMetadata, RecordedRtklibCommitIsTheSubmodulePin) {
 TEST_F(RtklibAdapterTest, SatelliteIdMappingCoversFrozenConstellations) {
     const char* const satellite_ids[] = {"G01", "R26", "E01", "C01", "J01"};
     for (const char* satellite_id : satellite_ids) {
+        const int legacy_satellite_number = satid2no(satellite_id);
+        ASSERT_GT(legacy_satellite_number, 0) << satellite_id;
+
         int satellite_number = 0;
-        EXPECT_TRUE(gnss_sim::rtklib_satellite_id_to_number(satellite_id, &satellite_number));
-        EXPECT_GT(satellite_number, 0);
+        ASSERT_TRUE(gnss_sim::rtklib_satellite_id_to_number(satellite_id, &satellite_number)) << satellite_id;
+        EXPECT_EQ(satellite_number, legacy_satellite_number) << satellite_id;
     }
+}
+
+TEST(RtklibAdapterMetadata, SatelliteIdMappingFailuresPreserveOutput) {
+    int satellite_number = 12345;
+    EXPECT_FALSE(gnss_sim::rtklib_satellite_id_to_number(nullptr, &satellite_number));
+    EXPECT_EQ(satellite_number, 12345);
+
+    EXPECT_FALSE(gnss_sim::rtklib_satellite_id_to_number("X01", &satellite_number));
+    EXPECT_EQ(satellite_number, 12345);
+
+    EXPECT_FALSE(gnss_sim::rtklib_satellite_id_to_number("G00", &satellite_number));
+    EXPECT_EQ(satellite_number, 12345);
+
+    EXPECT_FALSE(gnss_sim::rtklib_satellite_id_to_number("G01", nullptr));
 }
 
 TEST_F(RtklibAdapterTest, BroadcastSatelliteStateMatchesDirectRtklibReference) {

@@ -471,7 +471,7 @@ bool rtklib_satellite_id_to_number(const char* satellite_id, int* satellite_numb
     uint32_t shared_satellite_number = 0;
     const int status = rtklib_shared_satellite_from_id(satellite_id, &system, &prn, &shared_satellite_number);
     if (status != RTKLIB_SHARED_OK || shared_satellite_number == 0 ||
-        shared_satellite_number > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+        shared_satellite_number > static_cast<uint32_t>((std::numeric_limits<int>::max)())) {
         return false;
     }
 

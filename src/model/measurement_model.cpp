@@ -1,5 +1,6 @@
 #include "model/measurement_model.h"
 
+#include "gnss/rtklib_family_taxonomy.h"
 #include "gnss_sim/sim_time.h"
 
 #include <cmath>
@@ -37,35 +38,7 @@ bool family_is_beidou_modern(RtklibBroadcastMessageFamily family) {
 }
 
 RtklibBroadcastMessageFamily requested_bias_family(NavMessageFamily family) {
-    switch (family) {
-        case NavMessageFamily::kGpsLnav:
-        case NavMessageFamily::kQzssLnav:
-        case NavMessageFamily::kBeidouD1D2:
-            return RtklibBroadcastMessageFamily::kLegacy;
-        case NavMessageFamily::kGpsCnav:
-        case NavMessageFamily::kQzssCnav:
-            return RtklibBroadcastMessageFamily::kCnav;
-        case NavMessageFamily::kGpsCnav2:
-        case NavMessageFamily::kQzssCnav2:
-            return RtklibBroadcastMessageFamily::kCnav2;
-        case NavMessageFamily::kGlonassFdma:
-            return RtklibBroadcastMessageFamily::kGlonassFdma;
-        case NavMessageFamily::kGlonassL3Oc:
-            return RtklibBroadcastMessageFamily::kGlonassL3Oc;
-        case NavMessageFamily::kGalileoInav:
-            return RtklibBroadcastMessageFamily::kGalileoInav;
-        case NavMessageFamily::kGalileoFnav:
-            return RtklibBroadcastMessageFamily::kGalileoFnav;
-        case NavMessageFamily::kBeidouBcnav1:
-            return RtklibBroadcastMessageFamily::kBeidouBcnav1;
-        case NavMessageFamily::kBeidouBcnav2:
-            return RtklibBroadcastMessageFamily::kBeidouBcnav2;
-        case NavMessageFamily::kBeidouBcnav3:
-            return RtklibBroadcastMessageFamily::kBeidouBcnav3;
-        case NavMessageFamily::kGalileoCnav:
-            return RtklibBroadcastMessageFamily::kUnknown;
-    }
-    return RtklibBroadcastMessageFamily::kUnknown;
+    return rtklib_broadcast_message_family(family);
 }
 
 double frequency_ratio_squared(double reference_frequency_hz, double signal_frequency_hz) {

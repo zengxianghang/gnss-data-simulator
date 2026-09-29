@@ -6,6 +6,7 @@
 #include "gnss/nav_output_record.h"
 #include "gnss/navigation_state.h"
 #include "gnss/rtklib_adapter.h"
+#include "gnss/rtklib_family_taxonomy.h"
 #include "gnss/satellite_engine.h"
 #include "gnss/signal_definitions.h"
 #include "gnss_sim/sim_time.h"
@@ -181,86 +182,49 @@ bool constellation_from_satellite(int satellite_number, GnssConstellation* const
     }
 }
 
+int rtklib_system_from_nav_output_system(NavOutputSystem system) {
+    switch (system) {
+        case NavOutputSystem::kGps:
+            return SYS_GPS;
+        case NavOutputSystem::kGlonass:
+            return SYS_GLO;
+        case NavOutputSystem::kGalileo:
+            return SYS_GAL;
+        case NavOutputSystem::kBeidou:
+            return SYS_CMP;
+        case NavOutputSystem::kQzss:
+            return SYS_QZS;
+        case NavOutputSystem::kUnknown:
+        case NavOutputSystem::kNavic:
+            return 0;
+    }
+    return 0;
+}
+
 bool nav_family_from_record(const NavOutputRecord& record, NavMessageFamily* family) {
     if (family == nullptr) {
         return false;
     }
+
+    RtklibNavMessageFamilyProjection projection{};
     if (record.kind == RtklibNavRecordKind::kGlonassEphemeris) {
-        if (record.glonass.message_family == RtklibBroadcastMessageFamily::kGlonassL3Oc) {
-            *family = NavMessageFamily::kGlonassL3Oc;
-            return true;
+        if (record.glonass.message_family != RtklibBroadcastMessageFamily::kGlonassFdma &&
+            record.glonass.message_family != RtklibBroadcastMessageFamily::kGlonassL3Oc) {
+            return false;
         }
-        if (record.glonass.message_family == RtklibBroadcastMessageFamily::kGlonassFdma) {
-            *family = NavMessageFamily::kGlonassFdma;
-            return true;
-        }
-        return false;
-    }
-    if (record.kind != RtklibNavRecordKind::kEphemeris) {
+        projection = rtklib_nav_message_family_projection(SYS_GLO, record.glonass.message_family);
+    } else if (record.kind == RtklibNavRecordKind::kEphemeris) {
+        projection = rtklib_nav_message_family_projection(rtklib_system_from_nav_output_system(record.ephemeris.system),
+                                                          record.ephemeris.message_family);
+    } else {
         return false;
     }
 
-    const KeplerianNavOutputData& eph = record.ephemeris;
-    switch (eph.message_family) {
-        case RtklibBroadcastMessageFamily::kLegacy:
-            if (eph.system == NavOutputSystem::kGps) {
-                *family = NavMessageFamily::kGpsLnav;
-                return true;
-            }
-            if (eph.system == NavOutputSystem::kQzss) {
-                *family = NavMessageFamily::kQzssLnav;
-                return true;
-            }
-            if (eph.system == NavOutputSystem::kBeidou) {
-                *family = NavMessageFamily::kBeidouD1D2;
-                return true;
-            }
-            return false;
-        case RtklibBroadcastMessageFamily::kCnav:
-            if (eph.system == NavOutputSystem::kGps) {
-                *family = NavMessageFamily::kGpsCnav;
-                return true;
-            }
-            if (eph.system == NavOutputSystem::kQzss) {
-                *family = NavMessageFamily::kQzssCnav;
-                return true;
-            }
-            return false;
-        case RtklibBroadcastMessageFamily::kCnav2:
-            if (eph.system == NavOutputSystem::kGps) {
-                *family = NavMessageFamily::kGpsCnav2;
-                return true;
-            }
-            if (eph.system == NavOutputSystem::kQzss) {
-                *family = NavMessageFamily::kQzssCnav2;
-                return true;
-            }
-            return false;
-        case RtklibBroadcastMessageFamily::kGalileoInav:
-            *family = NavMessageFamily::kGalileoInav;
-            return true;
-        case RtklibBroadcastMessageFamily::kGalileoFnav:
-            *family = NavMessageFamily::kGalileoFnav;
-            return true;
-        case RtklibBroadcastMessageFamily::kBeidouBcnav1:
-            *family = NavMessageFamily::kBeidouBcnav1;
-            return true;
-        case RtklibBroadcastMessageFamily::kBeidouBcnav2:
-            *family = NavMessageFamily::kBeidouBcnav2;
-            return true;
-        case RtklibBroadcastMessageFamily::kBeidouBcnav3:
-            *family = NavMessageFamily::kBeidouBcnav3;
-            return true;
-        case RtklibBroadcastMessageFamily::kGlonassFdma:
-            *family = NavMessageFamily::kGlonassFdma;
-            return true;
-        case RtklibBroadcastMessageFamily::kGlonassL3Oc:
-            *family = NavMessageFamily::kGlonassL3Oc;
-            return true;
-        case RtklibBroadcastMessageFamily::kUnknown:
-            return false;
+    if (!projection.supported) {
+        return false;
     }
-    return false;
+    *family = projection.family;
+    return true;
 }
 
 bool build_truth_schedule(const RtklibNavStore* truth_nav, std::vector<TruthScheduleEntry>* schedule,

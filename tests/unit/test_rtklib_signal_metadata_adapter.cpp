@@ -78,8 +78,8 @@ TEST(RtklibSignalMetadataAdapter, FailuresPreserveOutput) {
     EXPECT_FALSE(gnss_sim::rtklib_signal_metadata(gnss_sim::RtklibSignalSystem::kGlonass, 1, "1C", 7, &metadata));
     EXPECT_EQ(metadata.observation_code, sentinel.observation_code);
 
-    EXPECT_FALSE(gnss_sim::rtklib_signal_metadata(static_cast<gnss_sim::RtklibSignalSystem>(99), 1, "1C", 0,
-                                                  &metadata));
+    EXPECT_FALSE(
+        gnss_sim::rtklib_signal_metadata(static_cast<gnss_sim::RtklibSignalSystem>(99), 1, "1C", 0, &metadata));
     EXPECT_EQ(metadata.observation_code, sentinel.observation_code);
 
     EXPECT_FALSE(gnss_sim::rtklib_signal_metadata(gnss_sim::RtklibSignalSystem::kGps, 1, nullptr, 0, &metadata));

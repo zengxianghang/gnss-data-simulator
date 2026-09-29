@@ -45,8 +45,7 @@ RtklibBroadcastMessageFamily message_family(int system, int message_type) {
     if (explicit_family != RtklibBroadcastMessageFamily::kUnknown) {
         return explicit_family;
     }
-    return system == SYS_GLO ? RtklibBroadcastMessageFamily::kGlonassFdma
-                             : RtklibBroadcastMessageFamily::kLegacy;
+    return system == SYS_GLO ? RtklibBroadcastMessageFamily::kGlonassFdma : RtklibBroadcastMessageFamily::kLegacy;
 }
 
 bool time_week_sow(gtime_t time, int* week, double* sow_sec) {

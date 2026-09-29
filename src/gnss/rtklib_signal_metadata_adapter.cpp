@@ -36,8 +36,7 @@ bool rtklib_signal_metadata(RtklibSignalSystem system, int prn, const char* rine
     if (prn <= 0 || rinex_signal_code == nullptr || metadata == nullptr) {
         return false;
     }
-    if (system == RtklibSignalSystem::kGlonass &&
-        (glonass_fcn < kGlonassMinFcn || glonass_fcn > kGlonassMaxFcn)) {
+    if (system == RtklibSignalSystem::kGlonass && (glonass_fcn < kGlonassMinFcn || glonass_fcn > kGlonassMaxFcn)) {
         return false;
     }
 
@@ -49,9 +48,8 @@ bool rtklib_signal_metadata(RtklibSignalSystem system, int prn, const char* rine
     rtklib_shared_signal_result_t shared{};
     shared.abi_version = RTKLIB_SHARED_ABI_VERSION;
     shared.struct_size = static_cast<uint32_t>(sizeof(shared));
-    const int32_t shared_fcn = system == RtklibSignalSystem::kGlonass
-                                   ? static_cast<int32_t>(glonass_fcn)
-                                   : RTKLIB_SHARED_GLO_FCN_UNKNOWN;
+    const int32_t shared_fcn =
+        system == RtklibSignalSystem::kGlonass ? static_cast<int32_t>(glonass_fcn) : RTKLIB_SHARED_GLO_FCN_UNKNOWN;
     const int status = rtklib_shared_signal_query(system_value, static_cast<uint32_t>(prn), rinex_signal_code,
                                                   shared_fcn, nullptr, &shared);
     if (status != RTKLIB_SHARED_OK || shared.rtklib_code == 0 || shared.frequency_index < 0 ||

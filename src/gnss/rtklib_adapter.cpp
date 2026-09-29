@@ -1,5 +1,7 @@
 #include "gnss/rtklib_adapter.h"
 
+#include "gnss/rtklib_family_taxonomy.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -549,45 +551,7 @@ bool get_rtklib_signal_satellite_state(const RtklibNavStore* store, int gps_week
     }
 
     const int system = satsys(satellite_number, nullptr);
-    int required_message_mask = 0;
-    switch (requested_message_family) {
-        case RtklibBroadcastMessageFamily::kLegacy:
-            if (system == SYS_GPS || system == SYS_QZS) {
-                required_message_mask = NAV_LNAV;
-            } else if (system == SYS_CMP) {
-                required_message_mask = NAV_D1 | NAV_D2 | NAV_D1D2;
-            }
-            break;
-        case RtklibBroadcastMessageFamily::kCnav:
-            required_message_mask = NAV_CNAV;
-            break;
-        case RtklibBroadcastMessageFamily::kCnav2:
-            required_message_mask = NAV_CNV2;
-            break;
-        case RtklibBroadcastMessageFamily::kGalileoInav:
-            required_message_mask = NAV_INAV;
-            break;
-        case RtklibBroadcastMessageFamily::kGalileoFnav:
-            required_message_mask = NAV_FNAV;
-            break;
-        case RtklibBroadcastMessageFamily::kBeidouBcnav1:
-            required_message_mask = NAV_CNV1;
-            break;
-        case RtklibBroadcastMessageFamily::kBeidouBcnav2:
-            required_message_mask = NAV_CNV2;
-            break;
-        case RtklibBroadcastMessageFamily::kBeidouBcnav3:
-            required_message_mask = NAV_CNV3;
-            break;
-        case RtklibBroadcastMessageFamily::kGlonassFdma:
-            required_message_mask = NAV_FDMA;
-            break;
-        case RtklibBroadcastMessageFamily::kGlonassL3Oc:
-            required_message_mask = NAV_L3OC;
-            break;
-        case RtklibBroadcastMessageFamily::kUnknown:
-            break;
-    }
+    const int required_message_mask = rtklib_required_nav_message_mask(system, requested_message_family);
     if (required_message_mask == 0) {
         set_error(error_message, "unsupported signal NAV family for satellite state");
         return false;

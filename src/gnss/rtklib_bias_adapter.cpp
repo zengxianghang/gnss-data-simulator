@@ -66,13 +66,7 @@ const eph_t* select_ephemeris(const nav_t& nav, gtime_t time, int satellite_numb
 
 RtklibBroadcastMessageFamily glonass_message_family(const geph_t& geph) {
     const int message_type = geph.hdr.msg_type != 0 ? geph.hdr.msg_type : NAV_FDMA;
-    if (message_type == NAV_L3OC) {
-        return RtklibBroadcastMessageFamily::kGlonassL3Oc;
-    }
-    if (message_type == NAV_FDMA) {
-        return RtklibBroadcastMessageFamily::kGlonassFdma;
-    }
-    return RtklibBroadcastMessageFamily::kUnknown;
+    return rtklib_explicit_message_family_for_system(SYS_GLO, message_type);
 }
 
 const geph_t* select_glonass_ephemeris(const nav_t& nav, gtime_t time, int satellite_number,
@@ -101,14 +95,12 @@ const geph_t* select_glonass_ephemeris(const nav_t& nav, gtime_t time, int satel
 }
 
 RtklibBroadcastMessageFamily message_family(const eph_t& eph, int system) {
-    const int message_type = eph.hdr.msg_type;
+    const RtklibBroadcastMessageFamily explicit_family =
+        rtklib_explicit_message_family_for_system(system, eph.hdr.msg_type);
+    if (explicit_family != RtklibBroadcastMessageFamily::kUnknown) {
+        return explicit_family;
+    }
     if (system == SYS_GAL) {
-        if (message_type == NAV_INAV) {
-            return RtklibBroadcastMessageFamily::kGalileoInav;
-        }
-        if (message_type == NAV_FNAV) {
-            return RtklibBroadcastMessageFamily::kGalileoFnav;
-        }
         // RINEX 3 stores Galileo message/clock source in eph.code. Bit 8
         // identifies E5a/E1 (F/NAV) clock data; bit 9 identifies E5b/E1
         // (I/NAV) clock data. Prefer the clock-source bits over lower signal
@@ -127,25 +119,7 @@ RtklibBroadcastMessageFamily message_family(const eph_t& eph, int system) {
         }
         return RtklibBroadcastMessageFamily::kUnknown;
     }
-    if (system == SYS_CMP) {
-        if (message_type == NAV_CNV1) {
-            return RtklibBroadcastMessageFamily::kBeidouBcnav1;
-        }
-        if (message_type == NAV_CNV2) {
-            return RtklibBroadcastMessageFamily::kBeidouBcnav2;
-        }
-        if (message_type == NAV_CNV3) {
-            return RtklibBroadcastMessageFamily::kBeidouBcnav3;
-        }
-        return RtklibBroadcastMessageFamily::kLegacy;
-    }
-    if (system == SYS_GPS || system == SYS_QZS) {
-        if (message_type == NAV_CNAV) {
-            return RtklibBroadcastMessageFamily::kCnav;
-        }
-        if (message_type == NAV_CNV2) {
-            return RtklibBroadcastMessageFamily::kCnav2;
-        }
+    if (system == SYS_CMP || system == SYS_GPS || system == SYS_QZS) {
         return RtklibBroadcastMessageFamily::kLegacy;
     }
     return RtklibBroadcastMessageFamily::kUnknown;

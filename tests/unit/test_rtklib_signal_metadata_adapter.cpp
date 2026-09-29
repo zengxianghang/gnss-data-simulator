@@ -73,7 +73,9 @@ TEST(RtklibSignalMetadataAdapter, FailuresPreserveOutput) {
     EXPECT_FALSE(gnss_sim::rtklib_signal_metadata(gnss_sim::RtklibSignalSystem::kGps, 1, "ZZ", 0, &metadata));
     EXPECT_EQ(metadata.observation_code, sentinel.observation_code);
 
-    EXPECT_FALSE(gnss_sim::rtklib_signal_metadata(gnss_sim::RtklibSignalSystem::kGlonass, 1, "1C", 14, &metadata));
+    // The pinned shared API accepts a wider GLO FCN range, but the simulator's
+    // established carrier model is -7..+6. Preserve that contract here.
+    EXPECT_FALSE(gnss_sim::rtklib_signal_metadata(gnss_sim::RtklibSignalSystem::kGlonass, 1, "1C", 7, &metadata));
     EXPECT_EQ(metadata.observation_code, sentinel.observation_code);
 
     EXPECT_FALSE(gnss_sim::rtklib_signal_metadata(static_cast<gnss_sim::RtklibSignalSystem>(99), 1, "1C", 0,

@@ -1,4 +1,5 @@
 #include "gnss/rtklib_adapter.h"
+#include "gnss/rtklib_family_taxonomy.h"
 
 #include <cmath>
 #include <cstdio>
@@ -68,38 +69,6 @@ unsigned char snr_quarter_dbhz(double cn0_dbhz) {
     return static_cast<unsigned char>(scaled + 0.5);
 }
 
-int required_message_mask(int system, RtklibBroadcastMessageFamily family) {
-    switch (family) {
-        case RtklibBroadcastMessageFamily::kLegacy:
-            if (system == SYS_GPS || system == SYS_QZS)
-                return NAV_LNAV;
-            if (system == SYS_CMP)
-                return NAV_D1 | NAV_D2 | NAV_D1D2;
-            break;
-        case RtklibBroadcastMessageFamily::kCnav:
-            return NAV_CNAV;
-        case RtklibBroadcastMessageFamily::kCnav2:
-            return NAV_CNV2;
-        case RtklibBroadcastMessageFamily::kGalileoInav:
-            return NAV_INAV;
-        case RtklibBroadcastMessageFamily::kGalileoFnav:
-            return NAV_FNAV;
-        case RtklibBroadcastMessageFamily::kBeidouBcnav1:
-            return NAV_CNV1;
-        case RtklibBroadcastMessageFamily::kBeidouBcnav2:
-            return NAV_CNV2;
-        case RtklibBroadcastMessageFamily::kBeidouBcnav3:
-            return NAV_CNV3;
-        case RtklibBroadcastMessageFamily::kGlonassFdma:
-            return NAV_FDMA;
-        case RtklibBroadcastMessageFamily::kGlonassL3Oc:
-            return NAV_L3OC;
-        case RtklibBroadcastMessageFamily::kUnknown:
-            break;
-    }
-    return 0;
-}
-
 bool append_solution_ephemeris(const nav_t& source_nav, gtime_t time, const RtklibSolutionObservation& observation,
                                nav_t* solver_nav, eph_t solver_eph[MAXOBS], geph_t solver_geph[MAXOBS]) {
     if (solver_nav == nullptr || observation.satellite_number <= 0 || observation.observation_code <= 0 ||
@@ -107,7 +76,7 @@ bool append_solution_ephemeris(const nav_t& source_nav, gtime_t time, const Rtkl
         return false;
     }
     const int system = satsys(observation.satellite_number, nullptr);
-    const int mask = required_message_mask(system, observation.message_family);
+    const int mask = rtklib_required_nav_message_mask(system, observation.message_family);
     if (mask == 0)
         return false;
 
@@ -188,7 +157,7 @@ bool solver_pseudorange_m(const nav_t& nav, gtime_t time, const RtklibSolutionOb
     } else {
         double rtklib_code_bias_m = 0.0;
         const int system = satsys(observation.satellite_number, nullptr);
-        const int mask = required_message_mask(system, observation.message_family);
+        const int mask = rtklib_required_nav_message_mask(system, observation.message_family);
         if (mask == 0)
             return false;
         const int status = rtklib_signal_code_bias_ext(time, observation.satellite_number,

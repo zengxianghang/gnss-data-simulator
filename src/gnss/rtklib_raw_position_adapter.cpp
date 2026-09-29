@@ -1,4 +1,5 @@
 #include "gnss/rtklib_adapter.h"
+#include "gnss/rtklib_family_taxonomy.h"
 
 #include <cmath>
 #include <cstdio>
@@ -23,40 +24,6 @@ void set_error(std::string* error_message, const char* message) {
 
 bool valid_time(int gps_week, double sow_sec) {
     return gps_week >= 0 && std::isfinite(sow_sec) && sow_sec >= 0.0 && sow_sec < 604800.0;
-}
-
-int required_message_mask(int system, RtklibBroadcastMessageFamily family) {
-    switch (family) {
-        case RtklibBroadcastMessageFamily::kLegacy:
-            if (system == SYS_GPS || system == SYS_QZS) {
-                return NAV_LNAV;
-            }
-            if (system == SYS_CMP) {
-                return NAV_D1 | NAV_D2 | NAV_D1D2;
-            }
-            break;
-        case RtklibBroadcastMessageFamily::kCnav:
-            return NAV_CNAV;
-        case RtklibBroadcastMessageFamily::kCnav2:
-            return NAV_CNV2;
-        case RtklibBroadcastMessageFamily::kGalileoInav:
-            return NAV_INAV;
-        case RtklibBroadcastMessageFamily::kGalileoFnav:
-            return NAV_FNAV;
-        case RtklibBroadcastMessageFamily::kBeidouBcnav1:
-            return NAV_CNV1;
-        case RtklibBroadcastMessageFamily::kBeidouBcnav2:
-            return NAV_CNV2;
-        case RtklibBroadcastMessageFamily::kBeidouBcnav3:
-            return NAV_CNV3;
-        case RtklibBroadcastMessageFamily::kGlonassFdma:
-            return NAV_FDMA;
-        case RtklibBroadcastMessageFamily::kGlonassL3Oc:
-            return NAV_L3OC;
-        case RtklibBroadcastMessageFamily::kUnknown:
-            break;
-    }
-    return 0;
 }
 
 int signal_bias_status(const RtklibNavStore* nav, gtime_t epoch_time, const RtklibRawCodeObservation& source,
@@ -84,7 +51,7 @@ bool validate_raw_observation(const RtklibRawCodeObservation& source, int index,
     }
 
     const int system = satsys(source.satellite_number, nullptr);
-    *message_mask = required_message_mask(system, source.message_family);
+    *message_mask = rtklib_required_nav_message_mask(system, source.message_family);
     if (*message_mask == 0) {
         if (error_message != nullptr) {
             char message[192]{};

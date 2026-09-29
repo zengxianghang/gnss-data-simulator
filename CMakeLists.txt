@@ -158,6 +158,7 @@ add_library(gnss_sim_core STATIC
     src/gnss/rtklib_nav_output_adapter.cpp
     src/gnss/rtklib_output_adapter.cpp
     src/gnss/rtklib_raw_position_adapter.cpp
+    src/gnss/rtklib_signal_metadata_adapter.cpp
     src/gnss/rtklib_solution_adapter.cpp
     src/gnss/satellite_engine.cpp
     src/gnss/signal_definitions.cpp
@@ -324,6 +325,7 @@ if(BUILD_TESTING)
         tests/unit/test_rinex4_brd400.cpp
         tests/unit/test_rinex_obs_stream.cpp
         tests/unit/test_rtklib_adapter.cpp
+        tests/unit/test_rtklib_signal_metadata_adapter.cpp
         tests/unit/test_satellite_engine.cpp
         tests/unit/test_scenario_engine.cpp
         tests/unit/test_signal_correlation_metadata.cpp

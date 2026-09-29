@@ -10,6 +10,9 @@ extern "C" {
 namespace gnss_sim {
 namespace {
 
+constexpr int kGlonassMinFcn = -7;
+constexpr int kGlonassMaxFcn = 6;
+
 uint32_t shared_system(RtklibSignalSystem system) {
     switch (system) {
         case RtklibSignalSystem::kGps:
@@ -31,6 +34,10 @@ uint32_t shared_system(RtklibSignalSystem system) {
 bool rtklib_signal_metadata(RtklibSignalSystem system, int prn, const char* rinex_signal_code, int glonass_fcn,
                             RtklibSignalMetadata* metadata) {
     if (prn <= 0 || rinex_signal_code == nullptr || metadata == nullptr) {
+        return false;
+    }
+    if (system == RtklibSignalSystem::kGlonass &&
+        (glonass_fcn < kGlonassMinFcn || glonass_fcn > kGlonassMaxFcn)) {
         return false;
     }
 

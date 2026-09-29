@@ -2,6 +2,7 @@
 #define GNSS_SIM_SRC_GNSS_RTKLIB_FAMILY_TAXONOMY_H_
 
 #include "gnss/rtklib_adapter.h"
+#include "gnss/signal_definitions.h"
 
 extern "C" {
 #include <rtklib.h>
@@ -116,6 +117,41 @@ constexpr RtklibBroadcastMessageFamily rtklib_explicit_message_family_for_system
     return rtklib_message_family_matches_system(system, family) ? family : RtklibBroadcastMessageFamily::kUnknown;
 }
 
+// Project the simulator-owned navigation family into the generic RTKLIB
+// broadcast-family taxonomy. Keep unsupported Galileo CNAV explicit: the
+// current RTKLIB broadcast-family contract has no corresponding family.
+constexpr RtklibBroadcastMessageFamily rtklib_broadcast_message_family(NavMessageFamily family) {
+    switch (family) {
+        case NavMessageFamily::kGpsLnav:
+        case NavMessageFamily::kQzssLnav:
+        case NavMessageFamily::kBeidouD1D2:
+            return RtklibBroadcastMessageFamily::kLegacy;
+        case NavMessageFamily::kGpsCnav:
+        case NavMessageFamily::kQzssCnav:
+            return RtklibBroadcastMessageFamily::kCnav;
+        case NavMessageFamily::kGpsCnav2:
+        case NavMessageFamily::kQzssCnav2:
+            return RtklibBroadcastMessageFamily::kCnav2;
+        case NavMessageFamily::kGlonassFdma:
+            return RtklibBroadcastMessageFamily::kGlonassFdma;
+        case NavMessageFamily::kGlonassL3Oc:
+            return RtklibBroadcastMessageFamily::kGlonassL3Oc;
+        case NavMessageFamily::kGalileoInav:
+            return RtklibBroadcastMessageFamily::kGalileoInav;
+        case NavMessageFamily::kGalileoFnav:
+            return RtklibBroadcastMessageFamily::kGalileoFnav;
+        case NavMessageFamily::kBeidouBcnav1:
+            return RtklibBroadcastMessageFamily::kBeidouBcnav1;
+        case NavMessageFamily::kBeidouBcnav2:
+            return RtklibBroadcastMessageFamily::kBeidouBcnav2;
+        case NavMessageFamily::kBeidouBcnav3:
+            return RtklibBroadcastMessageFamily::kBeidouBcnav3;
+        case NavMessageFamily::kGalileoCnav:
+            return RtklibBroadcastMessageFamily::kUnknown;
+    }
+    return RtklibBroadcastMessageFamily::kUnknown;
+}
+
 // Exhaust the current public simulator family enum at compile time. These
 // assertions are intentionally next to the mapping so adding/reassigning a
 // family cannot silently change the SPP/raw-position selection contract.
@@ -159,6 +195,30 @@ static_assert(rtklib_explicit_message_family_for_system(SYS_GPS, NAV_LNAV) == Rt
 static_assert(rtklib_explicit_message_family_for_system(SYS_CMP, NAV_D1) == RtklibBroadcastMessageFamily::kUnknown);
 static_assert(rtklib_explicit_message_family_for_system(SYS_GAL, NAV_CNAV) == RtklibBroadcastMessageFamily::kUnknown);
 static_assert(rtklib_explicit_message_family_for_system(SYS_GLO, 0) == RtklibBroadcastMessageFamily::kUnknown);
+
+static_assert(rtklib_broadcast_message_family(NavMessageFamily::kGpsLnav) == RtklibBroadcastMessageFamily::kLegacy);
+static_assert(rtklib_broadcast_message_family(NavMessageFamily::kGpsCnav) == RtklibBroadcastMessageFamily::kCnav);
+static_assert(rtklib_broadcast_message_family(NavMessageFamily::kGpsCnav2) == RtklibBroadcastMessageFamily::kCnav2);
+static_assert(rtklib_broadcast_message_family(NavMessageFamily::kQzssLnav) == RtklibBroadcastMessageFamily::kLegacy);
+static_assert(rtklib_broadcast_message_family(NavMessageFamily::kQzssCnav) == RtklibBroadcastMessageFamily::kCnav);
+static_assert(rtklib_broadcast_message_family(NavMessageFamily::kQzssCnav2) == RtklibBroadcastMessageFamily::kCnav2);
+static_assert(rtklib_broadcast_message_family(NavMessageFamily::kGlonassFdma) ==
+              RtklibBroadcastMessageFamily::kGlonassFdma);
+static_assert(rtklib_broadcast_message_family(NavMessageFamily::kGlonassL3Oc) ==
+              RtklibBroadcastMessageFamily::kGlonassL3Oc);
+static_assert(rtklib_broadcast_message_family(NavMessageFamily::kGalileoInav) ==
+              RtklibBroadcastMessageFamily::kGalileoInav);
+static_assert(rtklib_broadcast_message_family(NavMessageFamily::kGalileoFnav) ==
+              RtklibBroadcastMessageFamily::kGalileoFnav);
+static_assert(rtklib_broadcast_message_family(NavMessageFamily::kGalileoCnav) ==
+              RtklibBroadcastMessageFamily::kUnknown);
+static_assert(rtklib_broadcast_message_family(NavMessageFamily::kBeidouD1D2) == RtklibBroadcastMessageFamily::kLegacy);
+static_assert(rtklib_broadcast_message_family(NavMessageFamily::kBeidouBcnav1) ==
+              RtklibBroadcastMessageFamily::kBeidouBcnav1);
+static_assert(rtklib_broadcast_message_family(NavMessageFamily::kBeidouBcnav2) ==
+              RtklibBroadcastMessageFamily::kBeidouBcnav2);
+static_assert(rtklib_broadcast_message_family(NavMessageFamily::kBeidouBcnav3) ==
+              RtklibBroadcastMessageFamily::kBeidouBcnav3);
 
 } // namespace gnss_sim
 

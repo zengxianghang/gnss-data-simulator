@@ -139,10 +139,8 @@ static_assert(rtklib_required_nav_message_mask(SYS_GAL, RtklibBroadcastMessageFa
 static_assert(rtklib_required_nav_message_mask(SYS_GLO, RtklibBroadcastMessageFamily::kLegacy) == 0);
 static_assert(rtklib_required_nav_message_mask(SYS_GPS, RtklibBroadcastMessageFamily::kUnknown) == 0);
 
-static_assert(rtklib_explicit_message_family_for_system(SYS_GPS, NAV_CNAV) ==
-              RtklibBroadcastMessageFamily::kCnav);
-static_assert(rtklib_explicit_message_family_for_system(SYS_QZS, NAV_CNV2) ==
-              RtklibBroadcastMessageFamily::kCnav2);
+static_assert(rtklib_explicit_message_family_for_system(SYS_GPS, NAV_CNAV) == RtklibBroadcastMessageFamily::kCnav);
+static_assert(rtklib_explicit_message_family_for_system(SYS_QZS, NAV_CNV2) == RtklibBroadcastMessageFamily::kCnav2);
 static_assert(rtklib_explicit_message_family_for_system(SYS_GAL, NAV_INAV) ==
               RtklibBroadcastMessageFamily::kGalileoInav);
 static_assert(rtklib_explicit_message_family_for_system(SYS_GAL, NAV_FNAV) ==
@@ -157,14 +155,10 @@ static_assert(rtklib_explicit_message_family_for_system(SYS_GLO, NAV_FDMA) ==
               RtklibBroadcastMessageFamily::kGlonassFdma);
 static_assert(rtklib_explicit_message_family_for_system(SYS_GLO, NAV_L3OC) ==
               RtklibBroadcastMessageFamily::kGlonassL3Oc);
-static_assert(rtklib_explicit_message_family_for_system(SYS_GPS, NAV_LNAV) ==
-              RtklibBroadcastMessageFamily::kUnknown);
-static_assert(rtklib_explicit_message_family_for_system(SYS_CMP, NAV_D1) ==
-              RtklibBroadcastMessageFamily::kUnknown);
-static_assert(rtklib_explicit_message_family_for_system(SYS_GAL, NAV_CNAV) ==
-              RtklibBroadcastMessageFamily::kUnknown);
-static_assert(rtklib_explicit_message_family_for_system(SYS_GLO, 0) ==
-              RtklibBroadcastMessageFamily::kUnknown);
+static_assert(rtklib_explicit_message_family_for_system(SYS_GPS, NAV_LNAV) == RtklibBroadcastMessageFamily::kUnknown);
+static_assert(rtklib_explicit_message_family_for_system(SYS_CMP, NAV_D1) == RtklibBroadcastMessageFamily::kUnknown);
+static_assert(rtklib_explicit_message_family_for_system(SYS_GAL, NAV_CNAV) == RtklibBroadcastMessageFamily::kUnknown);
+static_assert(rtklib_explicit_message_family_for_system(SYS_GLO, 0) == RtklibBroadcastMessageFamily::kUnknown);
 
 } // namespace gnss_sim
 

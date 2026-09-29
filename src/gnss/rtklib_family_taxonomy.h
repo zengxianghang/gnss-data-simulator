@@ -162,8 +162,8 @@ struct RtklibNavMessageFamilyProjection {
 // Galileo/BeiDou/GLONASS families are intentionally projected without another
 // system check because that is the established simulator behavior. Tightening
 // those combinations is a separate semantic change, not part of this refactor.
-constexpr RtklibNavMessageFamilyProjection rtklib_nav_message_family_projection(
-    int system, RtklibBroadcastMessageFamily family) {
+constexpr RtklibNavMessageFamilyProjection rtklib_nav_message_family_projection(int system,
+                                                                                RtklibBroadcastMessageFamily family) {
     switch (family) {
         case RtklibBroadcastMessageFamily::kLegacy:
             if (system == SYS_GPS) {

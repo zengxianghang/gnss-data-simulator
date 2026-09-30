@@ -347,6 +347,80 @@ TEST(NavOutputWriter, HotAndWarmRestoreTheSameDeterministicReceiverNavBytes) {
     EXPECT_FALSE(baseline.empty());
 }
 
+// Unicore N4 BD3EPH (reference book 7.3.12): 45 fields in the N4 order, from
+// the real RINEX 4 B-CNAV1/2/3 records of BRD400DLR (C22 CNV1/CNV2, C24 CNV3).
+std::vector<std::string> bd3eph_fields(gnss_sim::RtklibBroadcastMessageFamily family,
+                                       gnss_sim::NavOutputRecord* record) {
+    std::string error_message;
+    std::string message;
+    bool supported = false;
+    EXPECT_TRUE(load_real_ephemeris_record("brd400dlr_rinex4_acceptance_nav.rnx", gnss_sim::NavOutputSystem::kBeidou,
+                                           family, record, &error_message))
+        << error_message;
+    EXPECT_TRUE(gnss_sim::format_unicore_nav_output_record(*record, ephemeris_output_time(*record), &message,
+                                                           &supported, &error_message))
+        << error_message;
+    EXPECT_TRUE(supported);
+    EXPECT_EQ(log_name(message), "BD3EPHA");
+    EXPECT_TRUE(valid_ascii_crc(message));
+    return split_body_fields(body_between_semicolon_and_crc(message));
+}
+
+TEST(NavOutputWriter, Bd3ephFollowsTheN4FieldOrder) {
+    gnss_sim::NavOutputRecord record{};
+    std::vector<std::string> fields = bd3eph_fields(gnss_sim::RtklibBroadcastMessageFamily::kBeidouBcnav1, &record);
+    ASSERT_EQ(fields.size(), 45u);
+    const gnss_sim::KeplerianNavOutputData& eph = record.ephemeris;
+    EXPECT_EQ(fields[0], "22");                                                  // PRN
+    EXPECT_EQ(fields[1], "0");                                                   // Health
+    EXPECT_EQ(fields[2], "3");                                                   // SatType: MEO
+    EXPECT_EQ(fields[3], "2");                                                   // SISMAI
+    EXPECT_EQ(fields[4], "9");                                                   // IODE
+    EXPECT_EQ(fields[5], "9");                                                   // IODC
+    EXPECT_EQ(fields[6], std::to_string(eph.toe_week));                          // Week (GPS)
+    EXPECT_EQ(fields[7], std::to_string(eph.toe_week));                          // Zweek
+    EXPECT_EQ(fields[8], "435600.0");                                            // Tow, BDT
+    EXPECT_EQ(fields[9], "435600.0");                                            // Toe, BDT
+    EXPECT_DOUBLE_EQ(std::stod(fields[10]), eph.semi_major_axis_m - 27906100.0); // DeltaA
+    EXPECT_DOUBLE_EQ(std::stod(fields[11]), 9.095668792725e-03);                 // dDeltaA
+    EXPECT_DOUBLE_EQ(std::stod(fields[12]), 3.614079112330e-09);                 // DeltaN
+    EXPECT_DOUBLE_EQ(std::stod(fields[13]), -8.017737709797e-14);                // dDeltaN
+    EXPECT_DOUBLE_EQ(std::stod(fields[14]), -2.508186829786e+00);                // M0
+    EXPECT_DOUBLE_EQ(std::stod(fields[15]), 4.446074599400e-04);                 // Ecc
+    EXPECT_DOUBLE_EQ(std::stod(fields[26]), eph.omega_dot_radps);                // OmegaDot
+    EXPECT_EQ(fields[27], "435600.0");                                           // toc, BDT
+    EXPECT_DOUBLE_EQ(std::stod(fields[28]), 1.728767529130e-08);                 // Tgdb1cp
+    EXPECT_DOUBLE_EQ(std::stod(fields[29]), -3.841705620289e-09);                // Tgdb2ap
+    EXPECT_DOUBLE_EQ(std::stod(fields[30]), 0.0);                                // Tgdb2bI
+    EXPECT_DOUBLE_EQ(std::stod(fields[31]), 0.0);                                // Tgdb2bQ
+    EXPECT_DOUBLE_EQ(std::stod(fields[32]), 0.0);                                // ISCb2ad
+    EXPECT_DOUBLE_EQ(std::stod(fields[33]), -2.328306436539e-10);                // ISCb1cd
+    EXPECT_DOUBLE_EQ(std::stod(fields[34]), 2.220366732217e-04);                 // af0
+    EXPECT_EQ(fields[37], "1452");                                               // iTop = t_op / 300 s
+    // SISAI as unsigned 5/5/3/3-bit fields (RINEX writes the signed -5, -1).
+    EXPECT_EQ((std::vector<std::string>(fields.begin() + 38, fields.begin() + 42)),
+              (std::vector<std::string>{"0", "27", "0", "7"}));
+    EXPECT_EQ(fields[42], "0");
+    EXPECT_EQ(fields[43], "0");
+    EXPECT_EQ(fields[44], "0"); // FreqType: B1C
+
+    fields = bd3eph_fields(gnss_sim::RtklibBroadcastMessageFamily::kBeidouBcnav2, &record);
+    ASSERT_EQ(fields.size(), 45u);
+    EXPECT_DOUBLE_EQ(std::stod(fields[32]), -2.793967723846e-09); // ISCb2ad
+    EXPECT_DOUBLE_EQ(std::stod(fields[33]), 0.0);                 // ISCb1cd
+    EXPECT_EQ(fields[44], "1");                                   // FreqType: B2a
+
+    fields = bd3eph_fields(gnss_sim::RtklibBroadcastMessageFamily::kBeidouBcnav3, &record);
+    ASSERT_EQ(fields.size(), 45u);
+    EXPECT_EQ(fields[0], "24");
+    EXPECT_EQ(fields[3], "4"); // SISMAI
+    EXPECT_EQ(fields[4], "0"); // IODE reserved for B2b
+    EXPECT_EQ(fields[5], "0"); // IODC reserved for B2b
+    EXPECT_DOUBLE_EQ(std::stod(fields[28]), 0.0);
+    EXPECT_DOUBLE_EQ(std::stod(fields[30]), -1.065200194716e-08); // Tgdb2bI
+    EXPECT_EQ(fields[44], "2");                                   // FreqType: B2b
+}
+
 TEST(NavOutputWriter, RealModernBdsAndNavicStayWithinFrozenOutputScope) {
     std::string message;
     std::string error_message;

@@ -26,6 +26,13 @@ bool modern_bds(const KeplerianNavOutputData& eph) {
            eph.message_family == RtklibBroadcastMessageFamily::kBeidouBcnav3;
 }
 
+// BDS-SIS-ICD-B1C/B2a/B2b reference semi-major axis A_ref (m): B-CNAV
+// broadcasts DeltaA = A - A_ref.
+constexpr double kBdsMeoReferenceSemiMajorAxisM = 27906100.0;
+constexpr double kBdsIgsoGeoReferenceSemiMajorAxisM = 42162200.0;
+// B-CNAV t_op scale factor (s).
+constexpr double kBdsTopScaleSec = 300.0;
+
 int bds_frequency_type(const KeplerianNavOutputData& eph) {
     if (eph.message_family == RtklibBroadcastMessageFamily::kBeidouBcnav2) {
         return 1;
@@ -55,22 +62,82 @@ std::string legacy_kepler_body(const KeplerianNavOutputData& eph, bool beidou) {
     return body.str();
 }
 
-std::string bd3_ephemeris_body(const KeplerianNavOutputData& eph) {
+// An integer-valued field as its unsigned raw value of `bits` bits.  RINEX
+// producers may write a signed reading of the same bits (SISAI_ocb 27 as -5).
+bool unsigned_raw_field(double value, int bits, int* raw) {
+    const double rounded = std::nearbyint(value);
+    const int limit = 1 << bits;
+    if (!std::isfinite(value) || rounded != value || rounded < -limit / 2 || rounded >= limit) {
+        return false;
+    }
+    *raw = (static_cast<int>(rounded) + limit) % limit;
+    return true;
+}
+
+// Unicore N4 BD3EPH (reference book 7.3.12), one B-CNAV1/B-CNAV2/B-CNAV3
+// ephemeris: PRN, Health, SatType, SISMAI, IODE, IODC, Week, Zweek, Tow, Toe,
+// DeltaA, dDeltaA, DeltaN, dDeltaN, M0, Ecc, omega, Cuc, Cus, Crc, Crs, Cic,
+// Cis, I0, IDOT, Omega0, OmegaDot, toc, Tgdb1cp, Tgdb2ap, Tgdb2bI, Tgdb2bQ,
+// ISCb2ad, ISCb1cd, af0, af1, af2, iTop, SISAIoe, SISAIocb, SISAIoc1,
+// SISAIoc2, two reserved fields and FreqType.  Week is the GPS week of Toe;
+// Tow, Toe and toc are native BDT seconds of week and iTop the raw t_op
+// (300 s units), as in the N4 example.  Group delays a message family does
+// not broadcast, and IODE/IODC of B-CNAV3 (reserved in N4), are zero.
+// Returns false when the record cannot be represented (unknown SatType or a
+// non-integral protocol field).
+bool bd3_ephemeris_body(const KeplerianNavOutputData& eph, std::string* body_text) {
+    const int sat_type = eph.flag; // RINEX 4 SatType: 1 GEO, 2 IGSO, 3 MEO
+    if (sat_type < 1 || sat_type > 3) {
+        return false;
+    }
+    const double reference_axis_m = sat_type == 3 ? kBdsMeoReferenceSemiMajorAxisM : kBdsIgsoGeoReferenceSemiMajorAxisM;
+    const double top_units = eph.top_sow_sec / kBdsTopScaleSec;
+    int sismai = 0;
+    int sisai[4] = {0, 0, 0, 0};
+    static const int kSisaiBits[4] = {5, 5, 3, 3}; // oe, ocb, oc1, oc2
+    bool valid = unsigned_raw_field(eph.sva, 4, &sismai) && std::nearbyint(top_units) == top_units;
+    for (int index = 0; valid && index < 4; ++index) {
+        valid = unsigned_raw_field(eph.sisai[index], kSisaiBits[index], &sisai[index]);
+    }
+    if (!valid) {
+        return false;
+    }
+    const int frequency_type = bds_frequency_type(eph);
+    const bool b2b = frequency_type == 2;
+    double tgd_b1cp = 0.0;
+    double tgd_b2ap = 0.0;
+    double tgd_b2bi = 0.0;
+    double isc_b2ad = 0.0;
+    double isc_b1cd = 0.0;
+    if (b2b) {
+        tgd_b2bi = eph.tgd_sec[0];
+    } else {
+        tgd_b1cp = eph.tgd_sec[0];
+        tgd_b2ap = eph.tgd_sec[1];
+        if (frequency_type == 0) {
+            isc_b1cd = eph.isc_sec[0]; // B-CNAV1 ISC_B1Cd
+        } else {
+            isc_b2ad = eph.isc_sec[0]; // B-CNAV2 ISC_B2ad
+        }
+    }
+
     std::ostringstream body;
     body.imbue(std::locale::classic());
-    body << eph.prn << ',' << eph.svh << ',' << static_cast<int>(std::llround(eph.sva)) << ',' << eph.iode << ','
-         << eph.iodc << ',' << eph.iodc << ',' << eph.toe_week << ',' << eph.toc_week << ',' << std::fixed
-         << std::setprecision(1) << eph.toe_sow_sec << ',' << eph.toc_sow_sec << ',' << std::scientific
-         << std::setprecision(15) << eph.sqrt_semi_major_axis_sqrt_m << ',' << eph.delta_mean_motion_radps << ','
+    body << eph.prn << ',' << eph.svh << ',' << sat_type << ',' << sismai << ',' << (b2b ? 0 : eph.iode) << ','
+         << (b2b ? 0 : eph.iodc) << ',' << eph.toe_week << ',' << eph.toe_week << ',' << std::fixed
+         << std::setprecision(1) << eph.bdt_transmit_sow_sec << ',' << eph.bdt_toe_sow_sec << ',' << std::scientific
+         << std::setprecision(15) << eph.semi_major_axis_m - reference_axis_m << ',' << eph.semi_major_axis_rate_mps
+         << ',' << eph.delta_mean_motion_radps << ',' << eph.delta_mean_motion_rate_radps2 << ','
          << eph.mean_anomaly_rad << ',' << eph.eccentricity << ',' << eph.argument_of_perigee_rad << ',' << eph.cuc_rad
          << ',' << eph.cus_rad << ',' << eph.crc_m << ',' << eph.crs_m << ',' << eph.cic_rad << ',' << eph.cis_rad
          << ',' << eph.inclination_rad << ',' << eph.inclination_dot_radps << ',' << eph.omega0_rad << ','
-         << eph.omega_dot_radps << ',' << eph.tgd_sec[0] << ',' << eph.tgd_sec[1] << ',' << eph.isc_sec[0] << ','
-         << eph.isc_sec[1] << ',' << eph.isc_sec[2] << ',' << eph.isc_sec[3] << ',' << eph.isc_sec[4] << ','
-         << eph.isc_sec[5] << ',' << eph.clock_bias_sec << ',' << eph.clock_drift_sec_per_sec << ','
-         << eph.clock_drift_rate_sec_per_sec2 << ',' << std::fixed << std::setprecision(0) << eph.transmit_sow_sec
-         << ",0,0,0,0,0,0," << bds_frequency_type(eph);
-    return body.str();
+         << eph.omega_dot_radps << ',' << std::fixed << std::setprecision(1) << eph.bdt_toc_sow_sec << ','
+         << std::scientific << std::setprecision(15) << tgd_b1cp << ',' << tgd_b2ap << ',' << tgd_b2bi << ',' << 0.0
+         << ',' << isc_b2ad << ',' << isc_b1cd << ',' << eph.clock_bias_sec << ',' << eph.clock_drift_sec_per_sec << ','
+         << eph.clock_drift_rate_sec_per_sec2 << ',' << static_cast<int>(std::llround(top_units)) << ',' << sisai[0]
+         << ',' << sisai[1] << ',' << sisai[2] << ',' << sisai[3] << ",0,0," << frequency_type;
+    *body_text = body.str();
+    return true;
 }
 
 std::string galileo_body(const KeplerianNavOutputData& eph) {
@@ -187,8 +254,10 @@ bool format_unicore_nav_output_record(const NavOutputRecord& source, const SimTi
                 break;
             case NavOutputSystem::kBeidou:
                 if (modern_bds(eph)) {
+                    if (!bd3_ephemeris_body(eph, &body)) {
+                        return true;
+                    }
                     log_name = "BD3EPHA";
-                    body = bd3_ephemeris_body(eph);
                 } else {
                     log_name = "BDSEPHA";
                     body = legacy_kepler_body(eph, true);

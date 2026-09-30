@@ -169,6 +169,16 @@ bool fill_ephemeris(const nav_t& nav, int index, NavOutputRecord* record) {
     std::memcpy(output.tgd_sec, eph.tgd, sizeof(output.tgd_sec));
     std::memcpy(output.isc_sec, eph.isc, sizeof(output.isc_sec));
     output.fit_hours = eph.fit;
+    output.semi_major_axis_rate_mps = eph.Adot;
+    output.delta_mean_motion_rate_radps2 = eph.delta_n0_dot;
+    output.top_sow_sec = eph.top;
+    std::memcpy(output.sisai, eph.sisai, sizeof(output.sisai));
+    if (system == SYS_CMP) {
+        int bdt_week = 0;
+        output.bdt_toe_sow_sec = time2bdt(gpst2bdt(eph.toe), &bdt_week);
+        output.bdt_toc_sow_sec = time2bdt(gpst2bdt(eph.toc), &bdt_week);
+        output.bdt_transmit_sow_sec = time2bdt(gpst2bdt(eph.ttr), &bdt_week);
+    }
     if (system == SYS_GAL) {
         fill_galileo_companion_clocks(nav, eph, &output);
         if (!output.galileo_fnav_received && output.message_family == RtklibBroadcastMessageFamily::kGalileoFnav) {

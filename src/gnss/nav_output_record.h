@@ -58,6 +58,16 @@ struct KeplerianNavOutputData {
     double tgd_sec[4];
     double isc_sec[6];
     double fit_hours;
+    // CNAV/B-CNAV orbit and accuracy terms kept by RTKLIB eph_t (Adot,
+    // delta_n0_dot, top, sisai); zero for families that do not carry them.
+    double semi_major_axis_rate_mps;
+    double delta_mean_motion_rate_radps2;
+    double top_sow_sec;
+    double sisai[4];
+    // BeiDou only: Toe/Toc/transmit time as native BDT seconds of week.
+    double bdt_toe_sow_sec;
+    double bdt_toc_sow_sec;
+    double bdt_transmit_sow_sec;
     bool galileo_fnav_received;
     bool galileo_inav_received;
     int galileo_e1b_dvs;

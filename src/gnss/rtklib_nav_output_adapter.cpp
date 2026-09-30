@@ -306,6 +306,7 @@ bool fill_legacy_ion(const nav_t& nav, int system, NavOutputRecord* record) {
         std::memcpy(output.coefficients, nav.ion_gal, sizeof(double) * 4);
         std::memcpy(output.utc, nav.utc_gal, sizeof(output.utc));
         output.coefficient_count = 3;
+        output.region = nav.ion_gal[3]; // IFNV disturbance flags
     } else if (system == SYS_CMP) {
         std::memcpy(output.coefficients, nav.ion_cmp, sizeof(double) * 8);
         std::memcpy(output.utc, nav.utc_cmp, sizeof(output.utc));

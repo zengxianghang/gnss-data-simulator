@@ -22,6 +22,7 @@ extern "C" {
 #include <cstdint>
 #include <cstdlib>
 #include <gtest/gtest.h>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -419,6 +420,145 @@ TEST(NavOutputWriter, Bd3ephFollowsTheN4FieldOrder) {
     EXPECT_DOUBLE_EQ(std::stod(fields[28]), 0.0);
     EXPECT_DOUBLE_EQ(std::stod(fields[30]), -1.065200194716e-08); // Tgdb2bI
     EXPECT_EQ(fields[44], "2");                                   // FreqType: B2b
+}
+
+struct UnicoreSample {
+    gnss_sim::NavOutputRecord record{};
+    std::vector<std::string> fields;
+};
+
+// The first record of a real RINEX fixture that serializes as each Unicore
+// log, with its N4 payload fields.
+std::map<std::string, UnicoreSample> first_unicore_samples(const char* fixture_name) {
+    std::map<std::string, UnicoreSample> samples;
+    gnss_sim::RtklibNavStore* store = gnss_sim::create_rtklib_nav_store();
+    std::string error_message;
+    EXPECT_TRUE(gnss_sim::load_rinex_nav_file(store, data_path(fixture_name).c_str(), &error_message)) << error_message;
+    const int count = gnss_sim::rtklib_nav_output_record_count(store);
+    for (int index = 0; index < count; ++index) {
+        gnss_sim::NavOutputRecord record{};
+        EXPECT_TRUE(gnss_sim::rtklib_nav_output_record(store, index, &record, &error_message)) << error_message;
+        std::string message;
+        bool supported = false;
+        EXPECT_TRUE(
+            gnss_sim::format_unicore_nav_output_record(record, output_time(), &message, &supported, &error_message))
+            << error_message;
+        if (!supported || samples.count(log_name(message)) != 0) {
+            continue;
+        }
+        EXPECT_TRUE(valid_ascii_crc(message));
+        samples[log_name(message)] = UnicoreSample{record, split_body_fields(body_between_semicolon_and_crc(message))};
+    }
+    gnss_sim::destroy_rtklib_nav_store(store);
+    return samples;
+}
+
+// Unicore N4 reference book: GPSEPH 7.3.38, QZSSEPH 7.3.80, BDSEPH 7.3.15,
+// IRNSSEPH 7.3.45, GALEPH 7.3.34 and GLOEPH 7.3.37.
+TEST(NavOutputWriter, UnicoreEphemerisLogsFollowTheN4FieldOrder) {
+    std::map<std::string, UnicoreSample> samples = first_unicore_samples("brd400dlr_rinex4_acceptance_nav.rnx");
+    const std::map<std::string, UnicoreSample> navic = first_unicore_samples("multi_gnss_acceptance_nav.rnx");
+    ASSERT_EQ(navic.count("IRNSSEPHA"), 1u);
+    samples["IRNSSEPHA"] = navic.at("IRNSSEPHA");
+    const std::map<std::string, std::size_t> field_counts = {{"GPSEPHA", 32},   {"QZSSEPHA", 32}, {"BDSEPHA", 33},
+                                                             {"IRNSSEPHA", 32}, {"GALEPHA", 38},  {"GLOEPHA", 29}};
+    for (const auto& entry : field_counts) {
+        ASSERT_EQ(samples.count(entry.first), 1u) << entry.first;
+        EXPECT_EQ(samples.at(entry.first).fields.size(), entry.second) << entry.first;
+    }
+
+    for (const char* name : {"GPSEPHA", "QZSSEPHA", "BDSEPHA"}) {
+        const UnicoreSample& sample = samples.at(name);
+        const gnss_sim::KeplerianNavOutputData& eph = sample.record.ephemeris;
+        const std::size_t as_index = std::string(name) == "BDSEPHA" ? 30u : 29u;
+        EXPECT_TRUE(sample.fields[as_index] == "TRUE" || sample.fields[as_index] == "FALSE") << name; // AS
+        EXPECT_DOUBLE_EQ(std::stod(sample.fields[as_index + 2]), eph.sva * eph.sva) << name;          // URA, m^2
+    }
+    EXPECT_EQ(samples.at("GPSEPHA").fields[0], std::to_string(samples.at("GPSEPHA").record.ephemeris.prn));
+    const int qzss_prn = std::stoi(samples.at("QZSSEPHA").fields[0]);
+    EXPECT_EQ(qzss_prn, samples.at("QZSSEPHA").record.ephemeris.prn - 192); // N4: QZSS 1-10
+    EXPECT_TRUE(qzss_prn >= 1 && qzss_prn <= 10);
+
+    const UnicoreSample& irnss = samples.at("IRNSSEPHA");
+    const gnss_sim::KeplerianNavOutputData& navic_eph = irnss.record.ephemeris;
+    EXPECT_NEAR(std::stod(irnss.fields[1]), navic_eph.transmit_sow_sec / 12.0, 0.05); // TOWC, 12 s units
+    EXPECT_EQ(irnss.fields[2], std::to_string((navic_eph.svh >> 1) & 1));             // L5 health
+    EXPECT_EQ(irnss.fields[3], std::to_string(navic_eph.iode));                       // IODEC
+    EXPECT_EQ(irnss.fields[4], std::to_string(navic_eph.svh & 1));                    // S health
+    EXPECT_EQ(irnss.fields[6], "0");                                                  // reserved
+    EXPECT_EQ(irnss.fields[23], "0");                                                 // reserved
+    EXPECT_EQ(irnss.fields[29], "0");                                                 // Flag
+    EXPECT_DOUBLE_EQ(std::stod(irnss.fields[31]), navic_eph.sva * navic_eph.sva);     // URA, m^2
+
+    const UnicoreSample& galileo = samples.at("GALEPHA");
+    EXPECT_EQ(galileo.fields[10], "0"); // reserved
+    if (galileo.record.ephemeris.sva == 3.12) {
+        EXPECT_EQ(galileo.fields[9], "107"); // SISA index: 2 m + 7 x 16 cm
+    }
+    const int sisa_index = std::stoi(galileo.fields[9]);
+    EXPECT_TRUE((sisa_index >= 0 && sisa_index <= 125) || sisa_index == 255);
+
+    const UnicoreSample& glonass = samples.at("GLOEPHA");
+    const gnss_sim::GlonassNavOutputData& glo = glonass.record.glonass;
+    EXPECT_DOUBLE_EQ(std::stod(glonass.fields[21]), glo.clock_bias_sec);          // tau_n
+    EXPECT_DOUBLE_EQ(std::stod(glonass.fields[22]), glo.differential_delay_sec);  // delta_tau_n
+    EXPECT_DOUBLE_EQ(std::stod(glonass.fields[23]), glo.relative_frequency_bias); // gamma
+    EXPECT_EQ(glonass.fields[25], "0");                                           // P, not in RINEX
+    const int p1 = (glo.flags >> 2) & 3;
+    const int p2 = (glo.flags >> 4) & 1;
+    const int p3 = (glo.flags >> 5) & 1;
+    EXPECT_EQ(glonass.fields[28], std::to_string(p1 | (p2 << 2) | (p3 << 3))); // N4 Table 7-102
+}
+
+TEST(NavOutputWriter, UnicoreLegacyEphemerisLogsDoNotMasqueradeModernGpsOrQzssFamilies) {
+    gnss_sim::RtklibNavStore* store = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(store, nullptr);
+    std::string error_message;
+    ASSERT_TRUE(
+        gnss_sim::load_rinex_nav_file(store, data_path("brd400dlr_rinex4_acceptance_nav.rnx").c_str(), &error_message))
+        << error_message;
+    int modern_rejected = 0;
+    const int count = gnss_sim::rtklib_nav_output_record_count(store);
+    for (int index = 0; index < count; ++index) {
+        gnss_sim::NavOutputRecord record{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(store, index, &record, &error_message)) << error_message;
+        if (record.kind != gnss_sim::RtklibNavRecordKind::kEphemeris ||
+            (record.ephemeris.system != gnss_sim::NavOutputSystem::kGps &&
+             record.ephemeris.system != gnss_sim::NavOutputSystem::kQzss) ||
+            record.ephemeris.message_family == gnss_sim::RtklibBroadcastMessageFamily::kLegacy) {
+            continue;
+        }
+        std::string message;
+        bool supported = false;
+        ASSERT_TRUE(
+            gnss_sim::format_unicore_nav_output_record(record, output_time(), &message, &supported, &error_message))
+            << error_message;
+        EXPECT_FALSE(supported);
+        EXPECT_TRUE(message.empty());
+        ++modern_rejected;
+    }
+    EXPECT_GT(modern_rejected, 0) << "real BRD400 fixture must contain modern GPS/QZSS ephemeris records";
+    gnss_sim::destroy_rtklib_nav_store(store);
+}
+
+// Unicore N4 GALION (7.3.35): SF1..SF5 from the RINEX 4.01 IFNV disturbance
+// flags (bit 4 = region 1 ... bit 0 = region 5).
+TEST(NavOutputWriter, UnicoreGalionCarriesTheIonosphericDisturbanceFlags) {
+    gnss_sim::NavOutputRecord record{};
+    record.kind = gnss_sim::RtklibNavRecordKind::kIonosphere;
+    record.ionosphere.system = gnss_sim::NavOutputSystem::kGalileo;
+    record.ionosphere.coefficient_count = 3;
+    record.ionosphere.region = 22.0; // 0b10110: regions 1, 3 and 4
+    std::string message;
+    std::string error_message;
+    bool supported = false;
+    ASSERT_TRUE(gnss_sim::format_unicore_nav_output_record(record, output_time(), &message, &supported, &error_message))
+        << error_message;
+    ASSERT_TRUE(supported);
+    const std::vector<std::string> fields = split_body_fields(body_between_semicolon_and_crc(message));
+    ASSERT_EQ(fields.size(), 9u);
+    EXPECT_EQ((std::vector<std::string>(fields.begin() + 3, fields.end())),
+              (std::vector<std::string>{"1", "0", "1", "1", "0", "0"}));
 }
 
 TEST(NavOutputWriter, RealModernBdsAndNavicStayWithinFrozenOutputScope) {

@@ -80,6 +80,10 @@ struct KeplerianNavOutputData {
     double galileo_fnav_clock[3];
     double galileo_inav_toc_sow_sec;
     double galileo_inav_clock[3];
+    // Galileo OS SIS ICD SISA index of the RINEX SISA in metres (255 NAPA);
+    // -1 when the value has no index.  Set by
+    // finalize_nav_output_record_metadata().
+    int galileo_sisa_index;
 };
 
 struct GlonassNavOutputData {
@@ -108,6 +112,12 @@ struct GlonassNavOutputData {
     double clock_bias_sec;
     double relative_frequency_bias;
     double differential_delay_sec;
+    // Receiver-log forms of the RINEX status flags (flags): the time-offset
+    // parameter P (RINEX bits 0-1) and the vendor flags word (NovAtel OEM7
+    // and Unicore N4: bits 0-1 P1, bit 2 P2, bit 3 P3, bit 4 P4).  Set by
+    // finalize_nav_output_record_metadata().
+    int time_offset_parameter;
+    int vendor_flags;
 };
 
 struct IonosphereNavOutputData {
@@ -135,6 +145,9 @@ int rtklib_nav_output_record_count(const RtklibNavStore* store);
 bool rtklib_nav_output_record(const RtklibNavStore* store, int output_record_index, NavOutputRecord* record,
                               std::string* error_message);
 bool finalize_nav_output_record_metadata(NavOutputRecord* record);
+// The RINEX SISA (m) of a Galileo SISA index (-1 for 255, NAPA; NaN when the
+// index is spare).
+double galileo_sisa_metres(int index);
 
 const char* nav_output_system_name(NavOutputSystem system);
 

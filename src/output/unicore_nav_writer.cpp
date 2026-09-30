@@ -117,34 +117,6 @@ bool irnss_body(const KeplerianNavOutputData& eph, std::string* body_text) {
     return true;
 }
 
-// Galileo OS SIS ICD SISA index from the RINEX SISA (m): 0-49 in 1 cm steps
-// from 0 m, 50-74 in 2 cm steps from 0.5 m, 75-99 in 4 cm steps from 1 m,
-// 100-125 in 16 cm steps from 2 m; RINEX -1 (no accuracy prediction) is 255.
-bool galileo_sisa_index(double sisa_m, int* index) {
-    if (!std::isfinite(sisa_m)) {
-        return false;
-    }
-    if (sisa_m < 0.0) {
-        *index = 255;
-        return true;
-    }
-    struct Band {
-        double start_m;
-        double step_m;
-        int first;
-        int last;
-    };
-    static const Band kBands[] = {{0.0, 0.01, 0, 49}, {0.5, 0.02, 50, 74}, {1.0, 0.04, 75, 99}, {2.0, 0.16, 100, 125}};
-    for (const Band& band : kBands) {
-        const long steps = std::lround((sisa_m - band.start_m) / band.step_m);
-        if (steps >= 0 && band.first + steps <= band.last) {
-            *index = band.first + static_cast<int>(steps);
-            return true;
-        }
-    }
-    return false;
-}
-
 // An integer-valued field as its unsigned raw value of `bits` bits.  RINEX
 // producers may write a signed reading of the same bits (SISAI_ocb 27 as -5).
 bool unsigned_raw_field(double value, int bits, int* raw) {
@@ -226,8 +198,8 @@ bool bd3_ephemeris_body(const KeplerianNavOutputData& eph, std::string* body_tex
 // Unicore N4 GALEPH (7.3.34).  SISA is the ICD index; field 12 is reserved.
 // Returns false when the SISA cannot be represented.
 bool galileo_body(const KeplerianNavOutputData& eph, std::string* body_text) {
-    int sisa_index = 0;
-    if (!galileo_sisa_index(eph.sva, &sisa_index)) {
+    const int sisa_index = eph.galileo_sisa_index;
+    if (sisa_index < 0) {
         return false;
     }
     std::ostringstream body;
@@ -250,18 +222,10 @@ bool galileo_body(const KeplerianNavOutputData& eph, std::string* body_text) {
     return true;
 }
 
-// N4 GLOEPH Flags (Table 7-102): bits 0-1 P1, bit 2 P2, bit 3 P3.  RINEX
-// status flags (GlonassNavOutputData::flags, from geph_t.flag) keep P1 in
-// bits 2-3, P2 in bit 4 and P3 in bit 5.
-int n4_glonass_flags(int rinex_status_flags) {
-    return ((rinex_status_flags >> 2) & 0x3) | (((rinex_status_flags >> 4) & 0x1) << 2) |
-           (((rinex_status_flags >> 5) & 0x1) << 3);
-}
-
 // Unicore N4 GLOEPH (7.3.37): ..., tau_n, delta_tau_n, gamma, Tk, P, Ft, age,
-// Flags.  The technological parameter P is not in RINEX and is written as
-// zero.  Returns false when Ft is not a 4-bit F_T value (RINEX 3.04 carries
-// none).
+// Flags.  P is the RINEX time-offset parameter (status flag bits 0-1); Flags
+// follow Table 7-102 (bits 0-1 P1, bit 2 P2, bit 3 P3; higher bits reserved).
+// Returns false when Ft is not a 4-bit F_T value.
 bool glonass_body(const GlonassNavOutputData& glo, std::string* body_text) {
     if (glo.sva < 0 || glo.sva > 15 || glo.age_days < 0) {
         return false;
@@ -276,8 +240,8 @@ bool glonass_body(const GlonassNavOutputData& glo, std::string* body_text) {
          << glo.velocity_ecef_mps[2] << ',' << glo.acceleration_ecef_mps2[0] << ',' << glo.acceleration_ecef_mps2[1]
          << ',' << glo.acceleration_ecef_mps2[2] << ',' << glo.clock_bias_sec << ',' << glo.differential_delay_sec
          << ',' << glo.relative_frequency_bias << ',' << std::fixed << std::setprecision(0)
-         << glo.frame_time_glonass_day_sec << ",0," << glo.sva << ',' << glo.age_days << ','
-         << n4_glonass_flags(glo.flags);
+         << glo.frame_time_glonass_day_sec << ',' << glo.time_offset_parameter << ',' << glo.sva << ',' << glo.age_days
+         << ',' << (glo.vendor_flags & 0xF);
     *body_text = body.str();
     return true;
 }

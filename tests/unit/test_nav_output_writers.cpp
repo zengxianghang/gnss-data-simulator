@@ -503,11 +503,76 @@ TEST(NavOutputWriter, UnicoreEphemerisLogsFollowTheN4FieldOrder) {
     EXPECT_DOUBLE_EQ(std::stod(glonass.fields[21]), glo.clock_bias_sec);          // tau_n
     EXPECT_DOUBLE_EQ(std::stod(glonass.fields[22]), glo.differential_delay_sec);  // delta_tau_n
     EXPECT_DOUBLE_EQ(std::stod(glonass.fields[23]), glo.relative_frequency_bias); // gamma
-    EXPECT_EQ(glonass.fields[25], "0");                                           // P, not in RINEX
+    EXPECT_EQ(glonass.fields[25], std::to_string(glo.flags & 3));                 // P: RINEX bits 0-1
     const int p1 = (glo.flags >> 2) & 3;
     const int p2 = (glo.flags >> 4) & 1;
     const int p3 = (glo.flags >> 5) & 1;
     EXPECT_EQ(glonass.fields[28], std::to_string(p1 | (p2 << 2) | (p3 << 3))); // N4 Table 7-102
+}
+
+// NovAtel OEM7 GPSEPHEMERIS/QZSSEPHEMERIS/GLOEPHEMERIS and the OEM6
+// GALEPHEMERIS layout that RTKLIB decode_galephemerisb reads.
+TEST(NavOutputWriter, NovatelEphemerisLogsFollowTheOem7FieldDefinitions) {
+    gnss_sim::RtklibNavStore* store = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(store, nullptr);
+    std::string error_message;
+    ASSERT_TRUE(
+        gnss_sim::load_rinex_nav_file(store, data_path("brd400dlr_rinex4_acceptance_nav.rnx").c_str(), &error_message))
+        << error_message;
+    std::set<std::string> checked;
+    const int count = gnss_sim::rtklib_nav_output_record_count(store);
+    for (int index = 0; index < count; ++index) {
+        gnss_sim::NavOutputRecord record{};
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(store, index, &record, &error_message)) << error_message;
+        std::string message;
+        bool supported = false;
+        ASSERT_TRUE(
+            gnss_sim::format_novatel_nav_output_record(record, output_time(), &message, &supported, &error_message))
+            << error_message;
+        const std::string name = log_name(message);
+        if (!supported || checked.count(name) != 0) {
+            continue;
+        }
+        checked.insert(name);
+        const std::vector<std::string> fields = split_body_fields(body_between_semicolon_and_crc(message));
+        if (name == "GPSEPHEMA" || name == "QZSSEPHEMERISA") {
+            const gnss_sim::KeplerianNavOutputData& eph = record.ephemeris;
+            EXPECT_DOUBLE_EQ(std::stod(fields[31]), eph.sva * eph.sva) << name; // URA variance, m^2
+        } else if (name == "GALEPHEMERISA") {
+            if (record.ephemeris.sva == 3.12) {
+                EXPECT_EQ(fields[9], "107"); // SISA index
+            }
+            EXPECT_EQ(fields[10], "0"); // reserved
+        } else if (name == "GLOEPHEMERISA") {
+            const gnss_sim::GlonassNavOutputData& glo = record.glonass;
+            EXPECT_EQ(fields[11], glo.svh != 0 ? "4" : "0");                      // health: 0-3 good, 4-15 bad
+            EXPECT_DOUBLE_EQ(std::stod(fields[22]), glo.differential_delay_sec);  // delta_tau_n
+            EXPECT_DOUBLE_EQ(std::stod(fields[23]), glo.relative_frequency_bias); // gamma
+            EXPECT_EQ(fields[25], std::to_string(glo.flags & 3));                 // P
+            const int flags = ((glo.flags >> 2) & 3) | (((glo.flags >> 4) & 1) << 2) | (((glo.flags >> 5) & 1) << 3) |
+                              (((glo.flags >> 6) & 1) << 4);
+            EXPECT_EQ(fields[28], std::to_string(flags)); // OEM7 flag coding
+        }
+    }
+    EXPECT_EQ(checked.count("GPSEPHEMA") + checked.count("QZSSEPHEMERISA") + checked.count("GALEPHEMERISA") +
+                  checked.count("GLOEPHEMERISA"),
+              4u);
+    gnss_sim::destroy_rtklib_nav_store(store);
+}
+
+TEST(NavOutputWriter, GalileoSisaIndexAndMetresAreInverse) {
+    for (int index : {0, 33, 49, 50, 74, 75, 99, 100, 107, 125}) {
+        gnss_sim::NavOutputRecord record{};
+        record.kind = gnss_sim::RtklibNavRecordKind::kEphemeris;
+        record.ephemeris.system = gnss_sim::NavOutputSystem::kGalileo;
+        record.ephemeris.semi_major_axis_m = 29600000.0;
+        record.ephemeris.sva = gnss_sim::galileo_sisa_metres(index);
+        ASSERT_TRUE(gnss_sim::finalize_nav_output_record_metadata(&record));
+        EXPECT_EQ(record.ephemeris.galileo_sisa_index, index);
+    }
+    EXPECT_DOUBLE_EQ(gnss_sim::galileo_sisa_metres(107), 3.12);
+    EXPECT_DOUBLE_EQ(gnss_sim::galileo_sisa_metres(255), -1.0);
+    EXPECT_TRUE(std::isnan(gnss_sim::galileo_sisa_metres(126)));
 }
 
 TEST(NavOutputWriter, UnicoreLegacyEphemerisLogsDoNotMasqueradeModernGpsOrQzssFamilies) {

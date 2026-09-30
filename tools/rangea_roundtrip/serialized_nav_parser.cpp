@@ -255,6 +255,15 @@ bool parse_generic_kepler(const std::string& name, int output_week, double outpu
         return false;
     }
     eph.flag = data_flag ? 1 : 0;
+    // GPSEPHEMERISA/QZSSEPHEMERISA carry the URA variance (m^2); BD2EPHEMA the
+    // URA in metres (the writer's contract).
+    if (!beidou) {
+        if (!(eph.sva >= 0.0)) {
+            set_error(error_message, name + " URA variance is invalid");
+            return false;
+        }
+        eph.sva = std::sqrt(eph.sva);
+    }
     // The ASCII body carries transmit SOW but not its week. Anchor the week to the log header
     // (the receiver delivery time), not Toe, so week-boundary delivery remains causal.
     eph.transmit_week = week_near_sow(output_week, output_sow, eph.transmit_sow_sec);
@@ -297,12 +306,14 @@ bool parse_galileo(int output_week, double output_sow, const std::vector<std::st
     eph.system = NavOutputSystem::kGalileo;
     bool fnav = false;
     bool inav = false;
+    int sisa_index = 0;
+    int reserved = 0;
     if (!parse_int(fields[0], &eph.prn) || !satellite_number('E', eph.prn, &eph.satellite_number) ||
         !parse_bool(fields[1], &fnav) || !parse_bool(fields[2], &inav) ||
         !parse_int(fields[3], &eph.galileo_e1b_health) || !parse_int(fields[4], &eph.galileo_e5a_health) ||
         !parse_int(fields[5], &eph.galileo_e5b_health) || !parse_int(fields[6], &eph.galileo_e1b_dvs) ||
         !parse_int(fields[7], &eph.galileo_e5a_dvs) || !parse_int(fields[8], &eph.galileo_e5b_dvs) ||
-        !parse_double(fields[9], &eph.sva) || !parse_int(fields[10], &eph.svh) || !parse_int(fields[11], &eph.iode) ||
+        !parse_int(fields[9], &sisa_index) || !parse_int(fields[10], &reserved) || !parse_int(fields[11], &eph.iode) ||
         !parse_double(fields[12], &eph.toe_sow_sec) || !parse_double(fields[13], &eph.sqrt_semi_major_axis_sqrt_m) ||
         !parse_double(fields[14], &eph.delta_mean_motion_radps) || !parse_double(fields[15], &eph.mean_anomaly_rad) ||
         !parse_double(fields[16], &eph.eccentricity) || !parse_double(fields[17], &eph.argument_of_perigee_rad) ||
@@ -327,6 +338,14 @@ bool parse_galileo(int output_week, double output_sow, const std::vector<std::st
         set_error(error_message, "GALEPHEMERISA contains no received navigation family");
         return false;
     }
+    eph.sva = galileo_sisa_metres(sisa_index);
+    if (std::isnan(eph.sva) || reserved != 0) {
+        set_error(error_message, "GALEPHEMERISA SISA index or reserved field is invalid");
+        return false;
+    }
+    // The RINEX SV health word, rebuilt from the decoded E1B/E5a/E5b fields.
+    eph.svh = eph.galileo_e1b_dvs | (eph.galileo_e1b_health << 1) | (eph.galileo_e5a_dvs << 3) |
+              (eph.galileo_e5a_health << 4) | (eph.galileo_e5b_dvs << 6) | (eph.galileo_e5b_health << 7);
     eph.galileo_fnav_received = fnav;
     eph.galileo_inav_received = inav;
     eph.toe_week = week_near_sow(output_week, output_sow, eph.toe_sow_sec);
@@ -384,31 +403,40 @@ bool parse_glonass(int output_week, double output_sow, const std::vector<std::st
     int constant_zero_b = 0;
     int constant_zero_c = 0;
     int toe_milliseconds = 0;
+    int health = 0;
     if (!parse_int(fields[0], &glo.slot_offset) || !parse_int(fields[1], &glo.frequency_offset) ||
         !parse_int(fields[2], &constant_one) || !parse_int(fields[3], &constant_zero_a) ||
         !parse_int(fields[4], &glo.toe_week) || !parse_int(fields[5], &toe_milliseconds) ||
         !parse_int(fields[6], &glo.gps_glonass_time_offset_sec) || !parse_int(fields[7], &glo.calendar_day_number) ||
         !parse_int(fields[8], &constant_zero_b) || !parse_int(fields[9], &constant_zero_c) ||
-        !parse_int(fields[10], &glo.iode) || !parse_int(fields[11], &glo.svh) ||
+        !parse_int(fields[10], &glo.iode) || !parse_int(fields[11], &health) ||
         !parse_double(fields[12], &glo.position_ecef_m[0]) || !parse_double(fields[13], &glo.position_ecef_m[1]) ||
         !parse_double(fields[14], &glo.position_ecef_m[2]) || !parse_double(fields[15], &glo.velocity_ecef_mps[0]) ||
         !parse_double(fields[16], &glo.velocity_ecef_mps[1]) || !parse_double(fields[17], &glo.velocity_ecef_mps[2]) ||
         !parse_double(fields[18], &glo.acceleration_ecef_mps2[0]) ||
         !parse_double(fields[19], &glo.acceleration_ecef_mps2[1]) ||
         !parse_double(fields[20], &glo.acceleration_ecef_mps2[2]) || !parse_double(fields[21], &glo.clock_bias_sec) ||
-        !parse_double(fields[22], &glo.relative_frequency_bias) ||
-        !parse_double(fields[23], &glo.differential_delay_sec) ||
-        !parse_double(fields[24], &glo.frame_time_glonass_day_sec) || !parse_int(fields[25], &glo.flags) ||
-        !parse_int(fields[26], &glo.sva) || !parse_int(fields[27], &glo.age_days)) {
+        !parse_double(fields[22], &glo.differential_delay_sec) ||
+        !parse_double(fields[23], &glo.relative_frequency_bias) ||
+        !parse_double(fields[24], &glo.frame_time_glonass_day_sec) ||
+        !parse_int(fields[25], &glo.time_offset_parameter) || !parse_int(fields[26], &glo.sva) ||
+        !parse_int(fields[27], &glo.age_days) || !parse_int(fields[28], &glo.vendor_flags)) {
         set_error(error_message, "GLOEPHEMERISA contains malformed fields");
         return false;
     }
-    int repeated_flags = 0;
-    if (!parse_int(fields[28], &repeated_flags) || repeated_flags != glo.flags || constant_one != 1 ||
-        constant_zero_a != 0 || constant_zero_b != 0 || constant_zero_c != 0) {
-        set_error(error_message, "GLOEPHEMERISA fixed/repeated fields are inconsistent");
+    if (constant_one != 1 || constant_zero_a != 0 || constant_zero_b != 0 || constant_zero_c != 0 ||
+        glo.time_offset_parameter < 0 || glo.time_offset_parameter > 3 || glo.vendor_flags < 0 ||
+        glo.vendor_flags > 0x1F || health < 0 || health > 15) {
+        set_error(error_message, "GLOEPHEMERISA fixed/flag fields are inconsistent");
         return false;
     }
+    // OEM7 health 0-3 is good and 4-15 bad; the writer maps RINEX health to
+    // 0/4.  The RINEX status flags are rebuilt from P and the OEM7 flag word
+    // (the RINEX GLONASS-M type bits are not in the log).
+    glo.svh = health >= 4 ? 1 : 0;
+    const int f = glo.vendor_flags;
+    glo.flags = glo.time_offset_parameter | ((f & 0x3) << 2) | (((f >> 2) & 0x1) << 4) | (((f >> 3) & 0x1) << 5) |
+                (((f >> 4) & 0x1) << 6);
     glo.prn = glo.slot_offset - 37;
     glo.frequency_channel = glo.frequency_offset - 7;
     if (glo.prn <= 0 || glo.prn > 31 || !satellite_number('R', glo.prn, &glo.satellite_number) ||

@@ -19,6 +19,28 @@ For Galileo, the pinned RTKLIB parser preserves the RINEX SV-health word with th
 
 BeiDou legacy D1/D2 maps to `BD2EPHEMA` and `BDSEPHA`. RINEX 4 B-CNAV1/2/3 maps to Unicore `BD3EPHA`; there is no frozen NovAtel OEM7 modern-BDS ephemeris record in V1, so the NovAtel writer reports that normalized record as unsupported instead of inventing a record family.
 
+### NovAtel field semantics
+
+The NovAtel writer follows the OEM7 log definitions (`GPSEPHEMERIS`,
+`QZSSEPHEMERIS`, `GLOEPHEMERIS`) and, for `GALEPHEMERIS`, which OEM7 no longer
+documents, the OEM6 layout that RTKLIB `decode_galephemerisb` reads:
+
+- `GPSEPHEMERISA`, `QZSSEPHEMERISA`: field 32 is the URA variance, the square
+  of the RINEX URA in metres. `BD2EPHEMA` has no NovAtel definition and keeps
+  the simulator's contract (the URA in metres).
+- `GALEPHEMERISA`: SISA is the Galileo SISA index; the field after it is
+  reserved (zero).
+- `GLOEPHEMERISA`: health is 0 for a healthy and 4 for an unhealthy RINEX
+  record (OEM7: 0-3 good, 4-15 bad); tau_n, delta_tau_n, gamma in the OEM7
+  order; P is the RINEX time-offset parameter; Flags use the OEM7 coding
+  (bits 0-1 P1, bit 2 P2, bit 3 P3, bit 4 P4).
+
+The derived values (Galileo SISA index, GLONASS P and vendor flags) are
+computed once in `finalize_nav_output_record_metadata()` and shared by both
+writers. A record whose URA, SISA or F_T cannot be represented is not written.
+The serialized-NAV parser (`tools/rangea_roundtrip`) inverts each mapping; the
+RINEX GLONASS type bits (M) are not in the log and are not restored.
+
 ### Unicore N4 field semantics
 
 The Unicore writer follows the *Unicore Reference Commands Manual for N4 High
@@ -38,9 +60,10 @@ that the writer derives from the RTKLIB record:
 - `GALEPHA` (7.3.34): SISA is the Galileo OS SIS ICD index of the RINEX SISA
   in metres (1/2/4/16 cm bands; RINEX -1 is 255, NAPA); the reserved field
   after it is zero.
-- `GLOEPHA` (7.3.37): tau_n, delta_tau_n, gamma in the N4 order; the Flags
-  field repacks the RINEX status flags into Table 7-102 (bits 0-1 P1, bit 2
-  P2, bit 3 P3); the technological parameter P (not in RINEX) is zero.
+- `GLOEPHA` (7.3.37): tau_n, delta_tau_n, gamma in the N4 order; P is the
+  RINEX time-offset parameter (status flag bits 0-1); the Flags field
+  repacks the RINEX status flags into Table 7-102 (bits 0-1 P1, bit 2 P2,
+  bit 3 P3).
 - `GALIONA` (7.3.35): SF1..SF5 come from the RINEX 4.01 IFNV disturbance
   flags (bit 4 region 1 ... bit 0 region 5).
 

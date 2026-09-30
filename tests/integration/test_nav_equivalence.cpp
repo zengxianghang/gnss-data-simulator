@@ -7,6 +7,7 @@
 #include "rangea_roundtrip.h"
 #include "serialized_nav_parser.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>

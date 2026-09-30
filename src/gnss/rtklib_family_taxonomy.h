@@ -7,6 +7,11 @@
 extern "C" {
 #include <rtklib.h>
 }
+// rtklib.h defines function-like lock()/unlock() macros for its own C code.
+// Leaked into C++ they break std::lock in <mutex> (libc++); the simulator
+// never uses them.
+#undef lock
+#undef unlock
 
 namespace gnss_sim {
 

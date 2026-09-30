@@ -19,6 +19,58 @@ For Galileo, the pinned RTKLIB parser preserves the RINEX SV-health word with th
 
 BeiDou legacy D1/D2 maps to `BD2EPHEMA` and `BDSEPHA`. RINEX 4 B-CNAV1/2/3 maps to Unicore `BD3EPHA`; there is no frozen NovAtel OEM7 modern-BDS ephemeris record in V1, so the NovAtel writer reports that normalized record as unsupported instead of inventing a record family.
 
+### Unicore N4 field semantics
+
+The Unicore writer follows the *Unicore Reference Commands Manual for N4 High
+Precision Products* (field order and types of each log). Protocol metadata
+that the writer derives from the RTKLIB record:
+
+- `GPSEPHA`, `QZSSEPHA`, `BDSEPHA` (7.3.38, 7.3.80, 7.3.15): the AS field is
+  written between af2 and N from `eph_t.flag`, as the NovAtel `GPSEPHEMERISA`
+  writer does (RINEX has no anti-spoofing flag); URA is the variance, the
+  square of the RINEX URA in metres; QZSS PRN is 1-10 (RTKLIB 193-202). Only
+  LNAV (and BDS D1/D2) records are written; GPS/QZSS CNAV/CNAV-2 records are
+  not relabelled as these logs.
+- `IRNSSEPHA` (7.3.45): TOWC is the transmission time in 12 s units; L5 and S
+  health come from the RINEX NavIC health (L5 the more significant bit);
+  IODEC is `eph_t.iode`; the two reserved fields and the Alert/AutoNav Flag
+  (not in RINEX) are zero; URA is the variance.
+- `GALEPHA` (7.3.34): SISA is the Galileo OS SIS ICD index of the RINEX SISA
+  in metres (1/2/4/16 cm bands; RINEX -1 is 255, NAPA); the reserved field
+  after it is zero.
+- `GLOEPHA` (7.3.37): tau_n, delta_tau_n, gamma in the N4 order; the Flags
+  field repacks the RINEX status flags into Table 7-102 (bits 0-1 P1, bit 2
+  P2, bit 3 P3); the technological parameter P (not in RINEX) is zero.
+- `GALIONA` (7.3.35): SF1..SF5 come from the RINEX 4.01 IFNV disturbance
+  flags (bit 4 region 1 ... bit 0 region 5).
+
+A record whose URA, SISA or F_T cannot be represented in its N4 field is not
+written. `GPSIONA`, `BDSIONA` and `BD3IONA` needed no change.
+
+`BD3EPHA` follows the Unicore N4 reference book (7.3.12) field order: PRN,
+Health, SatType, SISMAI, IODE, IODC, Week, Zweek, Tow, Toe, DeltaA, dDeltaA,
+DeltaN, dDeltaN, M0, Ecc, omega, Cuc, Cus, Crc, Crs, Cic, Cis, I0, IDOT,
+Omega0, OmegaDot, toc, Tgdb1cp, Tgdb2ap, Tgdb2bI, Tgdb2bQ, ISCb2ad, ISCb1cd,
+af0, af1, af2, iTop, SISAIoe, SISAIocb, SISAIoc1, SISAIoc2, two reserved
+fields and FreqType (0 B-CNAV1/B1C, 1 B-CNAV2/B2a, 2 B-CNAV3/B2b). The values
+come from the RINEX 4 CNV1/2/3 record as the pinned RTKLIB keeps it
+(`eph_t.flag` is SatType, `sva` SISMAI, `Adot`, `delta_n0_dot`, `top`,
+`sisai`). Deterministic protocol metadata computed by the writer:
+
+- DeltaA = A - A_ref, with A_ref 27906100 m (MEO) or 42162200 m (IGSO/GEO)
+  from the BDS B1C/B2a/B2b ICDs;
+- Week/Zweek are the GPS week of Toe; Tow, Toe and toc are native BDT seconds
+  of week, and iTop is t_op in its 300 s units, as in the N4 example;
+- SISAI are the unsigned 5/5/3/3-bit ICD fields (a RINEX producer may write
+  the signed reading, for example -5 for 27);
+- group delays that the record's family does not broadcast are zero
+  (B-CNAV1: Tgdb1cp, Tgdb2ap, ISCb1cd; B-CNAV2: Tgdb1cp, Tgdb2ap, ISCb2ad;
+  B-CNAV3: Tgdb2bI), and IODE/IODC are zero for B-CNAV3, where N4 reserves
+  them.
+
+A record whose SatType, SISMAI, SISAI or t_op cannot be represented is not
+written.
+
 `IRNSSEPHA` consumes a normalized NavIC ephemeris when present in Receiver NAV. This output capability does not modify the frozen 21-signal V1 observation table and does not enable NavIC RANGE generation.
 
 ## GLONASS ephemeris

@@ -11,8 +11,8 @@ The RTKLIB submodule was advanced to the revision that carries the shared
 GNSS adapter API (fork PR #17 / #25):
 
 ```text
-RTKLIB commit SHA      19938fd (fork PR #36 on top of bbb12e8)
-shared adapter ABI     1.2 (numeric 0x00010002; 1.0 and 1.1 layouts unchanged)
+RTKLIB commit SHA      0b42030 (fork PR #44 on top of 19938fd)
+shared adapter ABI     1.3 (numeric 0x00010003; 1.0-1.2 layouts unchanged)
 ```
 
 The full simulator suite passes on the new pin (377/377, serial). The shared
@@ -79,6 +79,22 @@ Consequences in the simulator:
   ionosphere identical (`NavEquivalence.*`).
 
 The full suite passes on the new pin (375/375, serial).
+
+### 1.5 GLONASS BROADCAST ORBIT 4 (RTKLIB #43/#44)
+
+The pin was advanced from `19938fd` to `0b42030`. In RINEX 2/3 files the
+fork decoded the GLONASS orbit-4 fields (status flags, L1/L2 group delay
+difference delta_tau_n, URAI F_T, health flags) from unset data: a RINEX <=
+3.04 record, which has no orbit 4, received stale values (in
+`multi_gnss_acceptance_nav.rnx` R01 got delta_tau_n = 285.53 s and F_T = -1),
+and a RINEX 3.05 record never consumed its fourth line. The fork now decodes
+orbit 4 only when the record carries it. RINEX <= 3.04 GLONASS records have
+delta_tau_n = 0 and F_T = 0; delta_tau_n feeds the GLONASS L2 group delay, so
+simulated GLONASS L2 observations from such files change accordingly.
+
+The pin also brings the additive ABI 1.3 (RTKLIB #40,
+`rtklib_shared_bds_sisa_query`), which the simulator does not call, and the
+fork's CI workflow. The full suite passes on the new pin (387/387, serial).
 
 ### 1.4 Exact Doppler range rate (RTKLIB #36, simulator #181)
 

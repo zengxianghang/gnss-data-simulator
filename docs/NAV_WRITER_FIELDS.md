@@ -50,7 +50,9 @@ that the writer derives from the RTKLIB record:
 - `GPSEPHA`, `QZSSEPHA`, `BDSEPHA` (7.3.38, 7.3.80, 7.3.15): the AS field is
   written between af2 and N from `eph_t.flag`, as the NovAtel `GPSEPHEMERISA`
   writer does (RINEX has no anti-spoofing flag); URA is the variance, the
-  square of the RINEX URA in metres; QZSS PRN is 1-10 (RTKLIB 193-202). Only
+  square of the RINEX URA in metres; QZSS PRN is 1-10 (RTKLIB 193-202);
+  BDSEPH Toe and toc are BDT seconds of week (maintainer confirmation), while
+  Week, Z Week and Tow stay on the GPS axis as N4 describes them. Only
   LNAV (and BDS D1/D2) records are written; GPS/QZSS CNAV/CNAV-2 records are
   not relabelled as these logs.
 - `IRNSSEPHA` (7.3.45): TOWC is the transmission time in 12 s units; L5 and S

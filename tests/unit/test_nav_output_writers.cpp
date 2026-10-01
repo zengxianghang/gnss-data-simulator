@@ -474,6 +474,12 @@ TEST(NavOutputWriter, UnicoreEphemerisLogsFollowTheN4FieldOrder) {
         EXPECT_TRUE(sample.fields[as_index] == "TRUE" || sample.fields[as_index] == "FALSE") << name; // AS
         EXPECT_DOUBLE_EQ(std::stod(sample.fields[as_index + 2]), eph.sva * eph.sva) << name;          // URA, m^2
     }
+    // BDSEPH Toe/toc are BDT seconds of week; D1/D2 broadcast them in 8 s units.
+    const UnicoreSample& bds = samples.at("BDSEPHA");
+    EXPECT_DOUBLE_EQ(std::stod(bds.fields[7]), bds.record.ephemeris.bdt_toe_sow_sec);
+    EXPECT_DOUBLE_EQ(std::stod(bds.fields[24]), bds.record.ephemeris.bdt_toc_sow_sec);
+    EXPECT_DOUBLE_EQ(std::fmod(std::stod(bds.fields[7]), 8.0), 0.0);
+    EXPECT_DOUBLE_EQ(std::fmod(std::stod(bds.fields[24]), 8.0), 0.0);
     EXPECT_EQ(samples.at("GPSEPHA").fields[0], std::to_string(samples.at("GPSEPHA").record.ephemeris.prn));
     const int qzss_prn = std::stoi(samples.at("QZSSEPHA").fields[0]);
     EXPECT_EQ(qzss_prn, samples.at("QZSSEPHA").record.ephemeris.prn - 192); // N4: QZSS 1-10

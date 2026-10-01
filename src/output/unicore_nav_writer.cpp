@@ -70,7 +70,9 @@ void legacy_orbit_block(std::ostringstream& body, const KeplerianNavOutputData& 
 
 // Unicore N4 GPSEPH (7.3.38), QZSSEPH (7.3.80) and BDSEPH (7.3.15): PRN, Tow,
 // health, IODE1, IODE2, Week, Z Week, Toe, A .. OmegaDot, IODC, toc, tgd
-// (BDSEPH: tgd1, tgd2), af0, af1, af2, AS, N, URA.  AS comes from eph_t.flag
+// (BDSEPH: tgd1, tgd2), af0, af1, af2, AS, N, URA.  BDSEPH Toe and toc are
+// BDT seconds of week (maintainer confirmation, 2026-10-01); Week, Z Week and
+// Tow stay on the GPS axis as N4 describes them.  AS comes from eph_t.flag
 // like the NovAtel GPSEPHEMERIS writer (RINEX carries no anti-spoofing flag).
 // Returns false when the URA cannot be represented.
 bool legacy_kepler_body(const KeplerianNavOutputData& eph, bool beidou, std::string* body_text) {
@@ -82,10 +84,12 @@ bool legacy_kepler_body(const KeplerianNavOutputData& eph, bool beidou, std::str
     std::ostringstream body;
     body.imbue(std::locale::classic());
     body << prn << ',' << std::fixed << std::setprecision(1) << eph.transmit_sow_sec << ',' << eph.svh << ','
-         << eph.iode << ',' << eph.iode << ',' << eph.toe_week << ',' << eph.toe_week << ',' << eph.toe_sow_sec << ',';
+         << eph.iode << ',' << eph.iode << ',' << eph.toe_week << ',' << eph.toe_week << ','
+         << (beidou ? eph.bdt_toe_sow_sec : eph.toe_sow_sec) << ',';
     legacy_orbit_block(body, eph);
-    body << ',' << eph.iodc << ',' << std::fixed << std::setprecision(1) << eph.toc_sow_sec << ',' << std::scientific
-         << std::setprecision(15) << eph.tgd_sec[0];
+    body << ',' << eph.iodc << ',' << std::fixed << std::setprecision(1)
+         << (beidou ? eph.bdt_toc_sow_sec : eph.toc_sow_sec) << ',' << std::scientific << std::setprecision(15)
+         << eph.tgd_sec[0];
     if (beidou) {
         body << ',' << eph.tgd_sec[1];
     }

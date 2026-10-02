@@ -72,6 +72,28 @@ that the writer derives from the RTKLIB record:
 A record whose URA, SISA or F_T cannot be represented in its N4 field is not
 written. `GPSIONA`, `BDSIONA` and `BD3IONA` needed no change.
 
+`GPSCNAVEPHA` follows the Unicore UT986 timing-products protocol
+(1.4.4.18) field order: PRN (QZSS 33-42), Health, ISF, reserved[5], Top,
+WNop, URAIndex[4] (ED, NED0, NED1, NED2), Week, Zweek, TOW, TOE, DeltaA,
+dDeltaA, DeltaN, dDeltaN, M0, Ecc, Omega, Cuc, Cus, Crc, Crs, Cic, Cis, I0,
+IDot, Omega0, OmegaDot, toc, Tgd, ISCL1CP, ISCL1CD, ISCL1CA, ISCL2C, ISCL5I5,
+ISCL5Q5, Af0, Af1, Af2. It carries the RINEX 4 GPS/QZSS CNAV (L2C/L5) and
+CNAV-2 (L1C) records; `GPSEPHA`/`QZSSEPHA` stay LNAV only. The values come
+from the record as the pinned RTKLIB keeps it (`Adot`, `delta_n0_dot`, `top`,
+`urai_ed`, `urai_ned`, `wn_op`, `isc`). Deterministic protocol metadata
+computed by the writer:
+
+- reserved[0] is 1 for an L5 ephemeris (CNAV) and 0 for L1C (CNAV-2); the
+  other reserved fields and ISF (not in RINEX) are zero;
+- DeltaA = A - A_ref, with A_ref 26559710 m (GPS) or 42164200 m (QZSS);
+- Week/Zweek are the GPS week of Toe; TOW, TOE (= toc for CNAV) and toc are
+  GPS seconds of week;
+- the signed URA_ED and URA_NED0 indices are written as unsigned bytes (-5 as
+  251, as in the UT986 example); URA_NED1/NED2 as written;
+- Top is t_op in its 300 s ICD units and WNop the full week: UT986 does not
+  state the unit, its USHORT cannot hold seconds of week, and its example is
+  not decisive (gnss-daily-analysis treats both as unavailable).
+
 `BD3EPHA` follows the Unicore N4 reference book (7.3.12) field order: PRN,
 Health, SatType, SISMAI, IODE, IODC, Week, Zweek, Tow, Toe, DeltaA, dDeltaA,
 DeltaN, dDeltaN, M0, Ecc, omega, Cuc, Cus, Crc, Crs, Cic, Cis, I0, IDOT,

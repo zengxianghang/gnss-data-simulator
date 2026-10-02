@@ -45,6 +45,12 @@ int bds_frequency_type(const KeplerianNavOutputData& eph) {
 
 // QZSS PRN offset: RTKLIB numbers QZSS 193-202; N4 QZSSEPH uses 1-10.
 constexpr int kQzssPrnOffset = 192;
+// IS-GPS-200 / IS-QZSS-PNT CNAV reference semi-major axis A_ref (m): CNAV
+// broadcasts DeltaA = A - A_ref.
+constexpr double kGpsCnavReferenceSemiMajorAxisM = 26559710.0;
+constexpr double kQzssCnavReferenceSemiMajorAxisM = 42164200.0;
+// CNAV t_op scale factor (s).
+constexpr double kGpsCnavTopScaleSec = 300.0;
 // NavIC TOWC unit (s): TOWC * 12 s is a subframe start time.
 constexpr double kNavicTowcUnitSec = 12.0;
 
@@ -199,6 +205,56 @@ bool bd3_ephemeris_body(const KeplerianNavOutputData& eph, std::string* body_tex
     return true;
 }
 
+// Unicore UT986 GPSCNAVEPH (Timing Products Protocol 1.4.4.18), one GPS/QZSS
+// CNAV (L5) or CNAV-2 (L1C) ephemeris: PRN (QZSS 33-42), Health, ISF,
+// reserved[5] (reserved[0] 1 for an L5 ephemeris, 0 for L1C), Top, WNop,
+// URAIndex[4] (ED, NED0, NED1, NED2), Week, Zweek, TOW, TOE, DeltaA,
+// dDeltaA, DeltaN, dDeltaN, M0, Ecc, Omega, Cuc, Cus, Crc, Crs, Cic, Cis,
+// I0, IDot, Omega0, OmegaDot, toc, Tgd, ISCL1CP, ISCL1CD, ISCL1CA, ISCL2C,
+// ISCL5I5, ISCL5Q5, Af0, Af1, Af2.  Week/Zweek are the GPS week of Toe and
+// TOW/TOE/toc GPS seconds of week.  The signed URA_ED/URA_NED0 indices are
+// written as unsigned bytes (-5 as 251, as in the UT986 example); Top is
+// t_op in its 300 s ICD units (UT986 does not give the unit; the USHORT
+// cannot hold seconds of week) and WNop the full week.  ISF is not in RINEX
+// and is written as zero.  Returns false when a protocol field cannot be
+// represented.
+bool gps_cnav_body(const KeplerianNavOutputData& eph, std::string* body_text) {
+    const bool qzss = eph.system == NavOutputSystem::kQzss;
+    const double reference_axis_m = qzss ? kQzssCnavReferenceSemiMajorAxisM : kGpsCnavReferenceSemiMajorAxisM;
+    const double top_units = eph.top_sow_sec / kGpsCnavTopScaleSec;
+    int ura[4] = {0, 0, 0, 0};
+    static const int kUraBits[4] = {8, 8, 3, 3}; // ED, NED0 signed bytes; NED1, NED2
+    const double ura_values[4] = {eph.urai_ed, eph.urai_ned[0], eph.urai_ned[1], eph.urai_ned[2]};
+    bool valid = std::nearbyint(top_units) == top_units && top_units >= 0.0 && top_units < 65536.0 &&
+                 std::isfinite(eph.wn_op) && eph.wn_op >= 0.0 && eph.wn_op < 65536.0 &&
+                 std::nearbyint(eph.wn_op) == eph.wn_op;
+    for (int index = 0; valid && index < 4; ++index) {
+        valid = unsigned_raw_field(ura_values[index], kUraBits[index], &ura[index]);
+    }
+    if (!valid) {
+        return false;
+    }
+    const int prn = qzss ? eph.prn - kQzssPrnOffset + 32 : eph.prn;
+    const bool l5 = eph.message_family == RtklibBroadcastMessageFamily::kCnav;
+    std::ostringstream body;
+    body.imbue(std::locale::classic());
+    body << prn << ',' << eph.svh << ",0," << (l5 ? 1 : 0) << ",0,0,0,0," << static_cast<int>(std::llround(top_units))
+         << ',' << static_cast<int>(std::llround(eph.wn_op)) << ',' << ura[0] << ',' << ura[1] << ',' << ura[2] << ','
+         << ura[3] << ',' << eph.toe_week << ',' << eph.toe_week << ',' << std::fixed << std::setprecision(1)
+         << eph.transmit_sow_sec << ',' << eph.toe_sow_sec << ',' << std::scientific << std::setprecision(15)
+         << eph.semi_major_axis_m - reference_axis_m << ',' << eph.semi_major_axis_rate_mps << ','
+         << eph.delta_mean_motion_radps << ',' << eph.delta_mean_motion_rate_radps2 << ',' << eph.mean_anomaly_rad
+         << ',' << eph.eccentricity << ',' << eph.argument_of_perigee_rad << ',' << eph.cuc_rad << ',' << eph.cus_rad
+         << ',' << eph.crc_m << ',' << eph.crs_m << ',' << eph.cic_rad << ',' << eph.cis_rad << ','
+         << eph.inclination_rad << ',' << eph.inclination_dot_radps << ',' << eph.omega0_rad << ','
+         << eph.omega_dot_radps << ',' << std::fixed << std::setprecision(1) << eph.toc_sow_sec << ','
+         << std::scientific << std::setprecision(15) << eph.tgd_sec[0] << ',' << eph.isc_sec[5] << ',' << eph.isc_sec[4]
+         << ',' << eph.isc_sec[0] << ',' << eph.isc_sec[1] << ',' << eph.isc_sec[2] << ',' << eph.isc_sec[3] << ','
+         << eph.clock_bias_sec << ',' << eph.clock_drift_sec_per_sec << ',' << eph.clock_drift_rate_sec_per_sec2;
+    *body_text = body.str();
+    return true;
+}
+
 // Unicore N4 GALEPH (7.3.34).  SISA is the ICD index; field 12 is reserved.
 // Returns false when the SISA cannot be represented.
 bool galileo_body(const KeplerianNavOutputData& eph, std::string* body_text) {
@@ -326,8 +382,16 @@ bool format_unicore_nav_output_record(const NavOutputRecord& source, const SimTi
         switch (eph.system) {
             case NavOutputSystem::kGps:
             case NavOutputSystem::kQzss:
-                // GPSEPH/QZSSEPH carry LNAV only; CNAV/CNAV-2 records are not
-                // relabelled as legacy ephemerides.
+                // GPSEPH/QZSSEPH carry LNAV only; CNAV/CNAV-2 records are
+                // GPSCNAVEPH (UT986), never relabelled as legacy ephemerides.
+                if (eph.message_family == RtklibBroadcastMessageFamily::kCnav ||
+                    eph.message_family == RtklibBroadcastMessageFamily::kCnav2) {
+                    if (!gps_cnav_body(eph, &body)) {
+                        return true;
+                    }
+                    log_name = "GPSCNAVEPHA";
+                    break;
+                }
                 if (eph.message_family != RtklibBroadcastMessageFamily::kLegacy ||
                     !legacy_kepler_body(eph, false, &body)) {
                     return true;

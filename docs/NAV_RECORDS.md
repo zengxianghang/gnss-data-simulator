@@ -27,6 +27,7 @@ Supported navigation record families:
 - `BDSION`
 - `GALION`
 - `GPSEPH`
+- `GPSCNAVEPH` (Unicore UT986: GPS/QZSS CNAV and CNAV-2)
 - `QZSSEPH`
 - `BD3EPH`
 - `BDSEPH`

@@ -28,6 +28,7 @@
 #include "output/novatel_range_writer.h"
 #include "output/novatel_solution_writer.h"
 #include "output/truth_writer.h"
+#include "output/unicore_nav_writer.h"
 #include "output/urban_truth_writer.h"
 #include "scenario/scenario_engine.h"
 #include "solution/solution_engine.h"
@@ -377,7 +378,11 @@ bool emit_receiver_nav_record(const SimConfig& config, const RtklibNavStore* rec
     }
     std::string message;
     bool supported = false;
-    if (!format_novatel_nav_output_record(record, output_time, &message, &supported, error_message)) {
+    const bool formatted =
+        config.nav_log_format == NavLogFormat::kUnicore
+            ? format_unicore_nav_output_record(record, output_time, &message, &supported, error_message)
+            : format_novatel_nav_output_record(record, output_time, &message, &supported, error_message);
+    if (!formatted) {
         return false;
     }
     if (supported) {

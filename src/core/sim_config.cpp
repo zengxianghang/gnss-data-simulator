@@ -160,6 +160,19 @@ bool parse_startup_mode(const char* value, StartupMode* startup_mode, std::strin
     return false;
 }
 
+bool parse_nav_log_format(const char* value, NavLogFormat* format, std::string* error_message) {
+    if (std::strcmp(value, "novatel") == 0) {
+        *format = NavLogFormat::kNovatel;
+        return true;
+    }
+    if (std::strcmp(value, "unicore") == 0) {
+        *format = NavLogFormat::kUnicore;
+        return true;
+    }
+    set_error(error_message, std::string("unsupported nav_log_format: ") + value);
+    return false;
+}
+
 bool parse_atmosphere_mode(const char* value, AtmosphereMode* atmosphere_mode, std::string* error_message) {
     if (std::strcmp(value, "unspecified") == 0) {
         *atmosphere_mode = AtmosphereMode::UNSPECIFIED;
@@ -662,6 +675,7 @@ SimConfig default_sim_config() {
     config.solution_elevation_mask_deg = 5.0;
     config.output_eph = true;
     config.output_ion = true;
+    config.nav_log_format = NavLogFormat::kNovatel;
     config.measurement_noise_enabled = false;
     config.multipath_enabled = false;
     config.receiver_clock_bias_m = 0.0;
@@ -819,6 +833,7 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                                         "solution_elevation_mask_deg",
                                         "output_eph",
                                         "output_ion",
+                                        "nav_log_format",
                                         "measurement_noise_enabled",
                                         "bestpos_rtk",
                                         "measurement_error",
@@ -835,11 +850,12 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                                         "seed"};
 
     SimConfig parsed = default_sim_config();
-    bool success = validate_object_keys(root, "root", allowed_keys, 22U, error_message);
+    bool success = validate_object_keys(root, "root", allowed_keys, 23U, error_message);
 
     double duration_sec = static_cast<double>(parsed.duration_ns) / static_cast<double>(NANOSECONDS_PER_SECOND);
     const char* scenario_name = scenario_type_name(parsed.scenario);
     const char* atmosphere_name = atmosphere_mode_name(parsed.atmosphere_mode);
+    const char* nav_log_format = nav_log_format_name(parsed.nav_log_format);
     if (success) {
         success = read_optional_int(root, "schema_version", &parsed.schema_version, error_message) &&
                   read_optional_string(root, "scenario", &scenario_name, error_message) &&
@@ -851,7 +867,9 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
                   read_optional_number(root, "solution_elevation_mask_deg", &parsed.solution_elevation_mask_deg,
                                        error_message) &&
                   read_optional_bool(root, "output_eph", &parsed.output_eph, error_message) &&
-                  read_optional_bool(root, "output_ion", &parsed.output_ion, error_message);
+                  read_optional_bool(root, "output_ion", &parsed.output_ion, error_message) &&
+                  read_optional_string(root, "nav_log_format", &nav_log_format, error_message) &&
+                  parse_nav_log_format(nav_log_format, &parsed.nav_log_format, error_message);
     }
     if (success && cJSON_GetObjectItemCaseSensitive(root, "measurement_noise_enabled") == nullptr) {
         parsed.measurement_noise_enabled =
@@ -880,6 +898,10 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
 
     *config = parsed;
     return true;
+}
+
+const char* nav_log_format_name(NavLogFormat format) {
+    return format == NavLogFormat::kUnicore ? "unicore" : "novatel";
 }
 
 const char* scenario_type_name(ScenarioType scenario) {

@@ -364,6 +364,7 @@ if(BUILD_TESTING)
         tests/integration/test_carrier_tracking_authentic_validation.cpp
         tests/integration/test_measurement_noise_integration.cpp
         tests/integration/test_nav_equivalence.cpp
+        tests/integration/test_unicore_nav_log.cpp
         tests/integration/test_shared_api_parity.cpp
         tests/integration/test_rea_fade.cpp
         tests/integration/test_rangea_roundtrip.cpp

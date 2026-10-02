@@ -132,6 +132,7 @@ All stochastic timing behavior must use the deterministic seeded PRNG and remain
 elevation_mask_deg       = 3.0
 output_eph               = true
 output_ion               = true
+nav_log_format           = novatel
 measurement_noise        = false
 psr_noise_m              = 0.0
 doppler_noise            = 0.0

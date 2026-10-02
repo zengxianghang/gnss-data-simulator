@@ -64,6 +64,11 @@ struct KeplerianNavOutputData {
     double delta_mean_motion_rate_radps2;
     double top_sow_sec;
     double sisai[4];
+    // GPS/QZSS CNAV/CNAV-2 accuracy terms (eph_t urai_ed, urai_ned, wn_op):
+    // the raw URA_ED/URA_NED0..2 indices and the t_op week.
+    double urai_ed;
+    double urai_ned[3];
+    double wn_op;
     // BeiDou only: Toe/Toc/transmit time as native BDT seconds of week.
     double bdt_toe_sow_sec;
     double bdt_toc_sow_sec;

@@ -348,6 +348,74 @@ TEST(NavOutputWriter, HotAndWarmRestoreTheSameDeterministicReceiverNavBytes) {
     EXPECT_FALSE(baseline.empty());
 }
 
+// Unicore UT986 GPSCNAVEPH (1.4.4.18): 46 fields in the UT986 order, from the
+// real RINEX 4 CNAV/CNAV-2 records of BRD400DLR (G17 CNAV, J04 CNAV-2).
+std::vector<std::string> gpscnaveph_fields(gnss_sim::NavOutputSystem system,
+                                           gnss_sim::RtklibBroadcastMessageFamily family,
+                                           gnss_sim::NavOutputRecord* record) {
+    std::string error_message;
+    std::string message;
+    bool supported = false;
+    EXPECT_TRUE(
+        load_real_ephemeris_record("brd400dlr_rinex4_acceptance_nav.rnx", system, family, record, &error_message))
+        << error_message;
+    EXPECT_TRUE(gnss_sim::format_unicore_nav_output_record(*record, ephemeris_output_time(*record), &message,
+                                                           &supported, &error_message))
+        << error_message;
+    EXPECT_TRUE(supported);
+    EXPECT_EQ(log_name(message), "GPSCNAVEPHA");
+    EXPECT_TRUE(valid_ascii_crc(message));
+    return split_body_fields(body_between_semicolon_and_crc(message));
+}
+
+TEST(NavOutputWriter, GpscnavephFollowsTheUt986FieldOrder) {
+    gnss_sim::NavOutputRecord record{};
+    std::vector<std::string> fields =
+        gpscnaveph_fields(gnss_sim::NavOutputSystem::kGps, gnss_sim::RtklibBroadcastMessageFamily::kCnav, &record);
+    ASSERT_EQ(fields.size(), 46u);
+    const gnss_sim::KeplerianNavOutputData& eph = record.ephemeris;
+    EXPECT_EQ(fields[0], "17"); // PRN
+    EXPECT_EQ(fields[1], "1");  // Health
+    EXPECT_EQ(fields[2], "0");  // ISF (not in RINEX)
+    EXPECT_EQ(fields[3], "1");  // reserved[0]: L5 ephemeris (CNAV)
+    EXPECT_EQ((std::vector<std::string>(fields.begin() + 4, fields.begin() + 8)),
+              (std::vector<std::string>{"0", "0", "0", "0"}));
+    EXPECT_EQ(fields[8], "1443"); // Top = t_op 432900 s / 300 s
+    EXPECT_EQ(fields[9], "2347"); // WNop
+    // URA ED -5 and NED0 -6 as unsigned bytes; NED1 1, NED2 7.
+    EXPECT_EQ((std::vector<std::string>(fields.begin() + 10, fields.begin() + 14)),
+              (std::vector<std::string>{"251", "250", "1", "7"}));
+    EXPECT_EQ(fields[14], std::to_string(eph.toe_week));                         // Week
+    EXPECT_EQ(fields[15], std::to_string(eph.toe_week));                         // Zweek
+    EXPECT_EQ(fields[16], "433836.0");                                           // TOW
+    EXPECT_DOUBLE_EQ(std::stod(fields[17]), eph.toe_sow_sec);                    // TOE = toc
+    EXPECT_DOUBLE_EQ(std::stod(fields[18]), eph.semi_major_axis_m - 26559710.0); // DeltaA
+    EXPECT_DOUBLE_EQ(std::stod(fields[19]), 1.355648040771e-02);                 // dDeltaA
+    EXPECT_DOUBLE_EQ(std::stod(fields[20]), 4.233926360027e-09);                 // DeltaN
+    EXPECT_DOUBLE_EQ(std::stod(fields[21]), -1.452479237639e-13);                // dDeltaN
+    EXPECT_DOUBLE_EQ(std::stod(fields[22]), -2.597699433317e+00);                // M0
+    EXPECT_DOUBLE_EQ(std::stod(fields[23]), 1.338323508389e-02);                 // Ecc
+    EXPECT_DOUBLE_EQ(std::stod(fields[34]), eph.omega_dot_radps);                // OmegaDot
+    EXPECT_DOUBLE_EQ(std::stod(fields[35]), eph.toc_sow_sec);                    // toc
+    EXPECT_DOUBLE_EQ(std::stod(fields[36]), -1.071020960808e-08);                // Tgd
+    EXPECT_DOUBLE_EQ(std::stod(fields[37]), 0.0);                                // ISCL1CP
+    EXPECT_DOUBLE_EQ(std::stod(fields[38]), 0.0);                                // ISCL1CD
+    EXPECT_DOUBLE_EQ(std::stod(fields[39]), -8.440110832453e-10);                // ISCL1CA
+    EXPECT_DOUBLE_EQ(std::stod(fields[40]), 6.722984835505e-09);                 // ISCL2C
+    EXPECT_DOUBLE_EQ(std::stod(fields[41]), 0.0);                                // ISCL5I5
+    EXPECT_DOUBLE_EQ(std::stod(fields[42]), 0.0);                                // ISCL5Q5
+    EXPECT_DOUBLE_EQ(std::stod(fields[43]), 4.916950128973e-04);                 // Af0
+
+    fields =
+        gpscnaveph_fields(gnss_sim::NavOutputSystem::kQzss, gnss_sim::RtklibBroadcastMessageFamily::kCnav2, &record);
+    ASSERT_EQ(fields.size(), 46u);
+    EXPECT_EQ(fields[0], "36"); // QZSS J04 as 33-42
+    EXPECT_EQ(fields[3], "0");  // reserved[0]: L1C ephemeris (CNAV-2)
+    EXPECT_DOUBLE_EQ(std::stod(fields[18]), record.ephemeris.semi_major_axis_m - 42164200.0);
+    EXPECT_DOUBLE_EQ(std::stod(fields[37]), -5.820766091347e-11); // ISCL1CP
+    EXPECT_DOUBLE_EQ(std::stod(fields[38]), -2.910383045673e-10); // ISCL1CD
+}
+
 // Unicore N4 BD3EPH (reference book 7.3.12): 45 fields in the N4 order, from
 // the real RINEX 4 B-CNAV1/2/3 records of BRD400DLR (C22 CNV1/CNV2, C24 CNV3).
 std::vector<std::string> bd3eph_fields(gnss_sim::RtklibBroadcastMessageFamily family,
@@ -581,14 +649,14 @@ TEST(NavOutputWriter, GalileoSisaIndexAndMetresAreInverse) {
     EXPECT_TRUE(std::isnan(gnss_sim::galileo_sisa_metres(126)));
 }
 
-TEST(NavOutputWriter, UnicoreLegacyEphemerisLogsDoNotMasqueradeModernGpsOrQzssFamilies) {
+TEST(NavOutputWriter, UnicoreModernGpsOrQzssFamiliesAreGpscnavephNotLegacyLogs) {
     gnss_sim::RtklibNavStore* store = gnss_sim::create_rtklib_nav_store();
     ASSERT_NE(store, nullptr);
     std::string error_message;
     ASSERT_TRUE(
         gnss_sim::load_rinex_nav_file(store, data_path("brd400dlr_rinex4_acceptance_nav.rnx").c_str(), &error_message))
         << error_message;
-    int modern_rejected = 0;
+    int modern_written = 0;
     const int count = gnss_sim::rtklib_nav_output_record_count(store);
     for (int index = 0; index < count; ++index) {
         gnss_sim::NavOutputRecord record{};
@@ -604,11 +672,12 @@ TEST(NavOutputWriter, UnicoreLegacyEphemerisLogsDoNotMasqueradeModernGpsOrQzssFa
         ASSERT_TRUE(
             gnss_sim::format_unicore_nav_output_record(record, output_time(), &message, &supported, &error_message))
             << error_message;
-        EXPECT_FALSE(supported);
-        EXPECT_TRUE(message.empty());
-        ++modern_rejected;
+        // CNAV/CNAV-2 are GPSCNAVEPH (UT986), never GPSEPH/QZSSEPH.
+        EXPECT_TRUE(supported);
+        EXPECT_EQ(log_name(message), "GPSCNAVEPHA");
+        ++modern_written;
     }
-    EXPECT_GT(modern_rejected, 0) << "real BRD400 fixture must contain modern GPS/QZSS ephemeris records";
+    EXPECT_GT(modern_written, 0) << "real BRD400 fixture must contain modern GPS/QZSS ephemeris records";
     gnss_sim::destroy_rtklib_nav_store(store);
 }
 
@@ -677,7 +746,7 @@ TEST(NavOutputWriter, NovatelLegacyEphemerisLogsDoNotMasqueradeModernGpsOrQzssFa
         << error_message;
 
     int legacy_supported = 0;
-    int modern_rejected = 0;
+    int modern_written = 0;
     const int count = gnss_sim::rtklib_nav_output_record_count(store);
     for (int index = 0; index < count; ++index) {
         gnss_sim::NavOutputRecord record{};
@@ -699,14 +768,14 @@ TEST(NavOutputWriter, NovatelLegacyEphemerisLogsDoNotMasqueradeModernGpsOrQzssFa
             EXPECT_TRUE(valid_ascii_crc(message));
             EXPECT_TRUE(log_name(message) == "GPSEPHEMA" || log_name(message) == "QZSSEPHEMERISA");
         } else {
-            ++modern_rejected;
+            ++modern_written;
             EXPECT_FALSE(supported);
             EXPECT_TRUE(message.empty());
         }
     }
 
     EXPECT_GT(legacy_supported, 0);
-    EXPECT_GT(modern_rejected, 0) << "real BRD400 fixture must contain modern GPS/QZSS ephemeris records";
+    EXPECT_GT(modern_written, 0) << "real BRD400 fixture must contain modern GPS/QZSS ephemeris records";
     gnss_sim::destroy_rtklib_nav_store(store);
 }
 

@@ -31,6 +31,7 @@ TEST_F(SimConfigTest, FrozenDefaultsAreCentralized) {
     EXPECT_DOUBLE_EQ(config.solution_elevation_mask_deg, 5.0);
     EXPECT_TRUE(config.output_eph);
     EXPECT_TRUE(config.output_ion);
+    EXPECT_EQ(config.nav_log_format, gnss_sim::NavLogFormat::kNovatel);
     EXPECT_FALSE(config.measurement_noise_enabled);
     EXPECT_DOUBLE_EQ(config.measurement_error.psr_sigma_m, 0.08);
     EXPECT_DOUBLE_EQ(config.measurement_error.doppler_sigma_mps, 0.03);
@@ -135,6 +136,19 @@ TEST_F(SimConfigTest, RejectsUnsupportedAtmosphereMode) {
     std::string error_message;
     EXPECT_FALSE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message));
     EXPECT_NE(error_message.find("unsupported atmosphere_mode"), std::string::npos);
+}
+
+TEST_F(SimConfigTest, LoadsNavLogFormat) {
+    write_test_config(R"json({"nav_log_format": "unicore"})json");
+    gnss_sim::SimConfig config{};
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message)) << error_message;
+    EXPECT_EQ(config.nav_log_format, gnss_sim::NavLogFormat::kUnicore);
+    EXPECT_STREQ(gnss_sim::nav_log_format_name(config.nav_log_format), "unicore");
+
+    write_test_config(R"json({"nav_log_format": "UNICORE"})json");
+    EXPECT_FALSE(gnss_sim::load_sim_config_json(TEST_CONFIG_PATH, &config, &error_message));
+    EXPECT_NE(error_message.find("unsupported nav_log_format"), std::string::npos);
 }
 
 TEST_F(SimConfigTest, RejectsUnknownKey) {

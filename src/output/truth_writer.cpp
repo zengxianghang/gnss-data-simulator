@@ -166,6 +166,10 @@ std::string config_json(const SimConfig& config, int indent) {
     output << inner << "\"solution_elevation_mask_deg\": " << config.solution_elevation_mask_deg << ",\n";
     output << inner << "\"output_eph\": " << bool_json(config.output_eph) << ",\n";
     output << inner << "\"output_ion\": " << bool_json(config.output_ion) << ",\n";
+    if (config.nav_log_format != NavLogFormat::kNovatel) {
+        // Written only when not the default, so default outputs are unchanged.
+        output << inner << "\"nav_log_format\": \"" << nav_log_format_name(config.nav_log_format) << "\",\n";
+    }
     output << inner << "\"measurement_noise_enabled\": " << bool_json(config.measurement_noise_enabled) << ",\n";
     output << inner << "\"multipath_enabled\": " << bool_json(config.multipath_enabled) << ",\n";
     output << inner << "\"receiver_clock_bias_m\": " << config.receiver_clock_bias_m << ",\n";

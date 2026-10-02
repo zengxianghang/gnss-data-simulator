@@ -173,6 +173,9 @@ bool fill_ephemeris(const nav_t& nav, int index, NavOutputRecord* record) {
     output.delta_mean_motion_rate_radps2 = eph.delta_n0_dot;
     output.top_sow_sec = eph.top;
     std::memcpy(output.sisai, eph.sisai, sizeof(output.sisai));
+    output.urai_ed = eph.urai_ed;
+    std::memcpy(output.urai_ned, eph.urai_ned, sizeof(output.urai_ned));
+    output.wn_op = eph.wn_op;
     if (system == SYS_CMP) {
         int bdt_week = 0;
         output.bdt_toe_sow_sec = time2bdt(gpst2bdt(eph.toe), &bdt_week);

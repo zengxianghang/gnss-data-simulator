@@ -135,6 +135,13 @@ struct Cn0HighBaselineConfig {
     double cn0_dbhz;
 };
 
+// Receiver NAV/ION log records: NovAtel OEM7 (default) or Unicore N4/UT986.
+// Observation and solution logs are unchanged.
+enum class NavLogFormat {
+    kNovatel,
+    kUnicore,
+};
+
 struct SimConfig {
     int schema_version;
     ScenarioType scenario;
@@ -144,6 +151,7 @@ struct SimConfig {
     double solution_elevation_mask_deg;
     bool output_eph;
     bool output_ion;
+    NavLogFormat nav_log_format;
     bool measurement_noise_enabled;
     bool multipath_enabled;
     double receiver_clock_bias_m;
@@ -166,6 +174,7 @@ bool load_sim_config_json(const char* file_path, SimConfig* config, std::string*
 const char* scenario_type_name(ScenarioType scenario);
 const char* startup_mode_name(StartupMode startup_mode);
 const char* atmosphere_mode_name(AtmosphereMode atmosphere_mode);
+const char* nav_log_format_name(NavLogFormat format);
 
 } // namespace gnss_sim
 

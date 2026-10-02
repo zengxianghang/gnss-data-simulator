@@ -27,12 +27,19 @@ Supported navigation record families:
 - `BDSION`
 - `GALION`
 - `GPSEPH`
+- `GPSCNAVEPH` (Unicore UT986: GPS/QZSS CNAV and CNAV-2)
 - `QZSSEPH`
 - `BD3EPH`
 - `BDSEPH`
 - `GLOEPH`
 - `GALEPH`
 - `IRNSSEPH`
+
+The receiver log uses the NovAtel NAV records by default. The configuration
+key `nav_log_format` (`"novatel"` or `"unicore"`) selects the NAV/ION writer
+only; observation and solution logs are unchanged. The resolved configuration
+in the truth outputs lists the key only when it is not the default, so default
+outputs stay byte-identical.
 
 For Unicore ASCII logs, the emitted record normally carries the trailing `A`, for example `GPSEPHA`. Internally, record-family identifiers should remain independent from ASCII suffix handling so binary/other output formats can be added later without changing navigation logic.
 

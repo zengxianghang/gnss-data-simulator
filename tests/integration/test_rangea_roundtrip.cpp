@@ -383,6 +383,72 @@ TEST(RangeaRoundtripIntegration, RealBeidouLegacyAsciiRestoresRtklibBroadcastSta
     gnss_sim::destroy_rtklib_nav_store(full);
 }
 
+TEST(RangeaRoundtripIntegration, BeidouBdtTimesRestoreGpsWeeksAcrossBoundaries) {
+    gnss_sim::RtklibNavStore* store = gnss_sim::create_rtklib_nav_store();
+    ASSERT_NE(store, nullptr);
+    std::string error_message;
+    ASSERT_TRUE(gnss_sim::load_rinex_nav_file(store, brd4_nav_path().c_str(), &error_message)) << error_message;
+    gnss_sim::NavOutputRecord source{};
+    bool found = false;
+    for (int i = 0; i < gnss_sim::rtklib_nav_output_record_count(store); ++i) {
+        ASSERT_TRUE(gnss_sim::rtklib_nav_output_record(store, i, &source, &error_message)) << error_message;
+        if (source.kind == gnss_sim::RtklibNavRecordKind::kEphemeris &&
+            source.ephemeris.system == gnss_sim::NavOutputSystem::kBeidou &&
+            source.ephemeris.message_family == gnss_sim::RtklibBroadcastMessageFamily::kLegacy) {
+            found = true;
+            break;
+        }
+    }
+    gnss_sim::destroy_rtklib_nav_store(store);
+    ASSERT_TRUE(found);
+    // These retimed records test serialization only. Real broadcast-state
+    // equivalence is covered separately without changing the source epochs.
+    struct Case {
+        double toe_gps;
+        double toc_gps;
+        double toe_bdt;
+        double toc_bdt;
+        int toc_week;
+    };
+    const Case cases[] = {{3.0, 16.0, 604789.0, 2.0, 2347},
+                          {604795.0, 2.0, 604781.0, 604788.0, 2348},
+                          {0.0, 604790.0, 604786.0, 604776.0, 2346},
+                          {14.0, 14.0, 0.0, 0.0, 2347}};
+    for (const Case& item : cases) {
+        SCOPED_TRACE(item.toe_gps);
+        auto& eph = source.ephemeris;
+        eph.toe_week = 2347;
+        eph.toe_sow_sec = item.toe_gps;
+        eph.toc_week = item.toc_week;
+        eph.toc_sow_sec = item.toc_gps;
+        eph.transmit_week = 2347;
+        eph.transmit_sow_sec = item.toe_gps;
+        eph.bdt_toe_sow_sec = item.toe_bdt;
+        eph.bdt_toc_sow_sec = item.toc_bdt;
+        gnss_sim::SimTime time{};
+        ASSERT_TRUE(gnss_sim::sim_time_from_week_sow(2347, item.toe_gps, &time));
+        std::string message;
+        bool supported = false;
+        ASSERT_TRUE(gnss_sim::format_novatel_nav_output_record(source, time, &message, &supported, &error_message));
+        ASSERT_TRUE(supported);
+        gnss_sim::ParsedSerializedNavRecord parsed{};
+        bool recognized = false;
+        ASSERT_TRUE(
+            gnss_sim::parse_serialized_novatel_nav_line_independent(message, &parsed, &recognized, &error_message))
+            << error_message;
+        ASSERT_TRUE(recognized);
+        const auto& restored = parsed.record.ephemeris;
+        EXPECT_EQ(restored.toe_week, 2347);
+        EXPECT_DOUBLE_EQ(restored.toe_sow_sec, item.toe_gps);
+        EXPECT_EQ(restored.toc_week, item.toc_week);
+        EXPECT_DOUBLE_EQ(restored.toc_sow_sec, item.toc_gps);
+        EXPECT_DOUBLE_EQ(restored.bdt_toe_sow_sec, item.toe_bdt);
+        EXPECT_DOUBLE_EQ(restored.bdt_toc_sow_sec, item.toc_bdt);
+        EXPECT_EQ(restored.transmit_week, 2347);
+        EXPECT_DOUBLE_EQ(restored.transmit_sow_sec, item.toe_gps);
+    }
+}
+
 TEST(RangeaRoundtripIntegration, BroadcastAtmosphereRequiresSerializedGpsIonBeforePositioning) {
     const std::filesystem::path directory = "gnss_sim_serialized_nav_no_gps_ion";
     gnss_sim::SimulatorRunSummary simulator_summary{};

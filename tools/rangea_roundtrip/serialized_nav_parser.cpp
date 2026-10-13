@@ -267,6 +267,21 @@ bool parse_generic_kepler(const std::string& name, int output_week, double outpu
     // The ASCII body carries transmit SOW but not its week. Anchor the week to the log header
     // (the receiver delivery time), not Toe, so week-boundary delivery remains causal.
     eph.transmit_week = week_near_sow(output_week, output_sow, eph.transmit_sow_sec);
+    if (beidou) {
+        // BD2EPHEMA is the simulator's BDSEPH alias: Toe/Toc are BDT SOW,
+        // while the serialized week belongs to the absolute GPST Toe epoch.
+        // Normalize the SOW only; adding a week on BDT wrap would double-count
+        // the week already supplied by the receiver record.
+        if (eph.toe_sow_sec < 0.0 || eph.toe_sow_sec >= 604800.0 || eph.toc_sow_sec < 0.0 ||
+            eph.toc_sow_sec >= 604800.0) {
+            set_error(error_message, name + " BDT time fields are out of range");
+            return false;
+        }
+        eph.bdt_toe_sow_sec = eph.toe_sow_sec;
+        eph.bdt_toc_sow_sec = eph.toc_sow_sec;
+        eph.toe_sow_sec = std::fmod(eph.toe_sow_sec + 14.0, 604800.0);
+        eph.toc_sow_sec = std::fmod(eph.toc_sow_sec + 14.0, 604800.0);
+    }
     eph.toc_week = week_near_sow(eph.toe_week, eph.toe_sow_sec, eph.toc_sow_sec);
     eph.sqrt_semi_major_axis_sqrt_m = std::sqrt(eph.semi_major_axis_m);
     eph.message_type = 0;

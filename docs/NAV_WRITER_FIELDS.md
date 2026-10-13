@@ -19,6 +19,8 @@ For Galileo, the pinned RTKLIB parser preserves the RINEX SV-health word with th
 
 BeiDou legacy D1/D2 maps to `BD2EPHEMA` and `BDSEPHA`. RINEX 4 B-CNAV1/2/3 maps to Unicore `BD3EPHA`; there is no frozen NovAtel OEM7 modern-BDS ephemeris record in V1, so the NovAtel writer reports that normalized record as unsupported instead of inventing a record family.
 
+Both legacy BeiDou outputs use native BDT Toe/Toc seconds of week, with GPS-axis Week/Z Week and transmission TOW. `BD2EPHEMA` is a simulator alias, not an official NovAtel log definition. Its time fields now match the `BDSEPH` interpretation used by the analysis consumer. Older simulator logs with GPST Toe/Toc must be regenerated; see [the serialized-NAV compatibility note](SERIALIZED_NAV_ROUNDTRIP.md#beidou-time-semantics).
+
 ### NovAtel field semantics
 
 The NovAtel writer follows the OEM7 log definitions (`GPSEPHEMERIS`,

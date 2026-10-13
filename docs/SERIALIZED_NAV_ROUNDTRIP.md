@@ -35,9 +35,11 @@ RINEX 4 can contain multiple GPS ionosphere message families. Only GPS LNAV Klob
 
 ### BeiDou time semantics
 
-The simulator's `BD2EPHEMA` receiver-log contract serializes the ephemeris week and Toe as GPST. RTKLIB, however, stores the absolute `eph.toe` epoch in GPST while retaining `eph.toes` as the native BeiDou BDT seconds-of-week used by the BeiDou Earth-rotation term in `eph2pos()`.
+The simulator's `BD2EPHEMA` is a NovAtel-framed alias of the legacy BeiDou `BDSEPH` body: Toe and Toc are native BDT seconds of week; Week/Z Week and transmission TOW remain on the GPS axis. The week fields identify the absolute GPST Toe epoch. The serialized parser adds 14 seconds to Toe/Toc SOW modulo one week, keeps the supplied GPS Toe week, and places Toc in the GPS week nearest Toe. This also handles the first 14 seconds of a GPS week, when the BDT SOW still belongs to the preceding BDT week.
 
-The serialized-NAV import adapter therefore keeps the parsed absolute Toe epoch unchanged and converts only the internal raw Toe SOW from GPST to BDT by subtracting 14 seconds, with week wrap handling. Omitting this conversion rotates BeiDou broadcast positions by roughly 16–43 km in the compact real-NAV case. This conversion is an RTKLIB internal representation requirement; it is not a change to the serialized `BD2EPHEMA` fields.
+After parsing, the normalized Toe/Toc epochs are GPST. RTKLIB stores the absolute `eph.toe` epoch in GPST while retaining `eph.toes` as the native BeiDou BDT SOW used by the Earth-rotation term in `eph2pos()`. The import adapter restores that internal raw BDT SOW by subtracting 14 seconds with week wrap handling.
+
+Compatibility: earlier simulator versions wrote GPST Toe/Toc under the same `BD2EPHEMA` name. Those generated logs must be regenerated with the corrected writer; the parser does not guess the time scale or silently accept both contracts. Field order, header framing, CRC and the normalized GPST input-adapter interface are unchanged.
 
 `BD2IONUTCA` similarly carries BDT-UTC leap seconds. The importer adds 14 seconds when restoring RTKLIB `nav.leaps`, whose convention is GPST-UTC. The validator also refuses broadcast-atmosphere positioning until a serialized GPS `IONUTCA` has appeared, so RTKLIB cannot silently fall back to its built-in default Klobuchar coefficients.
 

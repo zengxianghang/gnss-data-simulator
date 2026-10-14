@@ -36,13 +36,14 @@ bool generic_kepler_body(const KeplerianNavOutputData& eph, bool qzss, bool beid
     std::ostringstream body;
     body.imbue(std::locale::classic());
     body << eph.prn << ',' << std::fixed << std::setprecision(3) << eph.transmit_sow_sec << ',' << eph.svh << ','
-         << eph.iode << ',' << eph.iode << ',' << eph.toe_week << ',' << eph.toe_week << ',' << eph.toe_sow_sec << ','
-         << std::scientific << std::setprecision(15) << eph.semi_major_axis_m << ',' << eph.delta_mean_motion_radps
-         << ',' << eph.mean_anomaly_rad << ',' << eph.eccentricity << ',' << eph.argument_of_perigee_rad << ','
-         << eph.cuc_rad << ',' << eph.cus_rad << ',' << eph.crc_m << ',' << eph.crs_m << ',' << eph.cic_rad << ','
-         << eph.cis_rad << ',' << eph.inclination_rad << ',' << eph.inclination_dot_radps << ',' << eph.omega0_rad
-         << ',' << eph.omega_dot_radps << ',' << std::dec << eph.iodc << ',' << std::fixed << std::setprecision(3)
-         << eph.toc_sow_sec << ',' << std::scientific << std::setprecision(15) << eph.tgd_sec[0];
+         << eph.iode << ',' << eph.iode << ',' << eph.toe_week << ',' << eph.toe_week << ','
+         << (beidou ? eph.bdt_toe_sow_sec : eph.toe_sow_sec) << ',' << std::scientific << std::setprecision(15)
+         << eph.semi_major_axis_m << ',' << eph.delta_mean_motion_radps << ',' << eph.mean_anomaly_rad << ','
+         << eph.eccentricity << ',' << eph.argument_of_perigee_rad << ',' << eph.cuc_rad << ',' << eph.cus_rad << ','
+         << eph.crc_m << ',' << eph.crs_m << ',' << eph.cic_rad << ',' << eph.cis_rad << ',' << eph.inclination_rad
+         << ',' << eph.inclination_dot_radps << ',' << eph.omega0_rad << ',' << eph.omega_dot_radps << ',' << std::dec
+         << eph.iodc << ',' << std::fixed << std::setprecision(3) << (beidou ? eph.bdt_toc_sow_sec : eph.toc_sow_sec)
+         << ',' << std::scientific << std::setprecision(15) << eph.tgd_sec[0];
     if (beidou) {
         body << ',' << eph.tgd_sec[1];
     }

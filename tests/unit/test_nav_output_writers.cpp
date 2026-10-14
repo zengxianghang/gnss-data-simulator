@@ -612,6 +612,16 @@ TEST(NavOutputWriter, NovatelEphemerisLogsFollowTheOem7FieldDefinitions) {
         if (name == "GPSEPHEMA" || name == "QZSSEPHEMERISA") {
             const gnss_sim::KeplerianNavOutputData& eph = record.ephemeris;
             EXPECT_DOUBLE_EQ(std::stod(fields[31]), eph.sva * eph.sva) << name; // URA variance, m^2
+        } else if (name == "BD2EPHEMA") {
+            const gnss_sim::KeplerianNavOutputData& eph = record.ephemeris;
+            ASSERT_EQ(fields.size(), 33u);
+            EXPECT_DOUBLE_EQ(std::stod(fields[7]), eph.bdt_toe_sow_sec);
+            EXPECT_DOUBLE_EQ(std::stod(fields[24]), eph.bdt_toc_sow_sec);
+            EXPECT_EQ(std::stoi(fields[5]), eph.toe_week);
+            EXPECT_EQ(fields[6], fields[5]);
+            EXPECT_DOUBLE_EQ(std::stod(fields[1]), eph.transmit_sow_sec);
+            EXPECT_DOUBLE_EQ(std::fmod(std::stod(fields[7]), 8.0), 0.0);
+            EXPECT_DOUBLE_EQ(std::fmod(std::stod(fields[24]), 8.0), 0.0);
         } else if (name == "GALEPHEMERISA") {
             if (record.ephemeris.sva == 3.12) {
                 EXPECT_EQ(fields[9], "107"); // SISA index
@@ -629,8 +639,8 @@ TEST(NavOutputWriter, NovatelEphemerisLogsFollowTheOem7FieldDefinitions) {
         }
     }
     EXPECT_EQ(checked.count("GPSEPHEMA") + checked.count("QZSSEPHEMERISA") + checked.count("GALEPHEMERISA") +
-                  checked.count("GLOEPHEMERISA"),
-              4u);
+                  checked.count("GLOEPHEMERISA") + checked.count("BD2EPHEMA"),
+              5u);
     gnss_sim::destroy_rtklib_nav_store(store);
 }
 
